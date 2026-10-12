@@ -1,0 +1,112 @@
+# Local infrastructure for FS100 — Mode A (plan.md D18): Postgres, Qdrant, Keycloak, Phoenix.
+# Run from the repo root via `pnpm stack:up` / `pnpm stack:down` (scripts/stack.mjs adds the root `.env`).
+# Ports follow plan.md §5 and are bound to 127.0.0.1 only. The apps (web, api, ai-service) run natively
+# with `pnpm dev`; containerised app services join this file as `profiles: [full]` in M1.6 (Mode B).
+# All images are multi-arch (amd64 + arm64). Every credential here is a dev-only default.
+name: fs100
+
+services:
+  postgres:
+    image: postgres:17.11
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-dev-only-change-me}
+    ports:
+      - '127.0.0.1:5432:5432'
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      # TCP check on purpose: during first-run init Postgres only listens on the unix socket.
+      test: ['CMD-SHELL', 'pg_isready -h 127.0.0.1 -U "$${POSTGRES_USER}" -d postgres']
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  qdrant:
+    image: qdrant/qdrant:v1.18.3
+    environment:
+      QDRANT__TELEMETRY_DISABLED: 'true'
+    ports:
+      - '127.0.0.1:6333:6333' # REST + dashboard (/dashboard)
+      - '127.0.0.1:6334:6334' # gRPC
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      # The image ships bash but no curl/wget.
+      test:
+        - CMD-SHELL
+        - >-
+          bash -c 'exec 3<>/dev/tcp/127.0.0.1/6333 &&
+          printf "GET /readyz HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 &&
+          head -n1 <&3 | grep -q " 200 "'
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 5s
+    restart: unless-stopped
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.5
+    command: ['start-dev', '--import-realm']
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER:-postgres}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-dev-only-change-me}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-dev-only-change-me}
+      # Fixed frontend URL => tokens always carry iss=http://localhost:8080/realms/kb,
+      # also when a container reaches Keycloak as http://keycloak:8080 (Mode B).
+      KC_HOSTNAME: http://localhost:8080
+      KC_HEALTH_ENABLED: 'true'
+    ports:
+      - '127.0.0.1:8080:8080'
+    volumes:
+      # Imported on startup only if the realm does not exist yet (see docs/setup/startup.md).
+      - ../keycloak/realm-kb.json:/opt/keycloak/data/import/realm-kb.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # Health endpoints live on the management port 9000 (not published). No curl in the image.
+      test:
+        - CMD-SHELL
+        - >-
+          bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          printf "GET /health/ready HTTP/1.0\r\nHost: localhost\r\n\r\n" >&3 &&
+          head -n1 <&3 | grep -q " 200 "'
+      interval: 5s
+      timeout: 3s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
+  phoenix:
+    image: arizephoenix/phoenix:version-20.21.0
+    environment:
+      PHOENIX_WORKING_DIR: /mnt/data
+    ports:
+      - '127.0.0.1:6006:6006' # UI + OTLP over HTTP (/v1/traces)
+      - '127.0.0.1:4317:4317' # OTLP over gRPC (OTEL_EXPORTER_OTLP_ENDPOINT)
+    volumes:
+      - phoenix-data:/mnt/data
+    healthcheck:
+      # Distroless image: no shell, so probe with the bundled Python.
+      test:
+        - CMD
+        - /usr/bin/python3.13
+        - -c
+        - import urllib.request; urllib.request.urlopen('http://127.0.0.1:6006/healthz', timeout=3)
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  postgres-data:
+  qdrant-data:
+  phoenix-data:

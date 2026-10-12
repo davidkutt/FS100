@@ -1,0 +1,13 @@
+{
+  "recommendations": [
+    "angular.ng-template",
+    "dbaeumer.vscode-eslint",
+    "oxc.oxc-vscode",
+    "esbenp.prettier-vscode",
+    "vitest.explorer",
+    "ms-python.python",
+    "charliermarsh.ruff",
+    "ms-azuretools.vscode-containers",
+    "editorconfig.editorconfig"
+  ]
+}

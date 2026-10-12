@@ -1,0 +1,15 @@
+# Generated / vendored
+pnpm-lock.yaml
+**/dist/
+**/coverage/
+**/.angular/
+**/node_modules/
+
+# Python is formatted by ruff
+apps/ai-service/
+
+# Markdown stays hand-formatted (plan, ADRs, guides)
+*.md
+
+# Keycloak realm is exported by Keycloak itself; keep its formatting to make re-export diffs readable
+infra/keycloak/

@@ -1,0 +1,26 @@
+<section class="py-4">
+  <h1 class="display-6 fw-semibold">Hello, Dev of the future 👋</h1>
+  <p class="lead text-body-secondary">
+    FS100 is a RAG and agent assistant for engineers who work across DB, Dev, Cloud, DevOps, MLOps,
+    AI, Security, Architecture and SRE. This is the Phase 1 base setup.
+  </p>
+</section>
+
+<section aria-labelledby="services-heading">
+  <h2 id="services-heading" class="h5 mb-3">Local services</h2>
+  <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
+    @for (service of services; track service.name) {
+      <div class="col">
+        <div class="card h-100 shadow-sm">
+          <div class="card-body">
+            <h3 class="h6 card-title mb-1">{{ service.name }}</h3>
+            <p class="card-text small text-body-secondary mb-2">{{ service.role }}</p>
+            <a class="stretched-link small" [href]="service.url" target="_blank" rel="noopener">
+              {{ service.url }}
+            </a>
+          </div>
+        </div>
+      </div>
+    }
+  </div>
+</section>

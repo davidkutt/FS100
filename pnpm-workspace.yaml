@@ -1,0 +1,19 @@
+# pnpm workspace for the Node apps. The Python AI service is managed by uv (apps/ai-service).
+packages:
+  - apps/web
+  - apps/api
+
+# Dependency install scripts are blocked by default; only allow what is needed (ADR-0001).
+# Manage with `pnpm approve-builds`. The denied packages ship prebuilt binaries.
+allowBuilds:
+  '@parcel/watcher': false
+  esbuild: true
+  lmdb: false
+  msgpackr-extract: false
+
+# Shared versions: reference them as "catalog:" in an app's package.json.
+catalog:
+  '@types/node': ^24.19.2
+  prettier: ^3.9.10
+  typescript: ~6.0.3
+  vitest: ^5.0.3

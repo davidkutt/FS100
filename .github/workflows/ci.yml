@@ -1,0 +1,66 @@
+# Base CI (M1.0): lint, test and build every app on pushes to main and on pull requests.
+# Contract drift, retrieval eval, multi-arch images and e2e join in M1.6 (plan.md D19).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: web + api
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+      - name: Enable pnpm (version from package.json#packageManager)
+        run: corepack enable pnpm && pnpm --version
+      - run: pnpm install --frozen-lockfile
+      - name: Lint
+        run: pnpm --recursive --filter "./apps/*" run lint && pnpm format:check
+      - name: Test
+        run: pnpm --recursive --filter "./apps/*" run test
+      - name: Build
+        run: pnpm build
+
+  ai-service:
+    name: ai-service
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: apps/ai-service
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/ai-service/uv.lock
+      - run: uv sync --locked
+      - name: Lint
+        run: uv run ruff check . && uv run ruff format --check .
+      - name: Type check
+        run: uv run pyright
+      - name: Test
+        run: uv run pytest
+
+  compose:
+    name: compose config
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker compose --file infra/compose/docker-compose.yml config --quiet

@@ -1,0 +1,3 @@
+# Normalise line endings; shell scripts and env files must stay LF (they run inside Linux containers).
+* text=auto eol=lf
+*.{png,jpg,jpeg,gif,ico,pdf,woff,woff2} binary

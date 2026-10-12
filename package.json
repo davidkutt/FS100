@@ -1,0 +1,33 @@
+{
+  "name": "fs100",
+  "version": "0.0.0",
+  "private": true,
+  "description": "FS100 — the FULL FULL stack: a RAG/agent assistant for the \"Dev of the future\"",
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@12.11.2",
+  "engines": {
+    "node": ">=24.15.0 <25"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "build": "pnpm --recursive --filter \"./apps/*\" run build",
+    "lint": "pnpm --recursive --filter \"./apps/*\" run lint && pnpm format:check && pnpm lint:ai",
+    "lint:ai": "uv run --directory apps/ai-service ruff check . && uv run --directory apps/ai-service ruff format --check . && uv run --directory apps/ai-service pyright",
+    "format": "prettier --write . && uv run --directory apps/ai-service ruff format . && uv run --directory apps/ai-service ruff check --fix .",
+    "format:check": "prettier --check .",
+    "test": "pnpm --recursive --filter \"./apps/*\" run test && pnpm test:ai",
+    "test:ai": "uv run --directory apps/ai-service pytest",
+    "stack:up": "node scripts/stack.mjs up --detach --wait",
+    "stack:down": "node scripts/stack.mjs down",
+    "stack:reset": "node scripts/stack.mjs down --volumes",
+    "stack:ps": "node scripts/stack.mjs ps",
+    "stack:logs": "node scripts/stack.mjs logs --follow",
+    "eval:retrieval": "node scripts/not-yet.mjs eval:retrieval M1.2",
+    "contracts:generate": "node scripts/not-yet.mjs contracts:generate M1.4"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.6",
+    "prettier": "catalog:"
+  }
+}
