@@ -6,6 +6,7 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -26,6 +27,9 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version-file: .nvmrc
+          # setup-node would detect pnpm from package.json#packageManager and fail, because pnpm
+          # is only installed by Corepack in the next step.
+          package-manager-cache: false
       - name: Enable pnpm (version from package.json#packageManager)
         run: corepack enable pnpm && pnpm --version
       - run: pnpm install --frozen-lockfile
