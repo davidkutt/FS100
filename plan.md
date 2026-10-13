@@ -131,7 +131,7 @@ Status: **L** = locked · **C** = changed in v2 · **N** = new in v2. ADR number
 **Still open (decide during M1.0):**
 - **RAM size** of the Mac (affects A1).
 - **Monthly token cap** for the OpenRouter key (suggestion: 10–20 USD while building Phase 1).
-- **Project name** — `kb-agent` undersells the "Dev of the future" idea; pick a real name before the repo goes public.
+- ~~**Project name**~~ — `kb-agent` undersells the "Dev of the future" idea; pick a real name before the repo goes public. → **Decided: FS100** (M1.0).
 - **Dev and demo model** on OpenRouter — pick by price/quality in M1.3, record in ADR-0005, re-check with the eval harness.
 
 ---
@@ -321,25 +321,25 @@ Hours are ideal single-person hours, ±30 %.
 
 ### M1.0 — Repo & tooling (~5 h)
 
-- [ ] GitHub repo, MIT license, README stub, `.gitignore`, `.editorconfig`, `.nvmrc` (24), `.python-version` (3.13)
-- [ ] pnpm workspace: `packageManager` pin, `onlyBuiltDependencies`, catalog for TypeScript and shared tooling
-- [ ] Scaffold `apps/web` (`ng new --package-manager pnpm`, SCSS, routing), `apps/api` (Nest CLI 12), `apps/ai-service` (`uv init`, FastAPI, ruff, pytest, pyright)
-- [ ] Root scripts: `dev`, `lint`, `test`, `build`, `stack:up`, `stack:down`, `eval:retrieval`, `contracts:generate`
-- [ ] Conventional Commits (+ optional lefthook for lint-on-commit)
-- [ ] ADR-0001 (monorepo & pnpm), ADR-0002 (AI layer in Python), ADR-0003 (embeddings in-process)
-- [ ] **Compatibility spikes (≤1 h each, outcome into the ADRs):** Zod via Nest 12 Standard Schema · Drizzle with Nest 12 ESM · `keycloak-angular` with Angular 22 · Angular default test runner
-- [ ] Resolve the open items from §4 (RAM, token cap, project name)
+- [x] GitHub repo, MIT license, README stub, `.gitignore`, `.editorconfig`, `.nvmrc` (24), `.python-version` (3.13)
+- [x] pnpm workspace: `packageManager` pin, `onlyBuiltDependencies`, catalog for TypeScript and shared tooling — *pnpm 12 calls it `allowBuilds` (ADR-0001)*
+- [x] Scaffold `apps/web` (`ng new --package-manager pnpm`, SCSS, routing), `apps/api` (Nest CLI 12), `apps/ai-service` (`uv init`, FastAPI, ruff, pytest, pyright)
+- [x] Root scripts: `dev`, `lint`, `test`, `build`, `stack:up`, `stack:down`, `eval:retrieval`, `contracts:generate`
+- [x] Conventional Commits (+ optional lefthook for lint-on-commit) — *lefthook not added*
+- [x] ADR-0001 (monorepo & pnpm), ADR-0002 (AI layer in Python), ADR-0003 (embeddings in-process)
+- [x] **Compatibility spikes (≤1 h each, outcome into the ADRs):** Zod via Nest 12 Standard Schema · Drizzle with Nest 12 ESM · `keycloak-angular` with Angular 22 · Angular default test runner
+- [ ] Resolve the open items from §4 (RAM, token cap, project name) — *done: project name (FS100); open: RAM, token cap*
 
 **Acceptance:** clean clone → `pnpm install && pnpm lint && pnpm test` green; each app serves a hello endpoint/page.
 
 ### M1.1 — Local infra + auth walking skeleton (~8 h)
 
-- [ ] Compose: Postgres (init → `keycloak`, `app`), Qdrant (volume), Keycloak (`--import-realm`), **Phoenix** (volume), healthchecks, fixed port map, arm64 check for every image
-- [ ] Keycloak realm per §7.7; export committed; README section "how to re-export the realm"
-- [ ] NestJS: zod config, `JwtAuthGuard` (`jose`, cached JWKS), `RolesGuard` + `@Roles()`, `GET /api/me`, health, CORS allow-list, `helmet`, `nestjs-pino`, request-id
-- [ ] AI service: JWT dependency (`aud=kb-ai`), health, JSON logging, **OTel tracer → Phoenix** (one test span visible)
+- [x] Compose: Postgres (init → `keycloak`, `app`), Qdrant (volume), Keycloak (`--import-realm`), **Phoenix** (volume), healthchecks, fixed port map, arm64 check for every image
+- [x] Keycloak realm per §7.7; export committed; README section "how to re-export the realm" — *in `docs/setup/startup.md`*
+- [ ] NestJS: zod config, `JwtAuthGuard` (`jose`, cached JWKS), `RolesGuard` + `@Roles()`, `GET /api/me`, health, CORS allow-list, `helmet`, `nestjs-pino`, request-id — *done: zod config, health, CORS, helmet, nestjs-pino, request-id; open: guards, `/api/me`*
+- [ ] AI service: JWT dependency (`aud=kb-ai`), health, JSON logging, **OTel tracer → Phoenix** (one test span visible) — *done: health, JSON logging + request-id; open: JWT, OTel*
 - [ ] Nest → AI service client with client-credentials token caching and request-id propagation
-- [ ] Angular: `config.json` loader, Keycloak (PKCE), interceptor, route guard, landing page `Hello {name} · {roles}`, admin status card
+- [ ] Angular: `config.json` loader, Keycloak (PKCE), interceptor, route guard, landing page `Hello {name} · {roles}`, admin status card — *done: `config.json` loader*
 - [ ] Token test matrix: no token 401 · wrong `aud` 401 · expired 401 · viewer on editor route 403
 
 **Acceptance:** all seed users log in with correct roles; matrix passes; a test span appears in Phoenix; infra healthy in < 3 min from a clean clone (images cached).

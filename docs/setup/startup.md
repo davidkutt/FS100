@@ -97,6 +97,7 @@ curl -s localhost:3000/healthz                  # {"status":"ok"}
 curl -s localhost:8000/                         # {"service":"ai-service","version":"0.1.0","docs":"/docs"}
 curl -s localhost:8000/healthz                  # {"status":"ok"}
 curl -s localhost:6333/readyz                   # all shards are ready
+curl -si localhost:3000/api/hello | grep -i x-request-id   # every response carries a request id
 
 # Keycloak: service token of the API (client credentials). Decode the JWT, e.g. on jwt.io —
 # it must contain "iss": "http://localhost:8080/realms/kb" and "aud": "kb-ai".
@@ -133,6 +134,19 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`fe
   compose file apply — they match `.env.example`.
 - Every value in `.env.example` is a dev-only placeholder. Real secrets (the OpenRouter key from M1.3)
   go into your local `.env` only — never into git.
+- The web app reads its browser-facing settings at runtime from `/config.json` — locally
+  `apps/web/public/config.json` (Keycloak URL/realm/client, API base URL, Phoenix URL; an empty
+  `phoenixUrl` hides Phoenix links). In containers nginx renders it from the `WEB_*` variables (M1.6).
+- The API validates its environment at boot and refuses to start with a readable error if a value is
+  invalid (e.g. a `CORS_ORIGINS` entry with a path).
+
+### Logs and request ids
+
+API and AI service write **one JSON object per line** to stdout; `LOG_LEVEL` (`info` by default) applies to
+both. Each request gets an `x-request-id` — the caller's if it is safe, otherwise a new UUID — which is
+echoed in the response and included in the request's log lines (`req.id` in the API, `request_id` in the
+AI service). Authorization and cookie headers are redacted, and `/healthz` probes are not logged. To
+follow one request, search the `pnpm dev` output for its id.
 
 ## 7. Managing the infrastructure
 
