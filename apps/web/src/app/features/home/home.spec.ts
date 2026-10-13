@@ -1,22 +1,39 @@
 import { TestBed } from '@angular/core/testing';
+import { RUNTIME_CONFIG, type RuntimeConfig } from '../../core/config/runtime-config';
 import { Home } from './home';
 
-describe('Home', () => {
-  it('links to every local service', async () => {
-    const fixture = TestBed.createComponent(Home);
-    await fixture.whenStable();
-    const links = Array.from(
-      (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLAnchorElement>(
-        'a.stretched-link',
-      ),
-    ).map((a) => a.href);
+const config: RuntimeConfig = {
+  keycloakUrl: 'https://login.example.com',
+  keycloakRealm: 'kb',
+  keycloakClientId: 'kb-web',
+  apiBaseUrl: 'https://api.example.com',
+  phoenixUrl: 'https://phoenix.example.com',
+};
 
-    expect(links).toEqual([
-      'http://localhost:3000/api/hello',
+async function renderLinks(runtimeConfig: RuntimeConfig): Promise<string[]> {
+  TestBed.configureTestingModule({
+    providers: [{ provide: RUNTIME_CONFIG, useValue: runtimeConfig }],
+  });
+  const fixture = TestBed.createComponent(Home);
+  await fixture.whenStable();
+  return Array.from(
+    (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLAnchorElement>('a.stretched-link'),
+  ).map((a) => a.href);
+}
+
+describe('Home', () => {
+  it('builds browser-facing links from the runtime config', async () => {
+    expect(await renderLinks(config)).toEqual([
+      'https://api.example.com/api/hello',
       'http://localhost:8000/docs',
-      'http://localhost:8080/admin/',
+      'https://login.example.com/admin/',
       'http://localhost:6333/dashboard',
-      'http://localhost:6006/',
+      'https://phoenix.example.com/',
     ]);
+  });
+
+  it('hides Phoenix when phoenixUrl is empty', async () => {
+    const links = await renderLinks({ ...config, phoenixUrl: '' });
+    expect(links.some((href) => href.includes('phoenix'))).toBe(false);
   });
 });

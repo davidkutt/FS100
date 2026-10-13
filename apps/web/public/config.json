@@ -1,0 +1,7 @@
+{
+  "keycloakUrl": "http://localhost:8080",
+  "keycloakRealm": "kb",
+  "keycloakClientId": "kb-web",
+  "apiBaseUrl": "http://localhost:3000",
+  "phoenixUrl": "http://localhost:6006"
+}
