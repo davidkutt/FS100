@@ -5,8 +5,8 @@ Guidance for Claude Code sessions in this repo. Humans: start with [README.md](R
 ## Project
 
 FS100 — a RAG/agent assistant for the "Dev of the future". **[plan.md](plan.md) is the source of truth**
-(decisions D1–D26, contracts §7, milestones §8); ADRs in [docs/adr/](docs/adr/README.md) record decisions
-and spike results. Work milestone by milestone, keep scope to the current one, and update the plan's
+(decisions D1–D26, contracts §7, milestones §8); [docs/architecture.md](docs/architecture.md) is the living
+decision log across all phases, and ADRs in [docs/adr/](docs/adr/README.md) record decisions and spike results. Work milestone by milestone, keep scope to the current one, and update the plan's
 checkboxes or an ADR when a decision changes.
 
 - `apps/web` — Angular 22 (standalone, signals, zoneless), Bootstrap 5.3 via SCSS, Vitest, angular-eslint

@@ -1,6 +1,6 @@
 # Architecture & Design Decisions
 
-> **Project:** `kb-agent` (working title) — an assistant for the "Dev of the future".
+> **Project:** **FS100** — the FULL FULL stack (working title was `kb-agent`; technical identifiers keep the `kb-*` names) — an assistant for the "Dev of the future".
 > **Status:** living document · last updated 2026-10-13 · Phase 1 details in `plan.md` · significant decisions also get an ADR in `docs/adr/`.
 > **Phase** column = when a decision takes effect (1–6). `→` means introduced in one phase and extended in a later one.
 
@@ -55,12 +55,12 @@
 | ID | Decision | Why | Phase |
 |---|---|---|---|
 | REPO-1 | Monorepo for apps, infra, evals and docs | One PR can change a contract and all its consumers; one CI | 1 |
-| REPO-2 | pnpm workspaces, pinned via `packageManager`; `onlyBuiltDependencies` allow-list; catalogs for shared versions | Strict `node_modules` prevents phantom dependencies between apps; `--filter` and `pnpm deploy` simplify CI and Docker; fast cached installs. npm is looser and slower, Yarn PnP causes tooling friction, Bun is a runtime bet unrelated to the goals. pnpm 10 blocks dependency install scripts by default, hence the allow-list | 1 |
+| REPO-2 | pnpm workspaces, pinned via `packageManager` (pnpm 12); `allowBuilds` allow-list (pnpm ≥ 11's successor of `onlyBuiltDependencies`); catalogs for shared versions | Strict `node_modules` prevents phantom dependencies between apps; `--filter` and `pnpm deploy` simplify CI and Docker; fast cached installs. npm is looser and slower, Yarn PnP causes tooling friction, Bun is a runtime bet unrelated to the goals. pnpm 10 blocks dependency install scripts by default, hence the allow-list | 1 |
 | REPO-3 | uv for the Python service | Fast resolver, lockfile and Python version management in one tool | 1 |
 | REPO-4 | No Nx / Turborepo | Two Node apps don't justify a build orchestrator | 1 |
 | REPO-5 | Root `package.json` scripts as task entry points, no Makefile | Works the same on macOS, Linux and Windows/WSL2 | 1 |
 | REPO-6 | Pinned versions: Node 24 LTS, Angular 22, NestJS 12, Python 3.13, Keycloak 26.7.x, Qdrant 1.18.x, Postgres 17, Bootstrap 5.3 | Current stable lines; Node 26 reconsidered once it enters LTS (28 Oct 2026); Dependabot keeps pins fresh | 1 |
-| REPO-7 | Compatibility spikes with named fallbacks before building (Zod in Nest 12, Drizzle, keycloak-angular, Angular test runner) | Angular 22 and NestJS 12 are new majors; the ecosystem may lag | 1 |
+| REPO-7 | Compatibility spikes with named fallbacks before building (Zod in Nest 12, Drizzle, keycloak-angular, Angular test runner) — **done in M1.0, all passed, no fallback needed** (ADR-0001) | Angular 22 and NestJS 12 are new majors; the ecosystem may lag | 1 |
 | REPO-8 | Trunk-based development with short-lived branches and PRs (also solo), Conventional Commits | CI gates every change; readable history and changelog | 1 |
 | REPO-9 | Architecture Decision Records in `docs/adr/` | Documents the reasoning, not only the result — valuable for reviewers | 1 |
 | REPO-10 | Public repository, MIT licence | Portfolio visibility; permissive licence (drives the licence checks in RAG-1 and RAG-11) | 1 |
@@ -88,7 +88,7 @@
 | API-4 | Cancellation propagates browser → NestJS → AI service → LLM | Stops generation and token cost when the user stops or leaves | 1 |
 | API-5 | OpenAPI-first contracts: generated TypeScript types (FastAPI → NestJS, NestJS → Angular) are committed; SSE event schemas are exported as JSON Schema from Pydantic; CI fails on drift | Breaking changes across three apps are caught at PR time; OpenAPI describes SSE poorly | 1 |
 | API-6 | Errors as RFC 9457 `application/problem+json` | One standard error shape across services and clients | 1 |
-| API-7 | Validation with Zod in NestJS (via Standard Schema; fallback class-validator) and Pydantic v2 in Python | One schema language per runtime, with inferred types | 1 |
+| API-7 | Validation with Zod in NestJS (via Nest 12's Standard Schema support: `@Body({ schema })` + `StandardSchemaValidationPipe`; verified, so no class-validator fallback) and Pydantic v2 in Python | One schema language per runtime, with inferred types | 1 |
 | API-8 | `x-request-id` propagated across all hops; the `done` event carries the trace ID | Correlates logs, traces, UI messages and feedback | 1 |
 
 ## 6. Identity & access
@@ -244,7 +244,7 @@
 |---|---|---|
 | RAM of the development Mac | M1.0 | 8 GB shifts defaults to `e5-small` and Mode A only |
 | Monthly credit limit of the OpenRouter key | M1.0 | Suggested 10–20 USD during Phase 1 |
-| Project name | Before the repo goes public | `kb-agent` is a placeholder |
+| ~~Project name~~ | Decided in M1.0 | **FS100** — the FULL FULL stack; `kb-*` stays in technical identifiers (realm, clients, Qdrant alias) |
 | Development and demo LLM | M1.3 (ADR-0005) | Chosen by price/quality, re-checked with evals |
 | Final embedding model, chunk size and threshold | M1.2 (ADR-0004) | From the benchmark |
 | Azure region | M1.7 (ADR-0006) | Germany West Central or West Europe, depending on quota |

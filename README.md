@@ -94,6 +94,7 @@ infra/
   keycloak/       realm-kb.json (roles, clients, dev seed users)
   postgres/       init.sql (databases keycloak + app)
 docs/
+  architecture.md Architecture & design decisions (living document)
   setup/          installation.md · startup.md
   adr/            Architecture Decision Records
 scripts/          dev.mjs · stack.mjs · not-yet.mjs
@@ -107,6 +108,7 @@ Folders from plan.md §6 that belong to later milestones (`packages/contracts`, 
 ## Documentation
 
 - [plan.md](plan.md) — Phase 1 plan: scope, decisions D1–D26, contracts, milestones, risks
+- [Architecture & design decisions](docs/architecture.md) — living decision log across all phases (GOAL, REPO, SVC, API, IAM, … ids)
 - [Installation guide](docs/setup/installation.md) — toolchain for macOS (Apple Silicon), Linux, Windows/WSL2
 - [Startup guide](docs/setup/startup.md) — first start, daily routine, URLs, seed users, troubleshooting
 - [ADRs](docs/adr/README.md) — 0001 monorepo & pnpm · 0002 AI layer in Python · 0003 in-process embeddings
