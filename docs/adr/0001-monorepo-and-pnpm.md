@@ -50,11 +50,23 @@ everything.
 
 ## Compatibility spikes (M1.0)
 
+All spikes ran on 2026-10-13 in throwaway code against the Compose infra (Postgres 17.11,
+Keycloak 26.7.5); only the outcome is recorded here. All passed, so no fallback is needed.
+
 | Spike | Result |
 |---|---|
-| Angular default test runner | **Vitest** (5.x) is the default in Angular 22 (`@angular/build:unit-test`, jsdom). Adopted. |
-| Nest 12 + Vitest | Nest 12 scaffolds Vitest + oxlint and ESM. DI/decorators work under Vitest 5 without SWC. Adopted. |
-| TypeScript line | Angular 22 requires TypeScript `>=6.0 <6.1`; Nest 12 builds with it. Catalog pins `~6.0.3`. TS 7 (native) waits for Angular support. |
-| `keycloak-angular` with Angular 22 | `keycloak-angular@22` declares peers `@angular/* ^22` and `keycloak-js ≤ 26` — compatible on paper; runtime check in M1.1. |
-| Zod via Nest 12 Standard Schema | **Open** — spike with the first validated endpoint in M1.1 (fallback `class-validator`). |
-| Drizzle with Nest 12 ESM | **Open** — spike with the `documents` schema in M1.1/M1.4. |
+| Angular default test runner | ✅ **Vitest** (5.x) is the default in Angular 22 (`@angular/build:unit-test`, jsdom). Adopted. |
+| Nest 12 + Vitest | ✅ Nest 12 scaffolds Vitest + oxlint and ESM. DI/decorators work under Vitest 5 without SWC. Adopted. |
+| TypeScript line | ✅ Angular 22 requires TypeScript `>=6.0 <6.1`; Nest 12 builds with it. Catalog pins `~6.0.3`. TS 7 (native) waits for Angular support. |
+| Zod via Nest 12 Standard Schema | ✅ `zod@4.6` works with Nest's built-in Standard Schema support: `@Body({ schema: CreateX })` plus a global `new StandardSchemaValidationPipe()`. Transforms and defaults are applied (`transform: true` is the default), unknown keys are stripped (`z.object`), failures return 400 with `path: message` entries. Also works under Vitest + supertest. **No `class-validator` needed.** |
+| Drizzle with Nest 12 ESM | ✅ `drizzle-orm@0.45` + `pg@8.23` (`drizzle-orm/node-postgres`) as a global Nest provider; `drizzle-kit@0.31` reads an ESM `drizzle.config.ts`, `generate` emits readable SQL (incl. `text[]` with default), `migrate` applies it. Works with `nest build` → `node dist/main` and under Vitest. Stay on 0.45 until Drizzle 1.0 leaves beta. |
+| `keycloak-angular` with Angular 22 | ✅ `keycloak-angular@22.0` + `keycloak-js@26.2` in a zoneless Angular 22 app: `provideKeycloak({ config, initOptions: { onLoad: 'login-required', pkceMethod: 'S256' } })`, `inject(Keycloak)` and `includeBearerTokenInterceptor` with a URL condition. A headless Chromium login as `bob` / `carol` reached the app with the right roles, and API calls carried `Authorization: Bearer …` with `aud=kb-api`. |
+
+Follow-ups noted by the spikes (for M1.1/M1.4):
+
+- Nest's default validation error body is not RFC 9457 — map it with the pipe's `exceptionFactory` or the
+  global problem+json filter (M1.4).
+- Decide per schema whether unknown keys are stripped (`z.object`, default) or rejected (`z.strictObject`).
+- `drizzle-kit@0.31` pulls old `esbuild` versions via the deprecated `@esbuild-kit` loaders (dev-only;
+  `esbuild` is already in `allowBuilds`).
+- Set `checkLoginIframe: false` in `keycloak-js` init options (third-party cookie restrictions).
