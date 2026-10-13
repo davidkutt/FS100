@@ -3,6 +3,8 @@ from pydantic import BaseModel
 
 from ai_service import __version__
 from ai_service.api import health
+from ai_service.core.logging import configure_logging
+from ai_service.core.request_id import RequestIdMiddleware
 from ai_service.core.settings import Settings, get_settings
 
 
@@ -14,7 +16,9 @@ class ServiceInfo(BaseModel):
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
+    configure_logging(settings.log_level)
     app = FastAPI(title="FS100 AI service", version=__version__)
+    app.add_middleware(RequestIdMiddleware)
     app.include_router(health.router)
 
     @app.get("/", tags=["meta"])

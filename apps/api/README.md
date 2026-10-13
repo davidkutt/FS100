@@ -11,5 +11,7 @@ and the [startup guide](../../docs/setup/startup.md).
 | `pnpm --filter @fs100/api lint`       | oxlint (type-aware)                                      |
 | `pnpm --filter @fs100/api build`      | compile into `dist/`                                     |
 
-Endpoints today: `GET /api/hello`, `GET /healthz`. Generate code with the local CLI, e.g.
+Endpoints today: `GET /api/hello`, `GET /healthz`. Config is validated with Zod at boot (`src/config/`); logs are
+JSON via nestjs-pino (`LOG_LEVEL`, auth headers redacted); responses carry `x-request-id`; `helmet` and a CORS
+allow-list (`CORS_ORIGINS`) are on. Generate code with the local CLI, e.g.
 `pnpm --filter @fs100/api exec nest generate module documents`.

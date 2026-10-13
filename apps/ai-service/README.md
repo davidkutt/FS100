@@ -11,7 +11,8 @@ FS100: parsing, chunking, embeddings, retrieval, grounded chat, evals and tracin
 | `pnpm test:ai`                                                                      | pytest                          |
 | `pnpm lint:ai`                                                                      | ruff check + format check, pyright (strict) |
 
-Endpoints today: `GET /` (service info), `GET /healthz`, OpenAPI UI at `/docs`.
+Endpoints today: `GET /` (service info), `GET /healthz`, OpenAPI UI at `/docs`. Logs are JSON lines on stdout
+(`LOG_LEVEL`); every response carries `x-request-id` (the caller's, if safe, else a new UUID).
 
 Layout (grows per plan.md §6): `src/ai_service/api/` routers · `core/` settings (later auth, logging,
 tracing) · `tests/`. Add dependencies with `uv add <pkg>` (runtime) or `uv add --dev <pkg>`.
