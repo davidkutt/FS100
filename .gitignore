@@ -40,6 +40,9 @@ test-results/
 playwright-report/
 blob-report/
 
+# --- Claude Code (personal overrides stay local; .claude/settings.json is shared) ---
+.claude/settings.local.json
+
 # --- editors & OS ---
 .idea/
 .vscode/*
