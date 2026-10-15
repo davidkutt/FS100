@@ -8,7 +8,7 @@ Short, numbered records of decisions that shape FS100. Each ADR references the d
 | [0001](0001-monorepo-and-pnpm.md) | Monorepo with pnpm workspaces, uv for Python | Accepted |
 | [0002](0002-ai-layer-in-python.md) | All AI code lives in a Python service; NestJS is the product API | Accepted |
 | [0003](0003-embeddings-in-process.md) | Embeddings computed in-process with fastembed | Accepted |
-| 0004 | Embedding model, chunking and score threshold (benchmark) | Planned — M1.2 |
+| [0004](0004-embedding-model-chunking-threshold.md) | Embedding model `bge-m3`, chunking 1000/150, score threshold 0.55 (benchmark) | Accepted |
 | 0005 | LLM access via OpenAI-compatible adapter; dev/demo model choice | Planned — M1.3 |
 | 0006 | Azure region and quota | Planned — M1.7 |
 

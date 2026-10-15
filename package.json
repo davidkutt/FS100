@@ -23,7 +23,7 @@
     "stack:reset": "node scripts/stack.mjs down --volumes",
     "stack:ps": "node scripts/stack.mjs ps",
     "stack:logs": "node scripts/stack.mjs logs --follow",
-    "eval:retrieval": "node scripts/not-yet.mjs eval:retrieval M1.2",
+    "eval:retrieval": "uv run --directory apps/ai-service kb-eval retrieval",
     "contracts:generate": "node scripts/not-yet.mjs contracts:generate M1.4"
   },
   "devDependencies": {
