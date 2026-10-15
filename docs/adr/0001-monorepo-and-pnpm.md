@@ -55,6 +55,6 @@ everything.
 | Angular default test runner | **Vitest** (5.x) is the default in Angular 22 (`@angular/build:unit-test`, jsdom). Adopted. |
 | Nest 12 + Vitest | Nest 12 scaffolds Vitest + oxlint and ESM. DI/decorators work under Vitest 5 without SWC. Adopted. |
 | TypeScript line | Angular 22 requires TypeScript `>=6.0 <6.1`; Nest 12 builds with it. Catalog pins `~6.0.3`. TS 7 (native) waits for Angular support. |
-| `keycloak-angular` with Angular 22 | `keycloak-angular@22` declares peers `@angular/* ^22` and `keycloak-js ≤ 26` — compatible on paper; runtime check in M1.1. |
-| Zod via Nest 12 Standard Schema | **Open** — spike with the first validated endpoint in M1.1 (fallback `class-validator`). |
+| `keycloak-angular` with Angular 22 | `keycloak-angular@22` + `keycloak-js@26` work with Angular 22 (zoneless): `provideKeycloak`, `customBearerTokenInterceptor`. Adopted in M1.1. |
+| Zod via Nest 12 Standard Schema | **Open** — M1.1 uses Zod for config only (no request bodies yet); spike with the first validated endpoint in M1.4 (fallback `class-validator`). |
 | Drizzle with Nest 12 ESM | **Open** — spike with the `documents` schema in M1.1/M1.4. |

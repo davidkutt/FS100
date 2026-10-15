@@ -11,13 +11,14 @@ Guide for agents working in FS100. Read this first; follow the links only when t
 2. **ALWAYS keep comments minimal.** Add a code comment only when absolutely necessary (a non-obvious
    *why*: a workaround, a constraint, a surprising choice). Never restate what the code does. Keep each
    comment as short and concise as possible.
-3. **ALWAYS** follow the LAZY RULES section.
+3. **ALWAYS** follow the LAZY RULES section, except when it's crucial to the task or the user explicitly asks for it./ 
 ## What this is
 
 FS100 is a RAG/agent assistant: upload domain-tagged documents, ask questions, get streamed answers with
 citations, with every retrieval change measured by evals and every request traced. Built in six phases;
-**Phase 1 is in progress** — M1.0 (repo, skeletons, local infra, CI) is done. No auth flow, ingestion or chat
-yet. Check the milestone in [plan.md §8](plan.md#8-milestones-and-tasks) before building something: many
+**Phase 1 is in progress** — M1.0 (repo, skeletons, local infra, CI), M1.1 (auth walking skeleton) and
+M1.2 (ingest/search/delete in the AI service, golden set, `pnpm eval:retrieval`) are done. No chat yet.
+Check the milestone in [plan.md §8](plan.md#8-milestones-and-tasks) before building something: many
 features are deliberately scheduled for later milestones.
 
 The plan's working title `kb-agent` lives on in identifiers (realm `kb`, clients `kb-web`/`kb-api`/`kb-ai`,
@@ -31,6 +32,8 @@ Qdrant alias `kb_current`). Keep those names.
 | `apps/api` | Product API / BFF: auth, RBAC, document metadata, SSE relay. Browser-facing | NestJS 12 (ESM), Vitest + supertest, oxlint |
 | `apps/ai-service` | **All AI code**: parse, chunk, embed, retrieve, prompt, LLM, evals, tracing. Internal only | FastAPI, Python 3.13 (uv), pydantic-settings, ruff, pyright strict, pytest |
 | `infra/` | Compose (Postgres 17, Qdrant 1.18, Keycloak 26.7, Phoenix), realm export, DB init | Docker Compose |
+| `data/sample-docs/` | Demo + eval corpus; `domains.json` = file → domain tags; repo docs are frozen snapshots | — |
+| `evals/` | Golden datasets (`datasets/*.jsonl`, frozen per version); `runs/` git-ignored | — |
 | `scripts/` | `dev.mjs` (runs apps), `stack.mjs` (compose wrapper), `not-yet.mjs` (placeholder that fails) | Node |
 | `docs/adr/` | Architecture Decision Records — copy `template.md`, next free number, add to the index | — |
 | `docs/setup/` | `installation.md` (toolchain), `startup.md` (URLs, seed users, troubleshooting) | — |
@@ -94,7 +97,10 @@ Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
   Appendix A.
 - **Infra state:** realm JSON and `init.sql` only apply to empty volumes → `pnpm stack:reset && pnpm stack:up`
   (wipes all local data; ask first). Use `localhost`, not `127.0.0.1`, for anything Keycloak-related.
-- **Placeholders:** `pnpm eval:retrieval` (M1.2) and `pnpm contracts:generate` (M1.4) fail on purpose.
+- **Placeholders:** `pnpm contracts:generate` (M1.4) fails on purpose.
+- **AI service tests** never download models or need Docker: they fake fastembed (`tests/support.py`) and
+  use `QDRANT_URL=:memory:`. The golden set's labels are checked against `data/sample-docs/` by
+  `tests/test_evals.py`; `evals/datasets/retrieval_v1.jsonl` is frozen — changes go into a new version.
 - **No paid LLM calls in tests or CI** — use `LLM_PROVIDER=fake`. No agent frameworks (LangChain etc.)
   through Phase 2 (D11). No AGPL deps (repo is MIT; e.g. no PyMuPDF).
 - **Never commit secrets.** Only public or self-written documents go into the corpus (D25).

@@ -10,4 +10,8 @@ and the [startup guide](../../docs/setup/startup.md).
 | `pnpm --filter @fs100/web lint`      | ESLint (angular-eslint, incl. template a11y)  |
 | `pnpm --filter @fs100/web build`     | production build into `dist/`                 |
 
+Runtime config comes from `/config.json` (dev values in `public/config.json`, plan.md D17), loaded before
+bootstrap. Login is Keycloak Authorization Code + PKCE via `keycloak-angular` (`login-required`); the
+bearer token is attached to requests to `apiBaseUrl/api/` only.
+
 Generate code with the local CLI, e.g. `pnpm --filter @fs100/web ng generate component features/chat/chat`.

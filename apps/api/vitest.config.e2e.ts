@@ -5,5 +5,6 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['test/**/*.e2e-spec.ts'],
+    env: { KEYCLOAK_CLIENT_SECRET: 'test-only', LOG_LEVEL: 'silent' },
   },
 });

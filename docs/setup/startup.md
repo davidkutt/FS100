@@ -26,11 +26,17 @@ pnpm stack:up                             # Postgres, Qdrant, Keycloak, Phoenix 
 pnpm dev                                  # web + api + ai-service with hot reload
 ```
 
-Open **http://localhost:4200** — the landing page links to every running service.
+Open **http://localhost:4200** and log in as a seed user (below), e.g. `alice` / `alice` — the landing
+page greets you with your roles, shows admins a status card and links to every running service.
 
 `pnpm stack:up` uses `docker compose up --detach --wait`, so it returns only when every container's
 health check passes (≈ 1 minute; Keycloak is the slowest). `pnpm dev` runs in the foreground; stop it
 with `Ctrl+C`.
+
+On its **first** start the AI service downloads the embedding model (`EMBEDDING_MODEL`, ≈ 2.3 GB for the
+default `BAAI/bge-m3`, [ADR-0004](../adr/0004-embedding-model-chunking-threshold.md)) into
+`apps/ai-service/.cache/fastembed/`; it answers requests only after
+that (`/readyz` turns 200). Later starts load the model from the cache in a few seconds.
 
 ## 2. Daily routine
 
@@ -65,9 +71,9 @@ Ports are fixed and identical in Mode A and Mode B (plan.md §5). Everything bin
 
 | Service | URL | Login (dev only) |
 |---|---|---|
-| Web (Angular) | http://localhost:4200 | — (Keycloak login arrives in M1.1) |
-| API (NestJS) | http://localhost:3000/api/hello · http://localhost:3000/healthz | — |
-| AI service (FastAPI) | http://localhost:8000 · Swagger UI: http://localhost:8000/docs | — |
+| Web (Angular) | http://localhost:4200 | seed users below (Keycloak login, PKCE) |
+| API (NestJS) | http://localhost:3000/healthz · `/api/*` needs a user token (`/api/me`, admin: `/api/status`) | — |
+| AI service (FastAPI) | http://localhost:8000 · `/healthz`, `/readyz` · Swagger UI: http://localhost:8000/docs · `/v1/*` needs the API's service token | — |
 | Keycloak admin console | http://localhost:8080/admin/ | `admin` / `dev-only-change-me` (`KEYCLOAK_ADMIN*`) |
 | Keycloak account console (realm `kb`) | http://localhost:8080/realms/kb/account | seed users below |
 | Qdrant dashboard | http://localhost:6333/dashboard | — |
@@ -92,10 +98,11 @@ dev only:
 ```bash
 pnpm stack:ps                                   # all four containers "(healthy)"
 
-curl -s localhost:3000/api/hello                # {"message":"Hello from the FS100 API"}
 curl -s localhost:3000/healthz                  # {"status":"ok"}
+curl -s localhost:3000/api/me                   # 401 — every /api route needs a user token
 curl -s localhost:8000/                         # {"service":"ai-service","version":"0.1.0","docs":"/docs"}
 curl -s localhost:8000/healthz                  # {"status":"ok"}
+curl -s localhost:8000/readyz                   # {"status":"ok"} once the embedding model is loaded
 curl -s localhost:6333/readyz                   # all shards are ready
 
 # Keycloak: service token of the API (client credentials). Decode the JWT, e.g. on jwt.io —
@@ -103,12 +110,27 @@ curl -s localhost:6333/readyz                   # all shards are ready
 curl -s -d grant_type=client_credentials -d client_id=kb-api -d client_secret=dev-only-change-me \
   http://localhost:8080/realms/kb/protocol/openid-connect/token
 
+# AI service: /v1/* accepts only that service token (a user token for kb-api gets 401).
+TOKEN=$(curl -s -d grant_type=client_credentials -d client_id=kb-api -d client_secret=dev-only-change-me \
+  http://localhost:8080/realms/kb/protocol/openid-connect/token | sed -E 's/.*"access_token":"([^"]+)".*/\1/')
+curl -s localhost:8000/v1/status -H "Authorization: Bearer $TOKEN"   # {"status":"ok"} + a "status" span in Phoenix
+
+# AI service: ingest a document, search it, delete it (spans ingest/parse/chunk/embed/upsert/search in Phoenix)
+DOC=$(uuidgen | tr A-Z a-z)
+curl -s localhost:8000/v1/ingest -H "Authorization: Bearer $TOKEN" -F file=@data/sample-docs/slo-handbook.pdf \
+  -F doc_id=$DOC -F owner_id=dev -F domains=sre        # {"doc_id":…,"chunk_count":3,"page_count":3,…}
+curl -s localhost:8000/v1/search -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"query":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?","top_k":3}'   # hits with page numbers
+curl -s -o /dev/null -w '%{http_code}\n' -X DELETE localhost:8000/v1/documents/$DOC -H "Authorization: Bearer $TOKEN"  # 204
+
 # Postgres: both databases exist
 docker exec fs100-postgres-1 psql -U postgres -tAc "select datname from pg_database where datname in ('app','keycloak')"
 ```
 
-In the browser: log in as `bob` / `bob` at http://localhost:8080/realms/kb/account to see the user side of
-the realm.
+In the browser: log in at http://localhost:4200 as `alice` (admin: status card shows `api` and
+`aiService` = `ok`), then **Log out** and log in as `bob` / `carol` (no status card). The `status` span of
+the card's AI-service call appears in Phoenix (http://localhost:6006, project `default`). Every response
+carries an `x-request-id` header; the API and the AI service log it in their JSON log lines.
 
 ## 5. Quality checks
 
@@ -182,13 +204,16 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | Realm / users don't match the JSON | The realm already existed — see [Changing the Keycloak realm](#changing-the-keycloak-realm) |
 | `pnpm dev`: `[ai] … uv: not found` | Install uv ([installation guide](installation.md#24-uv-and-python-313)), then `uv sync --directory apps/ai-service` |
 | `pnpm dev`: port 4200/3000/8000 in use | An old dev server is still running: `lsof -nP -iTCP:4200 -sTCP:LISTEN` and kill it |
+| `pnpm dev`: `[ai]` exits on startup with a Qdrant connection error | The AI service needs Qdrant at startup: `pnpm stack:up` first |
+| `[ai]` takes minutes to start, `/readyz` returns 503 | First start downloads the embedding model; watch the `[ai]` progress output. Changing `EMBEDDING_MODEL` downloads another one and starts with an empty collection (re-ingest) |
 | Angular shows stale output | `rm -rf apps/web/.angular` and restart |
 | Login page: "Cookie not found" | Use `http://localhost:…`, not `127.0.0.1` — cookies and redirect URIs are bound to `localhost` |
 | Want a clean slate | `pnpm stack:reset`, `rm -rf node_modules apps/*/node_modules apps/ai-service/.venv`, then the steps in §1 |
 
 ## 9. What's next
 
-The base setup covers milestone **M1.0** plus the local infra of M1.1. Next steps, in plan order: auth
-walking skeleton (M1.1), ingestion + retrieval + eval harness (M1.2), grounded chat (M1.3), documents +
-relays (M1.4), UI (M1.5), containers + CI + e2e (M1.6). `pnpm eval:retrieval` and
-`pnpm contracts:generate` exist as placeholders and fail with a pointer to their milestone until then.
+Milestones **M1.0** (base setup), **M1.1** (infra + auth walking skeleton) and **M1.2** (ingestion,
+retrieval, eval harness — `pnpm eval:retrieval`, see [evals/README.md](../../evals/README.md)) are done.
+Next steps, in plan order: grounded chat (M1.3), documents + relays (M1.4), UI (M1.5), containers + CI +
+e2e (M1.6). `pnpm contracts:generate` exists as a placeholder and fails with a pointer to M1.4 until
+then.

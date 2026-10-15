@@ -96,7 +96,7 @@ Status: **L** = locked · **C** = changed in v2 · **N** = new in v2. ADR number
 | D6 | L | RBAC | Realm roles `viewer` < `editor` < `admin` (composites). viewer: chat + search. editor: + upload, delete own docs. admin: + delete any, status page. Docs org-wide visible in P1. | Simple matrix; per-document ACL in P3 (fields exist from day one). |
 | D7 | L | Ingestion flow | Nest: multipart (≤20 MB, allow-list PDF/MD/TXT, magic-byte check), SHA-256 dedupe (409), row `pending`, **202**. Background task streams file + metadata (incl. `domains`) to `POST /v1/ingest`; row → `ready`/`failed`. Originals not stored in P1. Boot-time recovery for stuck rows. | Smallest working thing; queue in P3. |
 | D8 | L | Parsing & chunking | `pypdf` (page-aware), plain read for MD/TXT; recursive splitter ~1000 chars / 150 overlap, heading-aware for Markdown; behind `Parser` / `Chunker` interfaces. **Not PyMuPDF** (AGPL vs. MIT repo). | Lightweight; Docling and code-aware (tree-sitter) chunkers are P3 drop-ins. |
-| D9 | **C** | Embeddings | In-process **fastembed** (ONNX, CPU). Benchmark candidates: `multilingual-e5-small`, `-base`, `-large`, **`bge-m3`** (dense + sparse from one model; large and slow on CPU). Default `e5-base` until the benchmark decides. E5 `query: ` / `passage: ` prefixes enforced + tested. (ADR-0004) | No token cost; identical locally and in the cloud; DE + EN corpus. bge-m3 is the natural path to hybrid search. |
+| D9 | **C** | Embeddings | In-process **fastembed** (ONNX, CPU). Benchmark candidates: `multilingual-e5-small`, `-base`, `-large`, **`bge-m3`** (dense + sparse from one model; large and slow on CPU). Default `e5-base` until the benchmark decides → **ADR-0004: `bge-m3`**, 1000/150, threshold 0.55. E5 `query: ` / `passage: ` prefixes enforced + tested. (ADR-0004) | No token cost; identical locally and in the cloud; DE + EN corpus. bge-m3 is the natural path to hybrid search. |
 | D10 | L | Qdrant model | Collection `kb__{model_slug}__{dim}` + alias **`kb_current`**; named dense vector `dense`, cosine; payload indexes `doc_id`, `owner_id`, **`domains`**; point ID = UUIDv5(`doc_id:chunk_index`); payload carries `visibility`, `allowed_groups` (P3). | Alias = zero-downtime model swaps and later A/B rollout (P6 MLOps). |
 | D11 | **C** | LLM access | In **Python**: `LlmProvider` protocol `stream_chat(messages, opts) → AsyncIterator[LlmEvent]`. Implementations: **`openai_compat`** (raw `openai` SDK with `base_url`; **OpenRouter** default, **HF router** alternative, Ollama/MLX/vLLM in P6) and **`fake`** (deterministic, CI). Model id only in env. No agent framework through Phase 2. (ADR-0005) | One adapter covers every target; writing against the raw SDK teaches what frameworks hide. A native vendor adapter is added only if a needed feature isn't reachable via OpenRouter. |
 | D12 | **C** | Chat protocol | Browser `POST /api/chat` (Nest: auth, RBAC, throttle) → Nest calls `POST /v1/chat` on the AI service (SSE) → Nest **relays events unchanged** → browser (fetch streaming; EventSource can't POST or send headers). Events: `sources`, `token`, `done`, `error`. Stateless; client sends last N messages. **Abort propagates on both hops** (browser → Nest → AI service → LLM). | Retrieval + prompt + LLM stay together in Python; P2 adds `tool_call` / `tool_result` without a protocol change. |
@@ -107,7 +107,7 @@ Status: **L** = locked · **C** = changed in v2 · **N** = new in v2. ADR number
 | D17 | L | Runtime config | Angular loads `/config.json` before bootstrap; nginx renders it from env (`envsubst`). | One image for local, k3d and Azure. |
 | D18 | **C** | Dev workflow | **Mode A (daily):** infra in Compose (Postgres, Qdrant, Keycloak, Phoenix), apps native with hot reload. **Mode B (`--profile full`):** all containerized for demos, e2e and image tests. **No local LLM in Phase 1.** Apple Silicon → arm64 images locally. | M1 RAM is limited; hot reload is fastest natively. |
 | D19 | **C** | CI/CD | GitHub Actions: per-app jobs (path filters, caching), contract-drift check, **retrieval eval job (report only)**, buildx **multi-arch** images (`linux/amd64,linux/arm64` on `main`; amd64 only on PRs) → GHCR; e2e smoke; Dependabot. Trunk-based, Conventional Commits. | amd64 for AKS, arm64 for the Mac; ACR in Phase 5. |
-| D20 | L | Testing | pytest (+ testcontainers Qdrant); Nest: Vitest + supertest; Angular: CLI default runner; one Playwright smoke (login → upload → ask) with `LLM_PROVIDER=fake`. **No paid LLM calls in CI.** | Deterministic and free. |
+| D20 | L | Testing | pytest (+ in-process Qdrant via `qdrant-client` `:memory:` — same client API, no Docker; testcontainers if server-only features are needed); Nest: Vitest + supertest; Angular: CLI default runner; one Playwright smoke (login → upload → ask) with `LLM_PROVIDER=fake`. **No paid LLM calls in CI.** | Deterministic and free. |
 | D21 | **C** | Observability | JSON logs, `x-request-id` browser → Nest → AI service, `/healthz` + `/readyz`. **LLM tracing** in the AI service: OpenTelemetry + OpenInference instrumentation (`openai` SDK) + manual spans for embed/search/prompt → **Arize Phoenix** container. Usage (tokens, cost if returned) logged per request. | Single-container, OTel-native; self-hosted Langfuse v3 needs ClickHouse, Redis and object storage — optional later. |
 | D22 | **C** | Domain & corpus | Taxonomy: `db`, `dev`, `cloud`, `devops`, `mlops`, `ai`, `security`, `architecture`, `sre`. Phase 1 corpus is platform/DevOps-heavy: **the repo's own docs + ADRs**, **runbooks you write yourself**, and open-licensed excerpts of upstream docs (Kubernetes, Keycloak, Qdrant, GitHub Actions …) plus 1–2 German docs. **Check every license**, keep `ATTRIBUTION.md`. | Meta-demo: the assistant explains its own stack. Self-written runbooks are licence-safe and authentic portfolio content. |
 | D23 | **N** | Evaluation from day one | Golden set `evals/datasets/retrieval_v1.jsonl` (40–60 items: question, expected doc + heading/page, domain, language, `answerable`). Metrics: hit@1/5, MRR@10, nDCG@10, latency p50/p95 — overall + per domain + per language. Unanswerable items calibrate `score_threshold`. Results as JSON under `evals/runs/` (git-ignored) + summary in the CI job. Dataset versioned. | Measurement before optimization — the base for every Phase 3 technique. |
@@ -355,7 +355,7 @@ Hours are ideal single-person hours, ±30 %.
 - [ ] **Golden set v1:** 40–60 items across domains, DE + EN, ≥8 unanswerable, mixed item types (§7.6) — written *before* any tuning
 - [ ] **Eval harness:** metrics (hit@k, MRR, nDCG, latency), runner, `kb-eval retrieval` CLI, JSON results, Markdown summary, per-domain/per-language breakdown
 - [ ] **Benchmark** `e5-small/base/large` + `bge-m3` and two chunk sizes → ADR-0004 (model, chunking, calibrated `score_threshold`)
-- [ ] Tests: unit (chunker, parsers, prefixes, metrics against hand-computed examples) + integration (ingest → search with testcontainers Qdrant)
+- [ ] Tests: unit (chunker, parsers, prefixes, metrics against hand-computed examples) + integration (ingest → search with in-process Qdrant `:memory:`)
 
 **Acceptance:** ingest → search round-trip with page numbers; re-ingest creates no duplicates; delete removes all points; `pnpm eval:retrieval` produces the report; ADR-0004 contains the numbers.
 
@@ -576,6 +576,7 @@ KEYCLOAK_ADMIN_PASSWORD=dev-only-change-me
 
 # --- api (NestJS) ---
 API_PORT=3000
+LOG_LEVEL=info                              # pino: fatal|error|warn|info|debug|trace|silent
 API_DATABASE_URL=postgresql://postgres:dev-only-change-me@localhost:5432/app
 KEYCLOAK_ISSUER=http://localhost:8080/realms/kb
 KEYCLOAK_AUDIENCE=kb-api
@@ -594,12 +595,12 @@ AI_KEYCLOAK_AUDIENCE=kb-ai
 QDRANT_URL=http://localhost:6333
 QDRANT_API_KEY=
 QDRANT_ALIAS=kb_current
-EMBEDDING_MODEL=intfloat/multilingual-e5-base
+EMBEDDING_MODEL=BAAI/bge-m3                 # ADR-0004
 EMBEDDING_CACHE_DIR=./.cache/fastembed
 CHUNK_SIZE=1000
 CHUNK_OVERLAP=150
 RETRIEVAL_TOP_K=5
-RETRIEVAL_SCORE_THRESHOLD=                  # set from the ADR-0004 calibration
+RETRIEVAL_SCORE_THRESHOLD=0.55              # ADR-0004 calibration, model-specific
 LLM_PROVIDER=openai_compat                  # openai_compat | fake
 LLM_BASE_URL=https://openrouter.ai/api/v1   # HF alternative: https://router.huggingface.co/v1
 LLM_API_KEY=                                # OpenRouter key WITH a credit limit

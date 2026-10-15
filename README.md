@@ -7,9 +7,9 @@ run and every request **traceable** from retrieval to prompt to model.
 
 The project is built in six phases; the full plan for Phase 1 lives in **[plan.md](plan.md)**.
 
-> **Status:** Phase 1 · **M1.0 base setup** — monorepo, three app skeletons, local infra (Postgres,
-> Qdrant, Keycloak with the `kb` realm, Phoenix), CI. No auth flow, ingestion or chat yet — see
-> [roadmap](#roadmap).
+> **Status:** Phase 1 · **M1.2 ingestion, retrieval, eval** — on top of the M1.1 auth skeleton, the AI
+> service ingests PDF/Markdown/TXT into Qdrant and searches it with domain filters; a 60-question golden
+> set measures retrieval (`pnpm eval:retrieval`). No chat and no upload UI yet — see [roadmap](#roadmap).
 
 ---
 
@@ -79,7 +79,7 @@ Open http://localhost:4200. Everything else — URLs, seed users, checks, troubl
 | `pnpm test` | Vitest (web, api) · pytest (ai-service) |
 | `pnpm build` | Production builds of web and api |
 | `pnpm format` | Auto-format (prettier + ruff) |
-| `pnpm eval:retrieval` | Retrieval eval against the golden set — *placeholder until M1.2* |
+| `pnpm eval:retrieval` | Retrieval eval against the golden set, in-memory Qdrant ([evals/README.md](evals/README.md)) |
 | `pnpm contracts:generate` | OpenAPI types + SSE JSON Schemas — *placeholder until M1.4* |
 
 ## Repository layout
@@ -93,6 +93,8 @@ infra/
   compose/        docker-compose.yml (Mode A infra; app containers join in M1.6)
   keycloak/       realm-kb.json (roles, clients, dev seed users)
   postgres/       init.sql (databases keycloak + app)
+data/sample-docs/ Demo + eval corpus with domain tags (domains.json, ATTRIBUTION.md)
+evals/            Golden datasets, eval docs; runs/ is git-ignored
 docs/
   setup/          installation.md · startup.md
   adr/            Architecture Decision Records
@@ -101,21 +103,23 @@ scripts/          dev.mjs · stack.mjs · not-yet.mjs
 plan.md           Phase 1 plan (decisions, contracts, milestones)
 ```
 
-Folders from plan.md §6 that belong to later milestones (`packages/contracts`, `evals/`,
-`data/sample-docs/`, `e2e/`) are created when their milestone starts.
+Folders from plan.md §6 that belong to later milestones (`packages/contracts`, `e2e/`) are created when
+their milestone starts.
 
 ## Documentation
 
 - [plan.md](plan.md) — Phase 1 plan: scope, decisions D1–D26, contracts, milestones, risks
 - [Installation guide](docs/setup/installation.md) — toolchain for macOS (Apple Silicon), Linux, Windows/WSL2
 - [Startup guide](docs/setup/startup.md) — first start, daily routine, URLs, seed users, troubleshooting
-- [ADRs](docs/adr/README.md) — 0001 monorepo & pnpm · 0002 AI layer in Python · 0003 in-process embeddings
+- [ADRs](docs/adr/README.md) — 0001 monorepo & pnpm · 0002 AI layer in Python · 0003 in-process embeddings ·
+  0004 embedding model, chunking and score threshold
+- [Evals](evals/README.md) — golden set, metrics, how to run and version
 
 ## Roadmap
 
 | Phase | Theme |
 |---|---|
-| **1** | Foundation + RAG slice + eval + tracing — *in progress: M1.0 done* |
+| **1** | Foundation + RAG slice + eval + tracing — *in progress: M1.0 – M1.2 done* |
 | 2 | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals |
 | 3 | Hybrid search, reranking, code-aware RAG, guardrails, routing + semantic cache, memory |
 | 4 | Kubernetes: Helm, k3d, GitOps-ready manifests |

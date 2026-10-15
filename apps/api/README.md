@@ -11,5 +11,7 @@ and the [startup guide](../../docs/setup/startup.md).
 | `pnpm --filter @fs100/api lint`       | oxlint (type-aware)                                      |
 | `pnpm --filter @fs100/api build`      | compile into `dist/`                                     |
 
-Endpoints today: `GET /api/hello`, `GET /healthz`. Generate code with the local CLI, e.g.
+Endpoints today: `GET /healthz` (public), `GET /api/me` (any role), `GET /api/status` (admin). Every route
+needs a Keycloak access token with `aud=kb-api` unless marked `@Public()`; restrict with `@Roles(...)`
+(`src/auth/auth.guard.ts`). Config is validated with Zod in `src/config.ts`. Generate code with the local CLI, e.g.
 `pnpm --filter @fs100/api exec nest generate module documents`.

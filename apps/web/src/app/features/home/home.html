@@ -1,10 +1,43 @@
 <section class="py-4">
-  <h1 class="display-6 fw-semibold">Hello, Dev of the future 👋</h1>
+  @if (me.hasValue()) {
+    <h1 class="display-6 fw-semibold">
+      Hello {{ me.value().name }}
+      <span class="text-body-secondary fs-4">· {{ me.value().roles.join(', ') }}</span>
+    </h1>
+  } @else if (me.error()) {
+    <div class="alert alert-danger" role="alert">Could not load your profile from the API.</div>
+  } @else {
+    <p class="text-body-secondary" aria-live="polite">Loading…</p>
+  }
   <p class="lead text-body-secondary">
     FS100 is a RAG and agent assistant for engineers who work across DB, Dev, Cloud, DevOps, MLOps,
-    AI, Security, Architecture and SRE. This is the Phase 1 base setup.
+    AI, Security, Architecture and SRE.
   </p>
 </section>
+
+@if (isAdmin()) {
+  <section class="card shadow-sm mb-4" aria-labelledby="status-heading">
+    <div class="card-body">
+      <h2 id="status-heading" class="h5 card-title">System status</h2>
+      @if (status.hasValue()) {
+        <ul class="list-unstyled mb-0">
+          @for (component of status.value() | keyvalue; track component.key) {
+            <li>
+              {{ component.key }}:
+              <span class="badge" [class]="component.value === 'ok' ? 'bg-success' : 'bg-danger'">
+                {{ component.value }}
+              </span>
+            </li>
+          }
+        </ul>
+      } @else if (status.error()) {
+        <p class="text-danger mb-0">Status unavailable.</p>
+      } @else {
+        <p class="text-body-secondary mb-0">Checking…</p>
+      }
+    </div>
+  </section>
+}
 
 <section aria-labelledby="services-heading">
   <h2 id="services-heading" class="h5 mb-3">Local services</h2>

@@ -1,7 +1,10 @@
 <nav class="navbar navbar-expand bg-body border-bottom">
   <div class="container">
     <a class="navbar-brand fw-semibold" routerLink="/">FS100</a>
-    <span class="navbar-text small text-body-secondary">the FULL FULL stack</span>
+    <span class="navbar-text small text-body-secondary me-auto">the FULL FULL stack</span>
+    <button type="button" class="btn btn-sm btn-outline-secondary" (click)="keycloak.logout()">
+      Log out
+    </button>
   </div>
 </nav>
 
