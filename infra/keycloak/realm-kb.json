@@ -3,7 +3,7 @@
   "displayName": "FS100",
   "enabled": true,
   "sslRequired": "external",
-  "registrationAllowed": false,
+  "registrationAllowed": true,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "resetPasswordAllowed": false,
@@ -33,8 +33,22 @@
         "composites": {
           "realm": ["editor"]
         }
+      },
+      {
+        "name": "default-roles-kb",
+        "description": "Granted to every new user, including self-registered ones",
+        "composite": true,
+        "composites": {
+          "realm": ["viewer"],
+          "client": {
+            "account": ["view-profile", "manage-account"]
+          }
+        }
       }
     ]
+  },
+  "defaultRole": {
+    "name": "default-roles-kb"
   },
   "clients": [
     {

@@ -74,11 +74,15 @@ Ports are fixed and identical in Mode A and Mode B (plan.md §5). Everything bin
 | Web (Angular) | http://localhost:4200 | seed users below (Keycloak login, PKCE) |
 | API (NestJS) | http://localhost:3000/healthz · `/api/*` needs a user token (`/api/me`, admin: `/api/status`) | — |
 | AI service (FastAPI) | http://localhost:8000 · `/healthz`, `/readyz` · Swagger UI: http://localhost:8000/docs · `/v1/*` needs the API's service token | — |
-| Keycloak admin console | http://localhost:8080/admin/ | `admin` / `dev-only-change-me` (`KEYCLOAK_ADMIN*`) |
+| Keycloak admin console | http://localhost:8080/admin/ | `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD` from the first start (default `admin` / `dev-only-change-me`) |
 | Keycloak account console (realm `kb`) | http://localhost:8080/realms/kb/account | seed users below |
 | Qdrant dashboard | http://localhost:6333/dashboard | — |
 | Phoenix (LLM traces) | http://localhost:6006 | — |
 | Postgres | `postgresql://postgres:dev-only-change-me@localhost:5432/app` | also DB `keycloak` |
+
+**Two separate logins.** The app (http://localhost:4200) signs you in with a user of realm **`kb`** — a seed
+user below or one you registered. The `KEYCLOAK_ADMIN` account lives in realm **`master`** and only opens
+the Keycloak admin console; it does not exist in realm `kb`, so the app login rejects it.
 
 **Seed users in realm `kb`** (from `infra/keycloak/realm-kb.json`, plan.md §7.7). Password = username,
 dev only:
@@ -88,6 +92,12 @@ dev only:
 | `alice` | `alice` | admin → editor → viewer |
 | `bob` | `bob` | editor → viewer |
 | `carol` | `carol` | viewer |
+
+**New users.** Click **Register** on the app's login page: the account gets the role `viewer`. To create
+users or change roles as the Keycloak admin: http://localhost:8080/admin/ → realm selector **kb** →
+**Users** → *Create new user* (then the **Credentials** tab → *Set password*, *Temporary* off) or open a user
+→ **Role mapping** → *Assign role* → filter *Realm roles* → `editor` / `admin`. Role changes apply at the
+next token refresh (≤ 5 min) or after logging out and in.
 
 **Clients:** `kb-web` (public, PKCE S256, redirect `http://localhost:4200/*`, access tokens carry
 `aud=kb-api`), `kb-api` (confidential, secret `dev-only-change-me`, service account with `aud=kb-ai`),
@@ -169,6 +179,21 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`fe
 `scripts/stack.mjs` forwards any extra arguments to `docker compose`, e.g.
 `node scripts/stack.mjs restart keycloak`.
 
+### Changing credentials in `.env`
+
+`POSTGRES_PASSWORD` and `KEYCLOAK_ADMIN*` are written into the Docker volumes on the **first** start and
+ignored afterwards. `pnpm stack:down`, restarts and deleting images all keep the volumes — only
+`pnpm stack:reset` (wipes all local data) makes the new values take effect:
+
+```bash
+pnpm stack:reset && pnpm stack:up
+```
+
+Keep `API_DATABASE_URL` in sync with `POSTGRES_*`. To keep your data instead, change the passwords where
+they live: the Keycloak admin via the admin console (realm `master` → Users → `admin` → Credentials), and
+Postgres with `docker exec fs100-postgres-1 psql -U postgres -c "ALTER USER postgres PASSWORD '<new>'"`
+before the next `pnpm stack:up` (otherwise Keycloak can no longer connect to Postgres).
+
 ### Changing the Keycloak realm
 
 Keycloak imports `infra/keycloak/realm-kb.json` **only if the realm does not exist yet**. After editing the
@@ -201,6 +226,10 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 |---|---|
 | `pnpm stack:up` fails: `port is already allocated` | Another process uses 5432/6333/6334/8080/6006/4317 (often a native Postgres). Find it: `lsof -nP -iTCP:5432 -sTCP:LISTEN`; stop it, or stop the other Compose project |
 | `pnpm stack:up` times out on Keycloak | First start imports the realm and builds its Quarkus image: wait, then `pnpm stack:logs keycloak`. Low Docker memory is the usual root cause |
+| App login says "Invalid username or password" for `admin` | `admin` is the Keycloak server admin (realm `master`). Log in to the app as `alice` / `bob` / `carol` or **Register** — see [§3](#3-what-runs-where) |
+| New `KEYCLOAK_ADMIN_PASSWORD` / `POSTGRES_PASSWORD` not accepted | The volumes still hold the first-start values — see [Changing credentials in `.env`](#changing-credentials-in-env) |
+| Keycloak unhealthy after changing `POSTGRES_PASSWORD` | Same cause: Postgres still has the old password. Revert `.env`, or reset / `ALTER USER` as described there |
+| Everything is slow | Usually memory: Docker infra + embedding model + IDE + browser on 16 GB. Check `sysctl vm.swapusage`; use `EMBEDDING_MODEL=intfloat/multilingual-e5-small`, stop `phoenix` when not needed, give Docker less RAM. The first page load after `pnpm install` also pre-bundles dependencies once |
 | Realm / users don't match the JSON | The realm already existed — see [Changing the Keycloak realm](#changing-the-keycloak-realm) |
 | `pnpm dev`: `[ai] … uv: not found` | Install uv ([installation guide](installation.md#24-uv-and-python-313)), then `uv sync --directory apps/ai-service` |
 | `pnpm dev`: port 4200/3000/8000 in use | An old dev server is still running: `lsof -nP -iTCP:4200 -sTCP:LISTEN` and kill it |

@@ -49,3 +49,4 @@ blob-report/
 *.swp
 .DS_Store
 Thumbs.db
+/data/sample-docs/

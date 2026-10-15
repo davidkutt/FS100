@@ -143,4 +143,4 @@ Never cut: validation at trust boundaries, error handling that prevents data los
 
 Rules learned from user feedback. Newest last. Format: `- <rule> — <why, one clause>`.
 
-<!-- none yet -->
+- Next to any setting that only applies on first start (Docker volumes, realm import), say so where it is edited and name the reset command — users edit `.env`, restart, and expect it to apply.

@@ -310,6 +310,8 @@ direct lookup, paraphrase without keyword overlap, cross-language (DE question �
 - **Clients:** `kb-web` — public, Standard Flow, **PKCE S256 required**, redirect `http://localhost:4200/*`, web origin `http://localhost:4200`, audience mapper → `kb-api`.
   `kb-api` — confidential, service account enabled, audience mapper → `kb-ai`.
 - **Seed users (dev only):** `alice` (admin), `bob` (editor), `carol` (viewer).
+- **Self-registration** on; default role `default-roles-kb` ⊃ `viewer`, so new users can chat and search. Turn it
+  off (or gate it) before any public deployment — viewers spend LLM tokens (D24).
 - **Settings:** access-token lifetime 5 min, refresh via `keycloak-js`; realm committed as `infra/keycloak/realm-kb.json`.
 
 ---
