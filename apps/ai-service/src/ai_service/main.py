@@ -7,13 +7,15 @@ from pydantic import BaseModel
 from qdrant_client import QdrantClient
 
 from ai_service import __version__
-from ai_service.api import documents, health
+from ai_service.api import chat, documents, health
 from ai_service.core.auth import ServiceAuth
 from ai_service.core.logging import request_id, setup_logging
 from ai_service.core.settings import Settings, get_settings
 from ai_service.core.tracing import setup_tracing
 from ai_service.embeddings import Embedder
 from ai_service.knowledge_base import KnowledgeBase
+from ai_service.llm import create_provider
+from ai_service.rag import ChatPipeline
 
 
 class ServiceInfo(BaseModel):
@@ -38,6 +40,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings.chunk_overlap,
         )
         app.state.kb.ensure_collection()
+        app.state.chat = ChatPipeline(
+            app.state.kb,
+            create_provider(settings),
+            settings.retrieval_top_k,
+            settings.retrieval_score_threshold,
+        )
         yield
 
     app = FastAPI(title="FS100 AI service", version=__version__, lifespan=lifespan)
@@ -46,6 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     service_auth = [Depends(ServiceAuth(settings))]
     app.include_router(health.status_router, dependencies=service_auth)
     app.include_router(documents.router, dependencies=service_auth)
+    app.include_router(chat.router, dependencies=service_auth)
 
     @app.middleware("http")
     async def propagate_request_id(  # pyright: ignore[reportUnusedFunction]

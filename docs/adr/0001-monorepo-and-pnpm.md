@@ -56,5 +56,5 @@ everything.
 | Nest 12 + Vitest | Nest 12 scaffolds Vitest + oxlint and ESM. DI/decorators work under Vitest 5 without SWC. Adopted. |
 | TypeScript line | Angular 22 requires TypeScript `>=6.0 <6.1`; Nest 12 builds with it. Catalog pins `~6.0.3`. TS 7 (native) waits for Angular support. |
 | `keycloak-angular` with Angular 22 | `keycloak-angular@22` + `keycloak-js@26` work with Angular 22 (zoneless): `provideKeycloak`, `customBearerTokenInterceptor`. Adopted in M1.1. |
-| Zod via Nest 12 Standard Schema | **Open** — M1.1 uses Zod for config only (no request bodies yet); spike with the first validated endpoint in M1.4 (fallback `class-validator`). |
-| Drizzle with Nest 12 ESM | **Open** — spike with the `documents` schema in M1.1/M1.4. |
+| Zod via Nest 12 Standard Schema | **Works (M1.4).** Global `StandardSchemaValidationPipe` + `@Body({ schema })`; `@nestjs/swagger` 12 turns the same Zod schemas into OpenAPI (`standardSchema` on responses, `.meta({ id })` for named components). Multipart needs the file field declared in the schema for the docs only. Adopted; no `class-validator`. |
+| Drizzle with Nest 12 ESM | **Works (M1.4).** `drizzle-orm` 0.45 + `pg` as a plain provider (no wrapper module), `drizzle-kit generate` for SQL migrations, applied on boot. Tests swap in PGlite (`API_DATABASE_URL=:memory:`) through the same migrations. Adopted. |

@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -24,6 +25,14 @@ class Settings(BaseSettings):
     embedding_cache_dir: str = ".cache/fastembed"
     chunk_size: int = 1000
     chunk_overlap: int = 150
+    retrieval_top_k: int = 5
+    retrieval_score_threshold: float | None = 0.55
+    llm_provider: Literal["openai_compat", "fake"] = "fake"  # unset = no paid calls (tests, CI)
+    llm_base_url: str = "https://openrouter.ai/api/v1"
+    llm_api_key: str = ""
+    llm_model: str = ""
+    llm_max_output_tokens: int = 800
+    llm_timeout_s: float = 60
     otel_exporter_otlp_endpoint: str = ""  # empty = tracing off (tests, CI)
     otel_service_name: str = "ai-service"
 

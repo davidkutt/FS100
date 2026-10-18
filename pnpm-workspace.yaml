@@ -2,11 +2,14 @@
 packages:
   - apps/web
   - apps/api
+  - packages/contracts
 
 # Dependency install scripts are blocked by default; only allow what is needed (ADR-0001).
-# Manage with `pnpm approve-builds`. The denied packages ship prebuilt binaries.
+# Manage with `pnpm approve-builds`. The denied packages ship prebuilt binaries
+# (@scarf/scarf is only an install-time telemetry ping from swagger-ui-dist).
 allowBuilds:
   '@parcel/watcher': false
+  '@scarf/scarf': false
   esbuild: true
   lmdb: false
   msgpackr-extract: false

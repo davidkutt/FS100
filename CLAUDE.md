@@ -12,12 +12,44 @@ Guide for agents working in FS100. Read this first; follow the links only when t
    *why*: a workaround, a constraint, a surprising choice). Never restate what the code does. Keep each
    comment as short and concise as possible.
 3. **ALWAYS** follow the LAZY RULES section, except when it's crucial to the task or the user explicitly asks for it./ 
+4. **ALWAYS** follow the Capturing lessons section.
+
+## Capturing lessons: rule, skill, or nothing
+
+When I correct you, or when you finish a task, decide where the lesson belongs:
+
+- **Constraint or preference** ("always X", "never Y") → one-line rule in CLAUDE.md.
+- **Reusable multi-step procedure** → a skill, but only if ALL of these hold:
+  - it took several steps, commands or lookups that weren't obvious from the code
+    (env setup, migrations, release steps, test fixtures, codegen, a debugging recipe for this stack)
+  - it will realistically come up again, in this project or others
+  - no existing skill covers it; if one is close, update that one instead
+- **One-off** → nothing.
+
+Don't interrupt the task for a skill. At the end, create it and tell me in one line what you added.
+
+When creating or updating a skill:
+- Path: `.claude/skills/<name>/SKILL.md` for this repo,
+  `~/.claude/skills/<name>/SKILL.md` if it applies across projects.
+- The `description` is all a future session sees before loading the skill, so it decides
+  whether the skill ever gets used. Lead with what it does, then "Use when…" with the words
+  I'd actually type and the files/tools involved. 1–3 sentences, clearly distinct from
+  existing skill descriptions.
+- Body: exact commands in order, the pitfalls hit this time, and how to verify success.
+  Imperative, no narrative, most important steps first. Keep it short; put long reference
+  material in separate files in the skill folder and link to them.
+- Add `disable-model-invocation: true` if it has side effects (deploy, publish, send, delete),
+  so it only runs when I type /name.
+- Move any CLAUDE.md rules that only apply to this workflow into the skill, and delete them
+  from CLAUDE.md.
+- Don't reference the skill in CLAUDE.md; the description handles discovery.
 ## What this is
 
 FS100 is a RAG/agent assistant: upload domain-tagged documents, ask questions, get streamed answers with
 citations, with every retrieval change measured by evals and every request traced. Built in six phases;
-**Phase 1 is in progress** — M1.0 (repo, skeletons, local infra, CI), M1.1 (auth walking skeleton) and
-M1.2 (ingest/search/delete in the AI service, golden set, `pnpm eval:retrieval`) are done. No chat yet.
+**Phase 1 is in progress** — M1.0 (repo, skeletons, local infra, CI), M1.1 (auth walking skeleton),
+M1.2 (ingest/search/delete in the AI service, golden set, `pnpm eval:retrieval`), M1.3 (grounded chat
+`POST /v1/chat` as SSE) and M1.4 (documents + chat/search relays in NestJS, contracts) are done. Next: M1.5 UI.
 Check the milestone in [plan.md §8](plan.md#8-milestones-and-tasks) before building something: many
 features are deliberately scheduled for later milestones.
 
@@ -31,10 +63,11 @@ Qdrant alias `kb_current`). Keep those names.
 | `apps/web` | Frontend, browser-facing | Angular 22 (standalone, signals, zoneless), Bootstrap 5.3 via SCSS, Vitest, angular-eslint |
 | `apps/api` | Product API / BFF: auth, RBAC, document metadata, SSE relay. Browser-facing | NestJS 12 (ESM), Vitest + supertest, oxlint |
 | `apps/ai-service` | **All AI code**: parse, chunk, embed, retrieve, prompt, LLM, evals, tracing. Internal only | FastAPI, Python 3.13 (uv), pydantic-settings, ruff, pyright strict, pytest |
+| `packages/contracts` | **Generated**, committed: OpenAPI of both services (+ SSE event schemas) and TS types | openapi-typescript |
 | `infra/` | Compose (Postgres 17, Qdrant 1.18, Keycloak 26.7, Phoenix), realm export, DB init | Docker Compose |
 | `data/sample-docs/` | Demo + eval corpus; `domains.json` = file → domain tags; repo docs are frozen snapshots | — |
 | `evals/` | Golden datasets (`datasets/*.jsonl`, frozen per version); `runs/` git-ignored | — |
-| `scripts/` | `dev.mjs` (runs apps), `stack.mjs` (compose wrapper), `not-yet.mjs` (placeholder that fails) | Node |
+| `scripts/` | `dev.mjs` (runs apps), `stack.mjs` (compose wrapper) | Node |
 | `docs/adr/` | Architecture Decision Records — copy `template.md`, next free number, add to the index | — |
 | `docs/setup/` | `installation.md` (toolchain), `startup.md` (URLs, seed users, troubleshooting) | — |
 | `plan.md` | Phase 1 source of truth: decisions D1–D26, contracts §7, milestones §8, target layout §6 | — |
@@ -57,6 +90,8 @@ pnpm lint            # angular-eslint · oxlint · prettier --check · ruff · p
 pnpm test            # all tests
 pnpm build           # web + api
 pnpm format          # prettier + ruff fix
+pnpm contracts:generate                   # after changing any route or SSE model; commit packages/contracts
+pnpm --filter @fs100/api db:generate      # Drizzle migration after editing apps/api/src/db/schema.ts
 ```
 
 Fast feedback — run only what you touched:
@@ -97,7 +132,11 @@ Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
   Appendix A.
 - **Infra state:** realm JSON and `init.sql` only apply to empty volumes → `pnpm stack:reset && pnpm stack:up`
   (wipes all local data; ask first). Use `localhost`, not `127.0.0.1`, for anything Keycloak-related.
-- **Placeholders:** `pnpm contracts:generate` (M1.4) fails on purpose.
+- **API DB:** Drizzle; migrations in `apps/api/drizzle/` run on API boot. API tests use `API_DATABASE_URL=:memory:`
+  (in-process PGlite) and need no Docker; `test/support.ts` builds the app with test JWT keys.
+- **Contracts:** Nest's OpenAPI comes from Zod schemas (`@Body({ schema })`, `@ApiOkResponse({ standardSchema })`;
+  `.meta({ id })` names a component). Relayed bodies (`/api/chat`, `/api/search`) are validated only by the AI
+  service; their types live in `@fs100/contracts/ai-service`.
 - **AI service tests** never download models or need Docker: they fake fastembed (`tests/support.py`) and
   use `QDRANT_URL=:memory:`. The golden set's labels are checked against `data/sample-docs/` by
   `tests/test_evals.py`; `evals/datasets/retrieval_v1.jsonl` is frozen — changes go into a new version.

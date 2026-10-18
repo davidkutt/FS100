@@ -4,6 +4,8 @@ pnpm-lock.yaml
 **/coverage/
 **/.angular/
 **/node_modules/
+packages/contracts/
+apps/api/drizzle/
 
 # Python is formatted by ruff
 apps/ai-service/

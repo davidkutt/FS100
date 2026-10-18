@@ -13,6 +13,19 @@ class HealthResponse(BaseModel):
     status: Literal["ok"]
 
 
+class ServiceStatus(BaseModel):
+    status: Literal["ok"]
+    qdrant: Literal["ok", "down"]
+
+
+def _ready(request: Request) -> bool:
+    kb = getattr(request.app.state, "kb", None)
+    try:
+        return kb is not None and kb.client.collection_exists(kb.alias)
+    except Exception:
+        return False
+
+
 @router.get("/healthz")
 async def healthz() -> HealthResponse:
     """Liveness probe."""
@@ -22,12 +35,7 @@ async def healthz() -> HealthResponse:
 @router.get("/readyz")
 def readyz(request: Request) -> HealthResponse:
     """Readiness: embedding model loaded (set at startup) and the Qdrant alias reachable."""
-    kb = getattr(request.app.state, "kb", None)
-    try:
-        ready = kb is not None and kb.client.collection_exists(kb.alias)
-    except Exception:
-        ready = False
-    if not ready:
+    if not _ready(request):
         raise HTTPException(
             status.HTTP_503_SERVICE_UNAVAILABLE, "Qdrant or embedding model not ready"
         )
@@ -35,7 +43,7 @@ def readyz(request: Request) -> HealthResponse:
 
 
 @status_router.get("/status")
-async def service_status() -> HealthResponse:
+def service_status(request: Request) -> ServiceStatus:
     """Authenticated status for the API's admin status card; emits one span to Phoenix."""
     with tracer.start_as_current_span("status"):
-        return HealthResponse(status="ok")
+        return ServiceStatus(status="ok", qdrant="ok" if _ready(request) else "down")

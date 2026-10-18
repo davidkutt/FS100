@@ -110,3 +110,4 @@ def test_v1_routes_need_the_service_token(client: TestClient) -> None:
 
 def test_readyz_reports_ready_once_model_and_qdrant_are_up(client: TestClient) -> None:
     assert client.get("/readyz").status_code == 200
+    assert client.get("/v1/status").json() == {"status": "ok", "qdrant": "ok"}

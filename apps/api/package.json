@@ -15,15 +15,19 @@
     "test:watch": "vitest",
     "test:cov": "vitest run --coverage",
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
-    "test:e2e": "vitest run --config ./vitest.config.e2e.ts"
+    "test:e2e": "vitest run --config ./vitest.config.e2e.ts",
+    "db:generate": "drizzle-kit generate"
   },
   "dependencies": {
     "@nestjs/common": "^12.1.2",
     "@nestjs/core": "^12.1.2",
     "@nestjs/platform-express": "^12.1.2",
+    "@nestjs/swagger": "^12.0.2",
+    "drizzle-orm": "^0.45.4",
     "helmet": "^8.3.0",
     "jose": "^6.2.12",
     "nestjs-pino": "^5.3.1",
+    "pg": "^8.23.1",
     "pino": "^10.4.0",
     "pino-http": "^11.0.0",
     "reflect-metadata": "^0.2.2",
@@ -31,13 +35,17 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.10",
+    "@fs100/contracts": "workspace:*",
     "@nestjs/cli": "^12.0.8",
     "@nestjs/schematics": "^12.0.6",
     "@nestjs/testing": "^12.1.2",
     "@types/express": "^5.0.0",
     "@types/node": "catalog:",
+    "@types/pg": "^8.23.1",
     "@types/supertest": "^7.0.0",
     "@vitest/coverage-v8": "^5.0.3",
+    "drizzle-kit": "^0.31.11",
     "oxlint": "^1.87.0",
     "oxlint-tsgolint": "^7.0.2004",
     "source-map-support": "^0.5.21",

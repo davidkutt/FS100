@@ -7,9 +7,11 @@ run and every request **traceable** from retrieval to prompt to model.
 
 The project is built in six phases; the full plan for Phase 1 lives in **[plan.md](plan.md)**.
 
-> **Status:** Phase 1 · **M1.2 ingestion, retrieval, eval** — on top of the M1.1 auth skeleton, the AI
-> service ingests PDF/Markdown/TXT into Qdrant and searches it with domain filters; a 60-question golden
-> set measures retrieval (`pnpm eval:retrieval`). No chat and no upload UI yet — see [roadmap](#roadmap).
+> **Status:** Phase 1 · **M1.4 documents + relays** — the AI service ingests PDF/Markdown/TXT into Qdrant,
+> searches it with domain filters (measured by a 60-question golden set, `pnpm eval:retrieval`) and streams
+> cited answers over SSE (OpenRouter or `fake`). The NestJS API in front of it handles uploads (RBAC,
+> dedupe, background ingest, metadata in Postgres) and relays chat and search; both services publish their
+> contracts to `packages/contracts`. The UI follows in M1.5 — see [roadmap](#roadmap).
 
 ---
 
@@ -22,7 +24,7 @@ The project is built in six phases; the full plan for Phase 1 lives in **[plan.m
 | AI service | FastAPI on Python 3.13 (uv) · pydantic-settings · ruff · pyright (strict) · pytest |
 | Identity | Keycloak 26.7 — realm `kb`, OIDC Authorization Code + PKCE, roles `viewer` < `editor` < `admin` |
 | Data | Postgres 17 (`app`, `keycloak`) · Qdrant 1.18 (vectors) |
-| LLM & tracing | OpenRouter / Hugging Face router via one OpenAI-compatible adapter (M1.3) · Arize Phoenix (OpenTelemetry) |
+| LLM & tracing | OpenRouter / Hugging Face router via one OpenAI-compatible adapter · Arize Phoenix (OpenTelemetry) |
 | Tooling | pnpm 12 workspaces + catalogs · uv · Docker Compose · GitHub Actions |
 
 ## Architecture (Phase 1 target)
@@ -80,7 +82,7 @@ Open http://localhost:4200. Everything else — URLs, seed users, checks, troubl
 | `pnpm build` | Production builds of web and api |
 | `pnpm format` | Auto-format (prettier + ruff) |
 | `pnpm eval:retrieval` | Retrieval eval against the golden set, in-memory Qdrant ([evals/README.md](evals/README.md)) |
-| `pnpm contracts:generate` | OpenAPI types + SSE JSON Schemas — *placeholder until M1.4* |
+| `pnpm contracts:generate` | Regenerate `packages/contracts` (OpenAPI of both services incl. SSE event schemas, TS types); commit the result |
 
 ## Repository layout
 
@@ -89,6 +91,8 @@ apps/
   web/            Angular 22 frontend            → apps/web/README.md
   api/            NestJS 12 product API / BFF    → apps/api/README.md
   ai-service/     FastAPI AI service (uv)         → apps/ai-service/README.md
+packages/
+  contracts/      Generated OpenAPI documents + TS types of api and ai-service (pnpm contracts:generate)
 infra/
   compose/        docker-compose.yml (Mode A infra; app containers join in M1.6)
   keycloak/       realm-kb.json (roles, clients, dev seed users)
@@ -98,13 +102,13 @@ evals/            Golden datasets, eval docs; runs/ is git-ignored
 docs/
   setup/          installation.md · startup.md
   adr/            Architecture Decision Records
-scripts/          dev.mjs · stack.mjs · not-yet.mjs
+  security/       red-teaming.md (playbook for attacking your own deployment)
+scripts/          dev.mjs · stack.mjs
 .github/workflows/ci.yml
 plan.md           Phase 1 plan (decisions, contracts, milestones)
 ```
 
-Folders from plan.md §6 that belong to later milestones (`packages/contracts`, `e2e/`) are created when
-their milestone starts.
+Folders from plan.md §6 that belong to later milestones (`e2e/`) are created when their milestone starts.
 
 ## Documentation
 
@@ -112,14 +116,15 @@ their milestone starts.
 - [Installation guide](docs/setup/installation.md) — toolchain for macOS (Apple Silicon), Linux, Windows/WSL2
 - [Startup guide](docs/setup/startup.md) — first start, daily routine, URLs, seed users, troubleshooting
 - [ADRs](docs/adr/README.md) — 0001 monorepo & pnpm · 0002 AI layer in Python · 0003 in-process embeddings ·
-  0004 embedding model, chunking and score threshold
+  0004 embedding model, chunking and score threshold · 0005 LLM access and model choice
 - [Evals](evals/README.md) — golden set, metrics, how to run and version
+- [Red teaming](docs/security/red-teaming.md) — threat model, test catalogue, grading, process
 
 ## Roadmap
 
 | Phase | Theme |
 |---|---|
-| **1** | Foundation + RAG slice + eval + tracing — *in progress: M1.0 – M1.2 done* |
+| **1** | Foundation + RAG slice + eval + tracing — *in progress: M1.0 – M1.3 done* |
 | 2 | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals |
 | 3 | Hybrid search, reranking, code-aware RAG, guardrails, routing + semantic cache, memory |
 | 4 | Kubernetes: Helm, k3d, GitOps-ready manifests |

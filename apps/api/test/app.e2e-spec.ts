@@ -1,47 +1,14 @@
-import { Test } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
-import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT, type CryptoKey } from 'jose';
+import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
-import { App } from 'supertest/types.js';
-import { AiClient } from './../src/ai-client/ai-client.service.js';
-import { AppModule } from './../src/app.module.js';
-import { configureApp } from './../src/app.setup.js';
-import { JWKS } from './../src/auth/auth.guard.js';
-
-const ISSUER = 'http://localhost:8080/realms/kb';
+import type { App } from 'supertest/types.js';
+import { ADMIN, createApp, foreignKey, token } from './support.js';
 
 describe('API (e2e)', () => {
   let app: INestApplication<App>;
-  let signingKey: CryptoKey;
-  let foreignKey: CryptoKey;
-  const ai = { get: vi.fn(async () => ({ status: 'ok' })) };
-
-  const token = (
-    roles: string[],
-    { aud = 'kb-api', exp = '5m' as string | number, key = signingKey } = {},
-  ) =>
-    new SignJWT({ name: 'Test User', realm_access: { roles } })
-      .setProtectedHeader({ alg: 'RS256', kid: 'test' })
-      .setSubject('user-1')
-      .setIssuer(ISSUER)
-      .setAudience(aud)
-      .setExpirationTime(exp)
-      .sign(key);
+  const ai = { get: vi.fn(async () => ({ status: 'ok', qdrant: 'ok' })) };
 
   beforeAll(async () => {
-    const pair = await generateKeyPair('RS256');
-    signingKey = pair.privateKey;
-    foreignKey = (await generateKeyPair('RS256')).privateKey;
-    const jwk = { ...(await exportJWK(pair.publicKey)), kid: 'test', alg: 'RS256' };
-
-    const moduleFixture = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(JWKS)
-      .useValue(createLocalJWKSet({ keys: [jwk] }))
-      .overrideProvider(AiClient)
-      .useValue(ai)
-      .compile();
-    app = configureApp(moduleFixture.createNestApplication());
-    await app.init();
+    app = await createApp(ai);
   });
 
   afterAll(async () => {
@@ -55,6 +22,10 @@ describe('API (e2e)', () => {
       .expect(200)
       .expect('x-request-id', 'req-42')
       .expect({ status: 'ok' });
+  });
+
+  it('GET /readyz is public and checks Postgres', () => {
+    return request(app.getHttpServer()).get('/readyz').expect(200).expect({ status: 'ok' });
   });
 
   describe('token matrix', () => {
@@ -77,6 +48,18 @@ describe('API (e2e)', () => {
     });
   });
 
+  it('errors are RFC 9457 problem details', async () => {
+    const res = await request(app.getHttpServer()).get('/api/me').expect(401);
+
+    expect(res.headers['content-type']).toMatch(/^application\/problem\+json/);
+    expect(res.body).toEqual({
+      type: 'about:blank',
+      title: 'Unauthorized',
+      status: 401,
+      detail: 'Missing bearer token',
+    });
+  });
+
   it('GET /api/me returns the caller with app roles only', async () => {
     await request(app.getHttpServer())
       .get('/api/me')
@@ -85,13 +68,23 @@ describe('API (e2e)', () => {
       .expect({ sub: 'user-1', name: 'Test User', roles: ['viewer'] });
   });
 
-  it('GET /api/status asks the AI service with the request id', async () => {
+  it('GET /api/status reports Postgres and asks the AI service with the request id', async () => {
     await request(app.getHttpServer())
       .get('/api/status')
       .set('x-request-id', 'req-7')
-      .auth(await token(['admin', 'editor', 'viewer']), { type: 'bearer' })
+      .auth(await token(ADMIN), { type: 'bearer' })
       .expect(200)
-      .expect({ api: 'ok', aiService: 'ok' });
+      .expect({ api: 'ok', db: 'ok', aiService: 'ok', qdrant: 'ok' });
     expect(ai.get).toHaveBeenCalledWith('/v1/status', 'req-7');
+  });
+
+  it('GET /api/status survives a dead AI service', async () => {
+    ai.get.mockRejectedValueOnce(new Error('ECONNREFUSED'));
+
+    await request(app.getHttpServer())
+      .get('/api/status')
+      .auth(await token(ADMIN), { type: 'bearer' })
+      .expect(200)
+      .expect({ api: 'ok', db: 'ok', aiService: 'down', qdrant: 'unknown' });
   });
 });

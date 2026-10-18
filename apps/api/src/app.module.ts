@@ -2,7 +2,10 @@ import { randomUUID } from 'node:crypto';
 import { Module } from '@nestjs/common';
 import { LoggerModule } from 'nestjs-pino';
 import { AuthModule } from './auth/auth.module.js';
+import { ChatModule } from './chat/chat.module.js';
 import { CONFIG, ConfigModule, type Config } from './config.js';
+import { DbModule } from './db/db.module.js';
+import { DocumentsModule } from './documents/documents.module.js';
 import { HealthModule } from './health/health.module.js';
 
 @Module({
@@ -27,8 +30,11 @@ import { HealthModule } from './health/health.module.js';
         },
       }),
     }),
+    DbModule,
     AuthModule,
     HealthModule,
+    DocumentsModule,
+    ChatModule,
   ],
 })
 export class AppModule {}

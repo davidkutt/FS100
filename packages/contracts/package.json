@@ -1,0 +1,21 @@
+{
+  "name": "@fs100/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./ai-service": {
+      "types": "./ai-service.d.ts"
+    },
+    "./api": {
+      "types": "./api.d.ts"
+    }
+  },
+  "scripts": {
+    "generate": "openapi-typescript ai-service.openapi.json -o ai-service.d.ts --default-non-nullable false && openapi-typescript api.openapi.json -o api.d.ts --default-non-nullable false"
+  },
+  "devDependencies": {
+    "openapi-typescript": "^7.13.0"
+  }
+}

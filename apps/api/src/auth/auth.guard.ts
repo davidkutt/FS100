@@ -10,16 +10,16 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
 import { errors, jwtVerify, type JWTVerifyGetKey } from 'jose';
+import { z } from 'zod';
 import { CONFIG, type Config } from '../config.js';
 
 export const ROLES = ['viewer', 'editor', 'admin'] as const;
 export type Role = (typeof ROLES)[number];
 
-export interface AuthUser {
-  sub: string;
-  name: string;
-  roles: Role[];
-}
+export const AuthUser = z
+  .object({ sub: z.string(), name: z.string(), roles: z.array(z.enum(ROLES)) })
+  .meta({ id: 'User' });
+export type AuthUser = z.infer<typeof AuthUser>;
 
 export type AuthRequest = Request & { user: AuthUser };
 

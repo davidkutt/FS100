@@ -9,7 +9,7 @@ Short, numbered records of decisions that shape FS100. Each ADR references the d
 | [0002](0002-ai-layer-in-python.md) | All AI code lives in a Python service; NestJS is the product API | Accepted |
 | [0003](0003-embeddings-in-process.md) | Embeddings computed in-process with fastembed | Accepted |
 | [0004](0004-embedding-model-chunking-threshold.md) | Embedding model `bge-m3`, chunking 1000/150, score threshold 0.55 (benchmark) | Accepted |
-| 0005 | LLM access via OpenAI-compatible adapter; dev/demo model choice | Planned — M1.3 |
+| [0005](0005-llm-access-and-model.md) | LLM access via one OpenAI-compatible adapter; dev model `gpt-6-luna`, demo model `deepseek-v4.1-flash` | Accepted |
 | 0006 | Azure region and quota | Planned — M1.7 |
 
 ## Writing a new ADR

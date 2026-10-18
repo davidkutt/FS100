@@ -20,7 +20,7 @@ corepack enable pnpm                      # once per machine
 pnpm install                              # web + api
 uv sync --directory apps/ai-service       # ai-service (creates apps/ai-service/.venv)
 
-cp .env.example .env                      # dev-only defaults; edit later (e.g. LLM_API_KEY in M1.3)
+cp .env.example .env                      # dev-only defaults; then set LLM_API_KEY + LLM_MODEL, or LLM_PROVIDER=fake
 
 pnpm stack:up                             # Postgres, Qdrant, Keycloak, Phoenix — waits until all are healthy
 pnpm dev                                  # web + api + ai-service with hot reload
@@ -72,7 +72,7 @@ Ports are fixed and identical in Mode A and Mode B (plan.md §5). Everything bin
 | Service | URL | Login (dev only) |
 |---|---|---|
 | Web (Angular) | http://localhost:4200 | seed users below (Keycloak login, PKCE) |
-| API (NestJS) | http://localhost:3000/healthz · `/api/*` needs a user token (`/api/me`, admin: `/api/status`) | — |
+| API (NestJS) | http://localhost:3000/healthz · `/readyz` · `/api/*` needs a user token (`/api/me`, `/api/documents`, `/api/chat`, `/api/search`, admin: `/api/status`) | — |
 | AI service (FastAPI) | http://localhost:8000 · `/healthz`, `/readyz` · Swagger UI: http://localhost:8000/docs · `/v1/*` needs the API's service token | — |
 | Keycloak admin console | http://localhost:8080/admin/ | `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD` from the first start (default `admin` / `dev-only-change-me`) |
 | Keycloak account console (realm `kb`) | http://localhost:8080/realms/kb/account | seed users below |
@@ -109,6 +109,7 @@ next token refresh (≤ 5 min) or after logging out and in.
 pnpm stack:ps                                   # all four containers "(healthy)"
 
 curl -s localhost:3000/healthz                  # {"status":"ok"}
+curl -s localhost:3000/readyz                   # {"status":"ok"} — Postgres reachable, migrations applied
 curl -s localhost:3000/api/me                   # 401 — every /api route needs a user token
 curl -s localhost:8000/                         # {"service":"ai-service","version":"0.1.0","docs":"/docs"}
 curl -s localhost:8000/healthz                  # {"status":"ok"}
@@ -131,14 +132,17 @@ curl -s localhost:8000/v1/ingest -H "Authorization: Bearer $TOKEN" -F file=@data
   -F doc_id=$DOC -F owner_id=dev -F domains=sre        # {"doc_id":…,"chunk_count":3,"page_count":3,…}
 curl -s localhost:8000/v1/search -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"query":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?","top_k":3}'   # hits with page numbers
+curl -N localhost:8000/v1/chat -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"messages":[{"role":"user","content":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?"}],"user":{"sub":"dev","roles":["viewer"]}}'
+  # streams event: sources → token … → done; Phoenix shows chat → search → embed and the LLM span (prompt, tokens)
 curl -s -o /dev/null -w '%{http_code}\n' -X DELETE localhost:8000/v1/documents/$DOC -H "Authorization: Bearer $TOKEN"  # 204
 
 # Postgres: both databases exist
 docker exec fs100-postgres-1 psql -U postgres -tAc "select datname from pg_database where datname in ('app','keycloak')"
 ```
 
-In the browser: log in at http://localhost:4200 as `alice` (admin: status card shows `api` and
-`aiService` = `ok`), then **Log out** and log in as `bob` / `carol` (no status card). The `status` span of
+In the browser: log in at http://localhost:4200 as `alice` (admin: status card shows `api`, `db`,
+`aiService` and `qdrant` = `ok`), then **Log out** and log in as `bob` / `carol` (no status card). The `status` span of
 the card's AI-service call appears in Phoenix (http://localhost:6006, project `default`). Every response
 carries an `x-request-id` header; the API and the AI service log it in their JSON log lines.
 
@@ -233,7 +237,11 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | Realm / users don't match the JSON | The realm already existed — see [Changing the Keycloak realm](#changing-the-keycloak-realm) |
 | `pnpm dev`: `[ai] … uv: not found` | Install uv ([installation guide](installation.md#24-uv-and-python-313)), then `uv sync --directory apps/ai-service` |
 | `pnpm dev`: port 4200/3000/8000 in use | An old dev server is still running: `lsof -nP -iTCP:4200 -sTCP:LISTEN` and kill it |
+| `[api]` exits on startup: `password authentication failed for user "postgres"` | `API_DATABASE_URL` in `.env` must repeat `POSTGRES_USER` / `POSTGRES_PASSWORD` (the API migrates on boot, so it fails fast) |
+| `POST /api/documents` → 409 for a file that failed | Dedupe is by content (SHA-256), failed rows included: delete the failed document, then upload again |
 | `pnpm dev`: `[ai]` exits on startup with a Qdrant connection error | The AI service needs Qdrant at startup: `pnpm stack:up` first |
+| `[ai]` exits: `LLM_PROVIDER=openai_compat needs LLM_API_KEY and LLM_MODEL` | Set both in `.env` (OpenRouter key with a credit limit, model from [ADR-0005](../adr/0005-llm-access-and-model.md)), or `LLM_PROVIDER=fake` |
+| Chat ends with `event: error`, `LLM request failed` | `detail` carries the provider's answer: 401 wrong key, 402 credits used up, 429 rate limit after retries — see `data/sample-docs/runbook-llm-provider-outage.md` |
 | `[ai]` takes minutes to start, `/readyz` returns 503 | First start downloads the embedding model; watch the `[ai]` progress output. Changing `EMBEDDING_MODEL` downloads another one and starts with an empty collection (re-ingest) |
 | Angular shows stale output | `rm -rf apps/web/.angular` and restart |
 | Login page: "Cookie not found" | Use `http://localhost:…`, not `127.0.0.1` — cookies and redirect URIs are bound to `localhost` |
@@ -241,8 +249,8 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 
 ## 9. What's next
 
-Milestones **M1.0** (base setup), **M1.1** (infra + auth walking skeleton) and **M1.2** (ingestion,
-retrieval, eval harness — `pnpm eval:retrieval`, see [evals/README.md](../../evals/README.md)) are done.
-Next steps, in plan order: grounded chat (M1.3), documents + relays (M1.4), UI (M1.5), containers + CI +
-e2e (M1.6). `pnpm contracts:generate` exists as a placeholder and fails with a pointer to M1.4 until
-then.
+Milestones **M1.0** (base setup), **M1.1** (infra + auth walking skeleton), **M1.2** (ingestion,
+retrieval, eval harness — `pnpm eval:retrieval`, see [evals/README.md](../../evals/README.md)) and
+**M1.3** (grounded chat, `POST /v1/chat` in the AI service) and **M1.4** (documents, chat and search
+relays in the API, `pnpm contracts:generate`) are done. Next steps, in plan order: UI (M1.5), containers +
+CI + e2e (M1.6).

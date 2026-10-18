@@ -38,4 +38,4 @@ def test_status_accepts_a_service_token(client: TestClient) -> None:
     response = client.get("/v1/status", headers={"Authorization": f"Bearer {token()}"})
 
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    assert response.json() == {"status": "ok", "qdrant": "down"}  # no lifespan, so no Qdrant

@@ -1,6 +1,7 @@
-import type { INestApplication } from '@nestjs/common';
+import { type INestApplication, StandardSchemaValidationPipe } from '@nestjs/common';
 import helmet from 'helmet';
 import { Logger } from 'nestjs-pino';
+import { ProblemFilter } from './common/problem.filter.js';
 import { CONFIG, type Config } from './config.js';
 
 /** Shared bootstrap configuration, applied in `main.ts` and in the e2e tests. */
@@ -9,7 +10,9 @@ export function configureApp(app: INestApplication): INestApplication {
   app.use(helmet());
   app.enableCors({ origin: app.get<Config>(CONFIG).CORS_ORIGINS });
   // Browser-facing routes live under /api; probes stay at the root (plan.md §7.2).
-  app.setGlobalPrefix('api', { exclude: ['healthz'] });
+  app.setGlobalPrefix('api', { exclude: ['healthz', 'readyz'] });
+  app.useGlobalPipes(new StandardSchemaValidationPipe());
+  app.useGlobalFilters(new ProblemFilter());
   app.enableShutdownHooks();
   return app;
 }
