@@ -1,0 +1,112 @@
+<h1 class="h3 mb-3">Chat</h1>
+
+<app-domain-picker class="d-block mb-3" label="Limit to domains (optional)" [(value)]="domains" />
+
+<div class="vstack gap-3 mb-3" aria-live="polite">
+  @for (turn of turns(); track $index) {
+    @if (turn.role === 'user') {
+      <p class="user-turn align-self-end bg-primary-subtle rounded-3 px-3 py-2 mb-0">
+        {{ turn.content }}
+      </p>
+    } @else {
+      <article class="card shadow-sm" [attr.aria-busy]="busy() && $last">
+        <div class="card-body">
+          @if (turn.content) {
+            <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -- citations are links, Enter fires click -->
+            <div
+              class="answer"
+              [innerHTML]="turn.content | markdown"
+              (click)="cite($event, turn)"
+            ></div>
+          } @else if (busy() && $last) {
+            <p class="text-body-secondary mb-0">
+              <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+              Searching the knowledge base…
+            </p>
+          }
+          @if (turn.error) {
+            <div class="alert alert-danger mt-2 mb-0" role="alert">{{ turn.error }}</div>
+          }
+          @if (turn.stopped) {
+            <p class="small text-body-secondary mt-2 mb-0">Stopped.</p>
+          }
+          @if (turn.sources?.length) {
+            <div class="d-flex flex-wrap align-items-center gap-1 mt-3">
+              <span class="small text-body-secondary me-1">Sources</span>
+              @for (source of turn.sources; track source.n) {
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-secondary"
+                  (click)="show(source)"
+                >
+                  [{{ source.n }}] {{ source.title }}
+                  @if (source.page) {
+                    · p. {{ source.page }}
+                  }
+                </button>
+              }
+            </div>
+          }
+          @if (phoenixUrl && turn.traceId) {
+            <a
+              class="small d-inline-block mt-2"
+              [href]="phoenixUrl + '/redirects/traces/' + turn.traceId"
+              target="_blank"
+              rel="noopener"
+              >Trace in Phoenix</a
+            >
+          }
+        </div>
+      </article>
+    }
+  } @empty {
+    <p class="text-body-secondary">
+      Ask a question about the documents in the knowledge base. Answers cite their sources as [1],
+      [2] … — select a citation to read the passage.
+    </p>
+  }
+</div>
+
+<form class="d-flex gap-2" (ngSubmit)="send()">
+  <label class="visually-hidden" for="question">Question</label>
+  <input
+    #input
+    id="question"
+    name="question"
+    class="form-control"
+    placeholder="Ask a question…"
+    autocomplete="off"
+    [(ngModel)]="question"
+  />
+  @if (busy()) {
+    <button type="button" class="btn btn-outline-danger" (click)="stop()">Stop</button>
+  } @else {
+    <button type="submit" class="btn btn-primary" [disabled]="!question().trim()">Send</button>
+  }
+</form>
+
+<dialog #panel class="source-panel" aria-labelledby="source-title" closedby="any">
+  @if (source(); as source) {
+    <div class="offcanvas-header border-bottom">
+      <h2 id="source-title" class="offcanvas-title h5">[{{ source.n }}] {{ source.title }}</h2>
+      <button type="button" class="btn-close" aria-label="Close" (click)="panel.close()"></button>
+    </div>
+    <div class="offcanvas-body">
+      <dl class="small mb-3">
+        @if (source.page) {
+          <dt>Page</dt>
+          <dd>{{ source.page }}</dd>
+        }
+        @if (source.heading) {
+          <dt>Section</dt>
+          <dd>{{ source.heading }}</dd>
+        }
+        <dt>Domains</dt>
+        <dd>{{ source.domains.join(', ') }}</dd>
+        <dt>Score</dt>
+        <dd>{{ source.score.toFixed(3) }}</dd>
+      </dl>
+      <p class="source-text">{{ source.text }}</p>
+    </div>
+  }
+</dialog>

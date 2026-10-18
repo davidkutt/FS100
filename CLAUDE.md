@@ -49,7 +49,8 @@ FS100 is a RAG/agent assistant: upload domain-tagged documents, ask questions, g
 citations, with every retrieval change measured by evals and every request traced. Built in six phases;
 **Phase 1 is in progress** — M1.0 (repo, skeletons, local infra, CI), M1.1 (auth walking skeleton),
 M1.2 (ingest/search/delete in the AI service, golden set, `pnpm eval:retrieval`), M1.3 (grounded chat
-`POST /v1/chat` as SSE) and M1.4 (documents + chat/search relays in NestJS, contracts) are done. Next: M1.5 UI.
+`POST /v1/chat` as SSE), M1.4 (documents + chat/search relays in NestJS, contracts) and M1.5 (Angular UI:
+documents, chat, inspector) are done. Next: M1.6 containers, CI, e2e.
 Check the milestone in [plan.md §8](plan.md#8-milestones-and-tasks) before building something: many
 features are deliberately scheduled for later milestones.
 

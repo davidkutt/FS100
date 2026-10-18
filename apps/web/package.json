@@ -21,6 +21,7 @@
     "bootstrap": "^5.3.8",
     "keycloak-angular": "^22.0.0",
     "keycloak-js": "^26.2.4",
+    "marked": "^18.1.1",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
@@ -30,6 +31,7 @@
     "@angular/cli": "^22.2.2",
     "@angular/compiler-cli": "^22.2.0",
     "@eslint/js": "^10.0.1",
+    "@fs100/contracts": "workspace:*",
     "angular-eslint": "^22.6.0",
     "eslint": "^10.12.0",
     "jsdom": "^30.0.0",

@@ -27,7 +27,8 @@ pnpm dev                                  # web + api + ai-service with hot relo
 ```
 
 Open **http://localhost:4200** and log in as a seed user (below), e.g. `alice` / `alice` — the landing
-page greets you with your roles, shows admins a status card and links to every running service.
+page greets you with your roles, shows admins a status card and links to every running service. The
+sidebar leads to **Chat**, **Documents** (upload needs `editor`) and the retrieval **Inspector**.
 
 `pnpm stack:up` uses `docker compose up --detach --wait`, so it returns only when every container's
 health check passes (≈ 1 minute; Keycloak is the slowest). `pnpm dev` runs in the foreground; stop it
@@ -146,6 +147,12 @@ In the browser: log in at http://localhost:4200 as `alice` (admin: status card s
 the card's AI-service call appears in Phoenix (http://localhost:6006, project `default`). Every response
 carries an `x-request-id` header; the API and the AI service log it in their JSON log lines.
 
+Then the demo path as `bob`: **Documents** → pick domains → drop files from `data/sample-docs/` → status
+goes `pending → processing → ready`. **Chat** → ask a question → the answer streams with `[1]` citations;
+select one to read the passage, **Trace in Phoenix** opens the request's trace. **Inspector** shows the
+raw hits with scores and a dashed line at the score threshold. As `carol` (viewer) there are no upload
+or delete controls. Chat calls the real LLM unless `LLM_PROVIDER=fake`.
+
 ## 5. Quality checks
 
 Run them before every push — they are also what CI runs.
@@ -251,6 +258,6 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 
 Milestones **M1.0** (base setup), **M1.1** (infra + auth walking skeleton), **M1.2** (ingestion,
 retrieval, eval harness — `pnpm eval:retrieval`, see [evals/README.md](../../evals/README.md)) and
-**M1.3** (grounded chat, `POST /v1/chat` in the AI service) and **M1.4** (documents, chat and search
-relays in the API, `pnpm contracts:generate`) are done. Next steps, in plan order: UI (M1.5), containers +
-CI + e2e (M1.6).
+**M1.3** (grounded chat, `POST /v1/chat` in the AI service), **M1.4** (documents, chat and search
+relays in the API, `pnpm contracts:generate`) and **M1.5** (Angular UI: documents, chat, inspector) are
+done. Next step, in plan order: containers + CI + e2e (M1.6).

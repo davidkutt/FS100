@@ -1,0 +1,98 @@
+<h1 class="h3 mb-3">Documents</h1>
+
+@if (canUpload) {
+  <section
+    class="card card-body shadow-sm mb-4"
+    [class.border-primary]="dragging()"
+    aria-labelledby="upload-heading"
+    (dragover)="$event.preventDefault(); dragging.set(true)"
+    (dragleave)="dragging.set(false)"
+    (drop)="$event.preventDefault(); upload($event.dataTransfer?.files)"
+  >
+    <h2 id="upload-heading" class="h5">Upload</h2>
+    <app-domain-picker class="d-block mb-3" label="Domains" [(value)]="domains" />
+    <label for="files" class="form-label">PDF, Markdown or text files — or drop them here</label>
+    <input
+      #files
+      id="files"
+      type="file"
+      class="form-control"
+      accept=".pdf,.md,.markdown,.txt"
+      multiple
+      [disabled]="uploading()"
+      (change)="upload(files.files); files.value = ''"
+    />
+    @if (uploading()) {
+      <p class="small text-body-secondary mt-2 mb-0" aria-live="polite">Uploading…</p>
+    }
+    @for (error of errors(); track $index) {
+      <div class="alert alert-danger mt-2 mb-0 py-2" role="alert">{{ error }}</div>
+    }
+  </section>
+}
+
+@if (docs.hasValue()) {
+  <div class="table-responsive">
+    <table class="table align-middle">
+      <thead>
+        <tr>
+          <th scope="col">File</th>
+          <th scope="col">Domains</th>
+          <th scope="col">Status</th>
+          <th scope="col" class="text-end">Chunks</th>
+          <th scope="col">Owner</th>
+          <th scope="col">Uploaded</th>
+          <th scope="col"><span class="visually-hidden">Actions</span></th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (doc of docs.value(); track doc.id) {
+          <tr>
+            <td>
+              {{ doc.filename }}
+              @if (doc.error) {
+                <div class="small text-danger">{{ doc.error }}</div>
+              }
+            </td>
+            <td>
+              @for (domain of doc.domains; track domain) {
+                <span class="badge text-bg-light border me-1">{{ domain }}</span>
+              }
+            </td>
+            <td>
+              <span class="badge" [class]="badge[doc.status]">
+                @if (doc.status === 'processing') {
+                  <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
+                }
+                {{ doc.status }}
+              </span>
+            </td>
+            <td class="text-end">{{ doc.chunkCount ?? '–' }}</td>
+            <td>{{ doc.ownerName }}</td>
+            <td>{{ doc.createdAt | date: 'short' }}</td>
+            <td class="text-end">
+              @if (canDelete(doc)) {
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-danger"
+                  [attr.aria-label]="'Delete ' + doc.filename"
+                  (click)="remove(doc)"
+                >
+                  Delete
+                </button>
+              }
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="7" class="text-body-secondary">No documents yet.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+} @else if (docs.error()) {
+  <div class="alert alert-danger" role="alert">Could not load the documents.</div>
+} @else {
+  <p class="text-body-secondary" aria-live="polite">Loading…</p>
+}

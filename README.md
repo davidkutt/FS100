@@ -7,11 +7,12 @@ run and every request **traceable** from retrieval to prompt to model.
 
 The project is built in six phases; the full plan for Phase 1 lives in **[plan.md](plan.md)**.
 
-> **Status:** Phase 1 · **M1.4 documents + relays** — the AI service ingests PDF/Markdown/TXT into Qdrant,
+> **Status:** Phase 1 · **M1.5 UI** — the AI service ingests PDF/Markdown/TXT into Qdrant,
 > searches it with domain filters (measured by a 60-question golden set, `pnpm eval:retrieval`) and streams
 > cited answers over SSE (OpenRouter or `fake`). The NestJS API in front of it handles uploads (RBAC,
 > dedupe, background ingest, metadata in Postgres) and relays chat and search; both services publish their
-> contracts to `packages/contracts`. The UI follows in M1.5 — see [roadmap](#roadmap).
+> contracts to `packages/contracts`. The Angular UI has document upload, streamed chat with clickable
+> citations and a retrieval inspector. Containers, CI and e2e follow in M1.6 — see [roadmap](#roadmap).
 
 ---
 

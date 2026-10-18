@@ -1,13 +1,35 @@
 <nav class="navbar navbar-expand bg-body border-bottom">
-  <div class="container">
+  <div class="container-fluid">
     <a class="navbar-brand fw-semibold" routerLink="/">FS100</a>
-    <span class="navbar-text small text-body-secondary me-auto">the FULL FULL stack</span>
+    <span class="navbar-text small text-body-secondary me-auto d-none d-sm-inline">
+      the FULL FULL stack
+    </span>
     <button type="button" class="btn btn-sm btn-outline-secondary" (click)="keycloak.logout()">
       Log out
     </button>
   </div>
 </nav>
 
-<main class="container py-4">
-  <router-outlet />
-</main>
+<div class="container-fluid">
+  <div class="row">
+    <nav class="sidebar col-md-3 col-xl-2 py-2 py-md-3" aria-label="Main">
+      <ul class="nav nav-pills flex-md-column gap-1">
+        @for (link of links; track link.path) {
+          <li class="nav-item">
+            <a
+              class="nav-link"
+              [routerLink]="link.path"
+              routerLinkActive="active"
+              ariaCurrentWhenActive="page"
+              [routerLinkActiveOptions]="{ exact: true }"
+              >{{ link.label }}</a
+            >
+          </li>
+        }
+      </ul>
+    </nav>
+    <main class="col-md-9 col-xl-10 py-4 px-md-4">
+      <router-outlet />
+    </main>
+  </div>
+</div>

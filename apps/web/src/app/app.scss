@@ -1,0 +1,7 @@
+// Horizontal pills on phones, a sidebar from md up — no toggle JS needed.
+@media (min-width: 768px) {
+  .sidebar {
+    min-height: calc(100vh - 57px);
+    border-right: var(--bs-border-width) solid var(--bs-border-color);
+  }
+}

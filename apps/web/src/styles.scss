@@ -1,7 +1,29 @@
 // Global styles: Bootstrap 5.3 compiled from SCSS with project variable overrides (D16).
-// Design tokens grow in M1.5; keep overrides here instead of overriding compiled CSS.
+// Keep overrides here instead of overriding compiled CSS.
 @use 'bootstrap/scss/bootstrap' with (
   $primary: #5b3cc4,
   $body-bg: #f7f7fb,
   $link-decoration: none
 );
+
+// Retrieved chunk text keeps its line breaks.
+.source-text {
+  white-space: pre-wrap;
+}
+
+// Rendered via [innerHTML], so component styles can't reach it.
+.answer {
+  > :last-child {
+    margin-bottom: 0;
+  }
+
+  .citation {
+    font-size: 0.8em;
+    font-weight: 600;
+    vertical-align: super;
+  }
+}
+
+.threshold-line {
+  border-top: 2px dashed var(--bs-warning);
+}
