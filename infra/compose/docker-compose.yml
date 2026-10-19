@@ -1,7 +1,7 @@
-# Local infrastructure for FS100 — Mode A (plan.md D18): Postgres, Qdrant, Keycloak, Phoenix.
-# Run from the repo root via `pnpm stack:up` / `pnpm stack:down` (scripts/stack.mjs adds the root `.env`).
-# Ports follow plan.md §5 and are bound to 127.0.0.1 only. The apps (web, api, ai-service) run natively
-# with `pnpm dev`; containerised app services join this file as `profiles: [full]` in M1.6 (Mode B).
+# Local stack for FS100 (plan.md D18). Run from the repo root (scripts/stack.mjs adds the root `.env`):
+# - Mode A, `pnpm stack:up`: infra only — Postgres, Qdrant, Keycloak, Phoenix; apps run with `pnpm dev`.
+# - Mode B, `pnpm stack:up:full`: also web, api and ai-service as containers (`profiles: [full]`).
+# Ports follow plan.md §5, identical in both modes, and are bound to 127.0.0.1 only.
 # All images are multi-arch (amd64 + arm64). Every credential here is a dev-only default.
 name: fs100
 
@@ -106,7 +106,87 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # --- Mode B: the apps. Stop `pnpm dev` first (same ports). A bare variable name passes the value from
+  # the shell or `.env` and stays unset otherwise, so the app's default applies; `=` entries point the
+  # apps at each other inside the Compose network.
+  ai-service:
+    profiles: [full]
+    build:
+      context: ../..
+      dockerfile: apps/ai-service/Dockerfile
+    environment:
+      - AI_KEYCLOAK_ISSUER
+      - AI_KEYCLOAK_AUDIENCE
+      - QDRANT_ALIAS
+      - EMBEDDING_MODEL
+      - CHUNK_SIZE
+      - CHUNK_OVERLAP
+      - RETRIEVAL_TOP_K
+      - RETRIEVAL_SCORE_THRESHOLD
+      - LLM_PROVIDER # unset = fake
+      - LLM_BASE_URL
+      - LLM_API_KEY
+      - LLM_MODEL
+      - LLM_MAX_OUTPUT_TOKENS
+      - LLM_TIMEOUT_S
+      - OTEL_SERVICE_NAME
+      - AI_KEYCLOAK_REALM_URL=http://keycloak:8080/realms/kb
+      - QDRANT_URL=http://qdrant:6333
+      - OTEL_EXPORTER_OTLP_ENDPOINT=http://phoenix:4317
+    ports:
+      - '127.0.0.1:8000:8000'
+    volumes:
+      # The first start downloads EMBEDDING_MODEL here (≈ 2.3 GB for bge-m3); later starts reuse it.
+      - fastembed-cache:/app/.cache/fastembed
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    healthcheck:
+      start_period: 15m
+      start_interval: 5s
+    restart: unless-stopped
+
+  api:
+    profiles: [full]
+    build:
+      context: ../..
+      dockerfile: apps/api/Dockerfile
+    environment:
+      - LOG_LEVEL
+      - KEYCLOAK_ISSUER
+      - KEYCLOAK_AUDIENCE
+      - KEYCLOAK_CLIENT_ID
+      - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-dev-only-change-me}
+      - CORS_ORIGINS
+      - UPLOAD_MAX_MB
+      - CHAT_THROTTLE_PER_MIN
+      - API_DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-dev-only-change-me}@postgres:5432/app
+      - KEYCLOAK_REALM_URL=http://keycloak:8080/realms/kb
+      - AI_SERVICE_URL=http://ai-service:8000
+    ports:
+      - '127.0.0.1:3000:3000'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    profiles: [full]
+    build:
+      context: ../..
+      dockerfile: apps/web/Dockerfile
+    environment:
+      - WEB_KEYCLOAK_URL
+      - WEB_KEYCLOAK_REALM
+      - WEB_KEYCLOAK_CLIENT_ID
+      - WEB_API_BASE_URL
+      - WEB_PHOENIX_URL
+    ports:
+      - '127.0.0.1:4200:8080'
+    restart: unless-stopped
+
 volumes:
   postgres-data:
   qdrant-data:
   phoenix-data:
+  fastembed-cache:

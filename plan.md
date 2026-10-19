@@ -3,7 +3,7 @@
 > **Project (working title):** `kb-agent` — an assistant for the **"Dev of the future"**: an engineer fluent across
 > DB · Dev · Cloud · DevOps · MLOps · AI integration · Security · Architecture · SRE.
 > Phase 1 starts with a **platform/DevOps** corpus; the other domains follow as tools, skills and corpora in later phases.
-> **Document scope:** Phase 1 of 6 · **Status:** Draft v2 · **Updated:** 2026-10-12
+> **Document scope:** Phase 1 of 6 · **Status:** Draft v2 · **Updated:** 2026-10-19
 > **Estimated effort:** ~76 h (range 60–90 h) · ~9 weeks at 8–10 h/week
 
 ### Changelog v1 → v2
@@ -398,14 +398,20 @@ Hours are ideal single-person hours, ±30 %.
 
 ### M1.6 — Containers, CI, e2e, docs (~10 h)
 
-- [ ] Dockerfiles ×3: multi-stage, non-root, pinned bases, `HEALTHCHECK`, `.dockerignore`; Angular via nginx (SPA fallback, `config.json` via `envsubst`, `proxy_buffering off` if nginx proxies SSE); embedding model baked in or cached volume
-- [ ] Compose `--profile full`
-- [ ] Workflows: `ci.yml` (lint/test/build, contract drift), `eval.yml` (retrieval eval on PRs touching `apps/ai-service/` or `evals/`; summary in the job summary; artifact upload; non-blocking), `docker.yml` (multi-arch buildx → GHCR on `main`), `e2e.yml` (full profile + Playwright, `fake` LLM)
-- [ ] `dependabot.yml` (npm, uv/pip, docker, github-actions); branch protection
-- [ ] README: pitch ("Dev of the future" assistant), Mermaid architecture, quickstart (OpenRouter key or `fake`), screenshots/GIF incl. Phoenix trace and eval table, ADR index, roadmap
-- [ ] `docs/architecture.md` with both flows
+- [x] Dockerfiles ×3: multi-stage, non-root, pinned bases, `HEALTHCHECK`, `.dockerignore`; Angular via nginx (SPA fallback, `config.json` via `envsubst`, `proxy_buffering off` if nginx proxies SSE); embedding model baked in or cached volume
+- [x] Compose `--profile full`
+- [x] Workflows: `ci.yml` (lint/test/build, contract drift), `eval.yml` (retrieval eval on PRs touching `apps/ai-service/` or `evals/`; summary in the job summary; artifact upload; non-blocking), `docker.yml` (multi-arch buildx → GHCR on `main`), `e2e.yml` (full profile + Playwright, `fake` LLM)
+- [x] `dependabot.yml` (npm, uv/pip, docker, github-actions)
+- [ ] Branch protection on `main` (GitHub setting, not code)
+- [x] README: pitch ("Dev of the future" assistant), Mermaid architecture, quickstart (OpenRouter key or `fake`), eval table, ADR index, roadmap
+- [ ] README screenshots/GIF incl. Phoenix trace
+- [x] `docs/architecture.md` with both flows
 
 **Acceptance:** CI green on a fresh PR with the eval summary visible; multi-arch images on GHCR; README alone gets a stranger to demo steps 1–7.
+
+> **Status 2026-10-19:** code complete, verified locally: `pnpm lint && pnpm test && pnpm build`, no
+> contract drift, `pnpm stack:up:full` + `pnpm e2e` green. Still open, none of it code: the unchecked items
+> above, and the first CI run on a PR / images on GHCR (needs a push).
 
 ### M1.7 — Azure readiness spike (mandatory, ~4 h, week 2)
 
@@ -415,6 +421,10 @@ Hours are ideal single-person hours, ±30 %.
 - [ ] Teardown script (everything except the budget)
 
 **Acceptance:** test budget alert fires; image pulled from ACR elsewhere; ADR-0006 (region & quota).
+
+> **Postponed 2026-10-19:** the project runs locally for now (assumption A6 → "move M1.7 later"). The spike
+> needs no code change; do it before Phase 5 and file the quota request early. ADR-0006 and the
+> "ADR-0001 … 0006" item of §10 wait for it.
 
 ---
 
@@ -581,6 +591,7 @@ API_PORT=3000
 LOG_LEVEL=info                              # pino: fatal|error|warn|info|debug|trace|silent
 API_DATABASE_URL=postgresql://postgres:dev-only-change-me@localhost:5432/app
 KEYCLOAK_ISSUER=http://localhost:8080/realms/kb
+# KEYCLOAK_REALM_URL=                       # how the API reaches the realm; unset = KEYCLOAK_ISSUER (Mode B: keycloak:8080)
 KEYCLOAK_AUDIENCE=kb-api
 KEYCLOAK_CLIENT_ID=kb-api
 KEYCLOAK_CLIENT_SECRET=dev-only-change-me
@@ -594,6 +605,7 @@ CHAT_THROTTLE_PER_MIN=20
 AI_PORT=8000
 AI_KEYCLOAK_ISSUER=http://localhost:8080/realms/kb
 AI_KEYCLOAK_AUDIENCE=kb-ai
+# AI_KEYCLOAK_REALM_URL=                    # same for the AI service's JWKS fetch
 QDRANT_URL=http://localhost:6333
 QDRANT_API_KEY=
 QDRANT_ALIAS=kb_current

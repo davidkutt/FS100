@@ -12,7 +12,11 @@ import { MeController } from './me.controller.js';
       provide: JWKS,
       inject: [CONFIG],
       useFactory: (config: Config) =>
-        createRemoteJWKSet(new URL(`${config.KEYCLOAK_ISSUER}/protocol/openid-connect/certs`)),
+        createRemoteJWKSet(
+          new URL(
+            `${config.KEYCLOAK_REALM_URL ?? config.KEYCLOAK_ISSUER}/protocol/openid-connect/certs`,
+          ),
+        ),
     },
     { provide: APP_GUARD, useClass: AuthGuard },
   ],

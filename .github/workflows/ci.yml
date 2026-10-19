@@ -1,5 +1,5 @@
-# Base CI (M1.0): lint, test and build every app on pushes to main and on pull requests.
-# Contract drift, retrieval eval, multi-arch images and e2e join in M1.6 (plan.md D19).
+# Lint, test and build every app, check contract drift and the Compose file (plan.md D19).
+# Siblings: eval.yml (retrieval eval, report only), e2e.yml (Playwright smoke), docker.yml (GHCR images).
 name: CI
 
 on:
@@ -61,10 +61,37 @@ jobs:
       - name: Test
         run: uv run pytest
 
+  contracts:
+    name: contract drift
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: corepack enable pnpm
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/ai-service/uv.lock
+      - run: pnpm install --frozen-lockfile && uv sync --locked --directory apps/ai-service
+      - run: pnpm contracts:generate
+      - name: Committed contracts match the code
+        run: |
+          if [ -n "$(git status --porcelain packages/contracts)" ]; then
+            git diff packages/contracts
+            echo "::error::packages/contracts is stale: run pnpm contracts:generate and commit the result"
+            exit 1
+          fi
+
   compose:
     name: compose config
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
-      - run: docker compose --file infra/compose/docker-compose.yml config --quiet
+      - run: docker compose --file infra/compose/docker-compose.yml --profile full config --quiet

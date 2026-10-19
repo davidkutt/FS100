@@ -1,0 +1,146 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 5 0 R >>
+endobj
+5 0 obj
+<< /Length 1179 >>
+stream
+BT
+/F1 11 Tf
+15 TL
+72 760 Td
+/F1 14 Tf
+(SLO Handbook - FS100) '
+/F1 11 Tf
+() '
+(Owner: SRE. Applies to: the chat, upload and login journeys of FS100. Last reviewed:) '
+(2026-10.) '
+() '
+/F1 14 Tf
+(1. Why service level objectives) '
+/F1 11 Tf
+() '
+(A service level objective \(SLO\) is a target for how reliable a user journey must be,) '
+(measured over a rolling window. It turns "is the system good enough?" into a number that) '
+(engineering and product agree on. Reliability above the target is not a goal in itself:) '
+(every extra nine costs effort that could go into features.) '
+() '
+/F1 14 Tf
+(2. Service level indicators) '
+/F1 11 Tf
+() '
+(A service level indicator \(SLI\) is the measured ratio of good events to all events.) '
+(FS100 uses three SLIs:) '
+(- Chat availability: share of chat requests that end with a done event instead of an) '
+(error event or a timeout.) '
+(- Chat latency: share of chat requests whose first token arrives within 3 seconds.) '
+(- Upload success: share of uploaded documents that reach the status ready within 5) '
+(minutes.) '
+(SLIs are measured at the NestJS API, as close to the user as possible, not inside the AI) '
+(service.) '
+ET
+endstream
+endobj
+6 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 7 0 R >>
+endobj
+7 0 obj
+<< /Length 1113 >>
+stream
+BT
+/F1 11 Tf
+15 TL
+72 760 Td
+/F1 14 Tf
+(3. Targets) '
+/F1 11 Tf
+() '
+(All targets use a rolling 28-day window.) '
+(- Chat availability: 99.5 percent.) '
+(- Chat latency \(first token within 3 seconds\): 95 percent.) '
+(- Upload success: 99 percent.) '
+(- Login availability: inherited from Keycloak, 99.9 percent.) '
+() '
+/F1 14 Tf
+(4. Error budget) '
+/F1 11 Tf
+() '
+(The error budget is the allowed amount of unreliability: 100 percent minus the target.) '
+(For chat availability that is 0.5 percent of all chat requests in 28 days, or roughly 3) '
+(hours and 22 minutes of full outage.) '
+() '
+/F1 14 Tf
+(5. Error budget policy) '
+/F1 11 Tf
+() '
+(- While budget remains, releases ship normally.) '
+(- When more than 50 percent of the budget is consumed in the first half of the window,) '
+(risky changes need a second reviewer.) '
+(- When the budget is exhausted, feature releases stop. Only fixes for reliability and) '
+(security ship until the SLI is back above target for 7 days.) '
+(- A single incident that consumes more than 20 percent of the budget requires a) '
+(postmortem, even if it was a SEV3.) '
+ET
+endstream
+endobj
+8 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents 9 0 R >>
+endobj
+9 0 obj
+<< /Length 1043 >>
+stream
+BT
+/F1 11 Tf
+15 TL
+72 760 Td
+/F1 14 Tf
+(6. Alerting on burn rate) '
+/F1 11 Tf
+() '
+(Alerts fire on the burn rate: how fast the error budget is consumed relative to the) '
+(target. A burn rate of 1 uses exactly the whole budget in 28 days.) '
+(Multi-window alerts avoid both slow detection and flapping:) '
+(- Page: burn rate above 14.4 over the last hour and over the last 5 minutes \(2 percent) '
+(of the budget in one hour\).) '
+(- Page: burn rate above 6 over the last 6 hours and over the last 30 minutes \(5 percent) '
+(of the budget in 6 hours\).) '
+(- Ticket: burn rate above 1 over the last 3 days.) '
+(The short window makes the alert stop quickly once the problem is fixed.) '
+() '
+/F1 14 Tf
+(7. Review cadence) '
+/F1 11 Tf
+() '
+(SLOs are reviewed every quarter with product. Questions for the review: did users) '
+(complain while the SLO was met \(target too loose\)? Did we burn budget on events users) '
+(did not notice \(SLI measures the wrong thing\)? Changes to targets are recorded in the) '
+(changelog of this handbook.) '
+ET
+endstream
+endobj
+xref
+0 10
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000127 00000 n 
+0000000224 00000 n 
+0000000350 00000 n 
+0000001581 00000 n 
+0000001707 00000 n 
+0000002872 00000 n 
+0000002998 00000 n 
+trailer
+<< /Size 10 /Root 1 0 R >>
+startxref
+4093
+%%EOF

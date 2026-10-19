@@ -7,12 +7,13 @@ run and every request **traceable** from retrieval to prompt to model.
 
 The project is built in six phases; the full plan for Phase 1 lives in **[plan.md](plan.md)**.
 
-> **Status:** Phase 1 · **M1.5 UI** — the AI service ingests PDF/Markdown/TXT into Qdrant,
-> searches it with domain filters (measured by a 60-question golden set, `pnpm eval:retrieval`) and streams
-> cited answers over SSE (OpenRouter or `fake`). The NestJS API in front of it handles uploads (RBAC,
-> dedupe, background ingest, metadata in Postgres) and relays chat and search; both services publish their
-> contracts to `packages/contracts`. The Angular UI has document upload, streamed chat with clickable
-> citations and a retrieval inspector. Containers, CI and e2e follow in M1.6 — see [roadmap](#roadmap).
+> **Status:** Phase 1 · **M1.6 containers, CI, e2e** — the AI service ingests PDF/Markdown/TXT into
+> Qdrant, searches it with domain filters (measured by a 60-question golden set, `pnpm eval:retrieval`) and
+> streams cited answers over SSE (OpenRouter or `fake`). The NestJS API in front of it handles uploads
+> (RBAC, dedupe, background ingest, metadata in Postgres) and relays chat and search; both services publish
+> their contracts to `packages/contracts`. The Angular UI has document upload, streamed chat with clickable
+> citations and a retrieval inspector. Everything also runs as containers (`pnpm stack:up:full`), CI checks
+> contracts, runs a Playwright smoke and reports the retrieval eval — see [roadmap](#roadmap).
 
 ---
 
@@ -53,11 +54,43 @@ flowchart LR
 ```
 
 Only the web app and the NestJS API are browser-facing; all AI code lives in the Python service
-([ADR-0002](docs/adr/0002-ai-layer-in-python.md)). Details: [plan.md §5](plan.md#5-architecture-phase-1).
+([ADR-0002](docs/adr/0002-ai-layer-in-python.md)). Ingest and chat flows step by step:
+**[docs/architecture.md](docs/architecture.md)**.
+
+## Retrieval quality
+
+Every retrieval change is judged by `pnpm eval:retrieval` (60 questions, DE + EN, 10 unanswerable — see
+[evals/README.md](evals/README.md)); CI posts the same table on pull requests that touch the AI service.
+The benchmark that picked the embedding model ([ADR-0004](docs/adr/0004-embedding-model-chunking-threshold.md),
+chunks 1000/150):
+
+| Model | hit@1 | hit@5 | MRR@10 | nDCG@10 | p50 ms |
+|---|---|---|---|---|---|
+| `intfloat/multilingual-e5-small` | 0.56 | 0.86 | 0.69 | 0.72 | 7 |
+| `intfloat/multilingual-e5-base` | 0.64 | 0.86 | 0.73 | 0.75 | 22 |
+| `intfloat/multilingual-e5-large` | 0.68 | 0.94 | 0.80 | 0.83 | 71 |
+| **`BAAI/bge-m3`** (default) | **0.76** | **0.98** | **0.84** | **0.86** | 59 |
+
+Each chat request is traced in Phoenix (http://localhost:6006): `chat → embed → search → llm` with the
+prompt, token counts and latency; the chat UI links every answer to its trace.
 
 ## Quickstart
 
-Needs Node 24, pnpm (via Corepack), uv and Docker — see the **[installation guide](docs/setup/installation.md)**.
+**Just run it** — Docker and Node 24 only, everything in containers (Mode B):
+
+```bash
+git clone https://github.com/davidkutt/FS100.git && cd FS100
+corepack enable pnpm
+cp .env.example .env    # either set LLM_API_KEY (OpenRouter key with a credit limit) + LLM_MODEL,
+                        # or set LLM_PROVIDER=fake for free, canned answers
+pnpm stack:up:full      # builds and starts everything; the first start downloads the ≈ 2.3 GB embedding model
+```
+
+Open http://localhost:4200, log in as `bob` / `bob` (editor) and upload files from `data/sample-docs/`
+with the domains from its `domains.json`. Phoenix traces: http://localhost:6006.
+
+**Develop** — Node 24, pnpm (via Corepack), uv and Docker, see the
+**[installation guide](docs/setup/installation.md)**; infra in Docker, apps native with hot reload (Mode A):
 
 ```bash
 corepack enable pnpm
@@ -76,12 +109,14 @@ Open http://localhost:4200. Everything else — URLs, seed users, checks, troubl
 |---|---|
 | `pnpm dev [web\|api\|ai …]` | Start the apps natively with hot reload (loads `.env`) |
 | `pnpm stack:up` / `stack:down` | Start / stop the local infra (data kept in volumes) |
+| `pnpm stack:up:full` | Infra **and** the apps as containers (Mode B), rebuilt when changed |
 | `pnpm stack:ps` / `stack:logs [service]` | Status / logs of the infra |
 | `pnpm stack:reset` | Stop the infra and **delete** its volumes |
 | `pnpm lint` | angular-eslint · oxlint · prettier check · ruff · pyright |
 | `pnpm test` | Vitest (web, api) · pytest (ai-service) |
 | `pnpm build` | Production builds of web and api |
 | `pnpm format` | Auto-format (prettier + ruff) |
+| `pnpm e2e` | Playwright smoke against http://localhost:4200 (login → upload → ask → citation) |
 | `pnpm eval:retrieval` | Retrieval eval against the golden set, in-memory Qdrant ([evals/README.md](evals/README.md)) |
 | `pnpm contracts:generate` | Regenerate `packages/contracts` (OpenAPI of both services incl. SSE event schemas, TS types); commit the result |
 
@@ -92,28 +127,30 @@ apps/
   web/            Angular 22 frontend            → apps/web/README.md
   api/            NestJS 12 product API / BFF    → apps/api/README.md
   ai-service/     FastAPI AI service (uv)         → apps/ai-service/README.md
+                  each with a Dockerfile (build context: repo root, see .dockerignore)
 packages/
   contracts/      Generated OpenAPI documents + TS types of api and ai-service (pnpm contracts:generate)
 infra/
-  compose/        docker-compose.yml (Mode A infra; app containers join in M1.6)
+  compose/        docker-compose.yml (infra; `--profile full` adds the three apps)
   keycloak/       realm-kb.json (roles, clients, dev seed users)
   postgres/       init.sql (databases keycloak + app)
 data/sample-docs/ Demo + eval corpus with domain tags (domains.json, ATTRIBUTION.md)
 evals/            Golden datasets, eval docs; runs/ is git-ignored
+e2e/              Playwright smoke test (pnpm e2e)
 docs/
+  architecture.md Components, ingest and chat flows, runtime modes
   setup/          installation.md · startup.md
   adr/            Architecture Decision Records
   security/       red-teaming.md (playbook for attacking your own deployment)
 scripts/          dev.mjs · stack.mjs
-.github/workflows/ci.yml
+.github/          workflows: ci · e2e · eval · docker (GHCR) · dependabot.yml
 plan.md           Phase 1 plan (decisions, contracts, milestones)
 ```
-
-Folders from plan.md §6 that belong to later milestones (`e2e/`) are created when their milestone starts.
 
 ## Documentation
 
 - [plan.md](plan.md) — Phase 1 plan: scope, decisions D1–D26, contracts, milestones, risks
+- [Architecture](docs/architecture.md) — components, ingest and chat flows, Mode A vs. Mode B
 - [Installation guide](docs/setup/installation.md) — toolchain for macOS (Apple Silicon), Linux, Windows/WSL2
 - [Startup guide](docs/setup/startup.md) — first start, daily routine, URLs, seed users, troubleshooting
 - [ADRs](docs/adr/README.md) — 0001 monorepo & pnpm · 0002 AI layer in Python · 0003 in-process embeddings ·
@@ -125,7 +162,7 @@ Folders from plan.md §6 that belong to later milestones (`e2e/`) are created wh
 
 | Phase | Theme |
 |---|---|
-| **1** | Foundation + RAG slice + eval + tracing — *in progress: M1.0 – M1.3 done* |
+| **1** | Foundation + RAG slice + eval + tracing — *in progress: M1.0 – M1.6 done; M1.7 Azure spike postponed (local only for now)* |
 | 2 | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals |
 | 3 | Hybrid search, reranking, code-aware RAG, guardrails, routing + semantic cache, memory |
 | 4 | Kubernetes: Helm, k3d, GitOps-ready manifests |

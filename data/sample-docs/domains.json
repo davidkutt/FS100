@@ -1,0 +1,19 @@
+{
+  "fs100-readme.md": ["dev", "architecture"],
+  "fs100-plan.md": ["architecture", "ai", "devops"],
+  "adr-0001-monorepo-and-pnpm.md": ["architecture", "dev"],
+  "adr-0002-ai-layer-in-python.md": ["architecture", "ai"],
+  "adr-0003-embeddings-in-process.md": ["ai", "architecture"],
+  "setup-installation.md": ["dev"],
+  "setup-startup.md": ["dev", "devops"],
+  "runbook-rollback.md": ["devops"],
+  "runbook-incident-response.md": ["sre"],
+  "runbook-postgres-backup-restore.md": ["db"],
+  "runbook-secret-rotation.md": ["security"],
+  "runbook-embedding-model-swap.md": ["ai", "mlops"],
+  "runbook-azure-cost-guard.md": ["cloud"],
+  "runbook-llm-provider-outage.md": ["ai", "sre"],
+  "runbook-tls-zertifikat-erneuern.md": ["security", "devops"],
+  "runbook-speicherplatz-voll.md": ["sre", "devops"],
+  "slo-handbook.pdf": ["sre"]
+}
