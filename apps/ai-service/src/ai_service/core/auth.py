@@ -15,7 +15,8 @@ class ServiceAuth:
     def __init__(self, settings: Settings) -> None:
         self._issuer = settings.ai_keycloak_issuer
         self._audience = settings.ai_keycloak_audience
-        self._jwks = jwt.PyJWKClient(f"{self._issuer}/protocol/openid-connect/certs")
+        realm = settings.ai_keycloak_realm_url or self._issuer
+        self._jwks = jwt.PyJWKClient(f"{realm}/protocol/openid-connect/certs")
 
     # Sync on purpose: PyJWKClient fetches with blocking I/O, so FastAPI runs this in a thread.
     def __call__(

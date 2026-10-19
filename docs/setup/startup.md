@@ -5,9 +5,10 @@ uv, Docker).
 
 FS100 uses two development modes (plan.md D18):
 
-- **Mode A (daily, available now):** infrastructure in Docker Compose — Postgres, Qdrant, Keycloak,
-  Phoenix — and the three apps running **natively** with hot reload.
-- **Mode B (`--profile full`, from M1.6):** everything containerised, for demos, e2e and image tests.
+- **Mode A (daily):** infrastructure in Docker Compose — Postgres, Qdrant, Keycloak, Phoenix — and the
+  three apps running **natively** with hot reload.
+- **Mode B (`pnpm stack:up:full`):** everything containerised, for demos, e2e and image tests — see
+  [Mode B](#mode-b-everything-in-containers).
 
 ---
 
@@ -65,6 +66,25 @@ uv run --directory apps/ai-service uvicorn ai_service.main:app --reload --port 8
 
 > Running an app on its own does **not** load `.env` (only `pnpm dev` and `pnpm stack:*` do). Export the
 > variables you need, or prefix with `node --env-file=.env …`.
+
+### Mode B: everything in containers
+
+Needs Docker and pnpm (Corepack) only — no `pnpm install`, no uv; the images build the apps:
+
+```bash
+cp .env.example .env        # set LLM_API_KEY + LLM_MODEL, or LLM_PROVIDER=fake
+pnpm stack:up:full          # = node scripts/stack.mjs --profile full up --detach --wait --build
+```
+
+It builds the images from `apps/*/Dockerfile` and starts them next to the infra, on the same ports as
+Mode A — so stop `pnpm dev` first. The containers read the same variables from `.env` (or your shell,
+which wins); only the hostnames between them differ, and those are set in the Compose file.
+
+- The **first** start downloads the embedding model into the Docker volume `fs100_fastembed-cache`
+  (≈ 2.3 GB for `bge-m3`); `stack:up:full` waits until the AI service is ready. Later starts reuse it.
+- After a code change, run `pnpm stack:up:full` again: it rebuilds what changed.
+- `pnpm stack:down` stops everything (both modes); `pnpm stack:reset` also deletes the model volume.
+- Without `.env`, `LLM_PROVIDER` falls back to `fake`.
 
 ## 3. What runs where
 
@@ -164,6 +184,20 @@ pnpm build          # production builds of web and api
 pnpm format         # auto-fix formatting (prettier + ruff)
 ```
 
+**End-to-end smoke** (Playwright, `e2e/`): logs in as `bob`, uploads a generated Markdown file, asks a
+question, opens the citation and deletes the file again. It runs against whatever serves
+http://localhost:4200 — Mode B as in CI, or Mode A:
+
+```bash
+pnpm --filter @fs100/e2e exec playwright install chromium   # once per machine
+LLM_PROVIDER=fake pnpm stack:up:full                        # free: no LLM tokens
+pnpm e2e
+```
+
+CI (`.github/workflows/`) runs `ci.yml` (lint, test, build, contract drift), `e2e.yml` (this smoke),
+`eval.yml` (retrieval eval on PRs touching the AI service or evals, report only) and, on `main`,
+`docker.yml` (multi-arch images to GHCR).
+
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`,
 `chore:`, `refactor:`, `test:`, `ci:` …), trunk-based on `main`.
 
@@ -182,10 +216,11 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`fe
 | Command | Effect |
 |---|---|
 | `pnpm stack:up` | Create/start all infra containers, wait until healthy |
+| `pnpm stack:up:full` | Same plus web, api and ai-service as containers (Mode B), rebuilt if changed |
 | `pnpm stack:ps` | Container status and health |
 | `pnpm stack:logs` / `pnpm stack:logs keycloak` | Follow logs (all services or one) |
 | `pnpm stack:down` | Stop and remove containers; **keeps** data volumes |
-| `pnpm stack:reset` | Stop and **delete all local data** (Postgres incl. Keycloak, Qdrant, Phoenix) |
+| `pnpm stack:reset` | Stop and **delete all local data** (Postgres incl. Keycloak, Qdrant, Phoenix, model cache of Mode B) |
 
 `scripts/stack.mjs` forwards any extra arguments to `docker compose`, e.g.
 `node scripts/stack.mjs restart keycloak`.
@@ -250,6 +285,8 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | `[ai]` exits: `LLM_PROVIDER=openai_compat needs LLM_API_KEY and LLM_MODEL` | Set both in `.env` (OpenRouter key with a credit limit, model from [ADR-0005](../adr/0005-llm-access-and-model.md)), or `LLM_PROVIDER=fake` |
 | Chat ends with `event: error`, `LLM request failed` | `detail` carries the provider's answer: 401 wrong key, 402 credits used up, 429 rate limit after retries — see `data/sample-docs/runbook-llm-provider-outage.md` |
 | `[ai]` takes minutes to start, `/readyz` returns 503 | First start downloads the embedding model; watch the `[ai]` progress output. Changing `EMBEDDING_MODEL` downloads another one and starts with an empty collection (re-ingest) |
+| `pnpm stack:up:full`: `port is already allocated` on 3000/4200/8000 | `pnpm dev` (or one native app) still runs — stop it; both modes use the same ports |
+| `pnpm stack:up:full` waits for minutes on `ai-service` | First start downloads the embedding model into the volume: `pnpm stack:logs ai-service` |
 | Angular shows stale output | `rm -rf apps/web/.angular` and restart |
 | Login page: "Cookie not found" | Use `http://localhost:…`, not `127.0.0.1` — cookies and redirect URIs are bound to `localhost` |
 | Want a clean slate | `pnpm stack:reset`, `rm -rf node_modules apps/*/node_modules apps/ai-service/.venv`, then the steps in §1 |
@@ -259,5 +296,6 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 Milestones **M1.0** (base setup), **M1.1** (infra + auth walking skeleton), **M1.2** (ingestion,
 retrieval, eval harness — `pnpm eval:retrieval`, see [evals/README.md](../../evals/README.md)) and
 **M1.3** (grounded chat, `POST /v1/chat` in the AI service), **M1.4** (documents, chat and search
-relays in the API, `pnpm contracts:generate`) and **M1.5** (Angular UI: documents, chat, inspector) are
-done. Next step, in plan order: containers + CI + e2e (M1.6).
+relays in the API, `pnpm contracts:generate`), **M1.5** (Angular UI: documents, chat, inspector) and
+**M1.6** (containers, Mode B, CI workflows, Playwright e2e) are done. The Azure readiness spike (M1.7)
+is postponed while the project runs locally; next is Phase 2.

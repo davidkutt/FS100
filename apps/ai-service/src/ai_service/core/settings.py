@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     ai_port: int = 8000
     ai_keycloak_issuer: str = "http://localhost:8080/realms/kb"
     ai_keycloak_audience: str = "kb-ai"
+    ai_keycloak_realm_url: str = ""  # JWKS base URL; empty = the issuer (differs in Compose)
     qdrant_url: str = "http://localhost:6333"  # ":memory:" = in-process Qdrant (tests, evals)
     qdrant_api_key: str | None = None
     qdrant_alias: str = "kb_current"

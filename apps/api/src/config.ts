@@ -6,6 +6,8 @@ const schema = z.object({
   LOG_LEVEL: z.enum(['fatal', 'error', 'warn', 'info', 'debug', 'trace', 'silent']).default('info'),
   API_DATABASE_URL: z.string().min(1), // `:memory:` = in-process PGlite (tests)
   KEYCLOAK_ISSUER: z.url().default('http://localhost:8080/realms/kb'),
+  // Where the API reaches the realm (JWKS, token); differs from the issuer inside Compose.
+  KEYCLOAK_REALM_URL: z.url().optional(),
   KEYCLOAK_AUDIENCE: z.string().default('kb-api'),
   KEYCLOAK_CLIENT_ID: z.string().default('kb-api'),
   KEYCLOAK_CLIENT_SECRET: z.string().min(1),

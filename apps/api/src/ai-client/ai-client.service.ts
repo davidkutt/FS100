@@ -95,7 +95,8 @@ export class AiClient {
     // Renew 30 s early so a token never expires in flight.
     if (this.token && this.token.expiresAt - 30_000 > Date.now()) return this.token.value;
 
-    const res = await fetch(`${this.config.KEYCLOAK_ISSUER}/protocol/openid-connect/token`, {
+    const realm = this.config.KEYCLOAK_REALM_URL ?? this.config.KEYCLOAK_ISSUER;
+    const res = await fetch(`${realm}/protocol/openid-connect/token`, {
       method: 'POST',
       body: new URLSearchParams({
         grant_type: 'client_credentials',

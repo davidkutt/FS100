@@ -1,0 +1,7 @@
+{
+  "keycloakUrl": "${WEB_KEYCLOAK_URL}",
+  "keycloakRealm": "${WEB_KEYCLOAK_REALM}",
+  "keycloakClientId": "${WEB_KEYCLOAK_CLIENT_ID}",
+  "apiBaseUrl": "${WEB_API_BASE_URL}",
+  "phoenixUrl": "${WEB_PHOENIX_URL}"
+}

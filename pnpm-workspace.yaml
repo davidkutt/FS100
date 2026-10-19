@@ -3,6 +3,7 @@ packages:
   - apps/web
   - apps/api
   - packages/contracts
+  - e2e
 
 # Dependency install scripts are blocked by default; only allow what is needed (ADR-0001).
 # Manage with `pnpm approve-builds`. The denied packages ship prebuilt binaries

@@ -49,8 +49,9 @@ FS100 is a RAG/agent assistant: upload domain-tagged documents, ask questions, g
 citations, with every retrieval change measured by evals and every request traced. Built in six phases;
 **Phase 1 is in progress** — M1.0 (repo, skeletons, local infra, CI), M1.1 (auth walking skeleton),
 M1.2 (ingest/search/delete in the AI service, golden set, `pnpm eval:retrieval`), M1.3 (grounded chat
-`POST /v1/chat` as SSE), M1.4 (documents + chat/search relays in NestJS, contracts) and M1.5 (Angular UI:
-documents, chat, inspector) are done. Next: M1.6 containers, CI, e2e.
+`POST /v1/chat` as SSE), M1.4 (documents + chat/search relays in NestJS, contracts), M1.5 (Angular UI:
+documents, chat, inspector) and M1.6 (Dockerfiles, Compose `--profile full`, CI workflows, Playwright e2e)
+are done. M1.7 (Azure spike) is postponed while the project runs locally; next is Phase 2.
 Check the milestone in [plan.md §8](plan.md#8-milestones-and-tasks) before building something: many
 features are deliberately scheduled for later milestones.
 
@@ -65,7 +66,8 @@ Qdrant alias `kb_current`). Keep those names.
 | `apps/api` | Product API / BFF: auth, RBAC, document metadata, SSE relay. Browser-facing | NestJS 12 (ESM), Vitest + supertest, oxlint |
 | `apps/ai-service` | **All AI code**: parse, chunk, embed, retrieve, prompt, LLM, evals, tracing. Internal only | FastAPI, Python 3.13 (uv), pydantic-settings, ruff, pyright strict, pytest |
 | `packages/contracts` | **Generated**, committed: OpenAPI of both services (+ SSE event schemas) and TS types | openapi-typescript |
-| `infra/` | Compose (Postgres 17, Qdrant 1.18, Keycloak 26.7, Phoenix), realm export, DB init | Docker Compose |
+| `infra/` | Compose (Postgres 17, Qdrant 1.18, Keycloak 26.7, Phoenix; `--profile full` adds the apps), realm export, DB init | Docker Compose |
+| `e2e/` | Playwright smoke (login → upload → ask → citation), runs against :4200 | Playwright |
 | `data/sample-docs/` | Demo + eval corpus; `domains.json` = file → domain tags; repo docs are frozen snapshots | — |
 | `evals/` | Golden datasets (`datasets/*.jsonl`, frozen per version); `runs/` git-ignored | — |
 | `scripts/` | `dev.mjs` (runs apps), `stack.mjs` (compose wrapper) | Node |
@@ -86,12 +88,14 @@ Run everything from the repo root. Root `package.json` scripts are the entry poi
 ```bash
 pnpm install && uv sync --directory apps/ai-service   # setup
 pnpm stack:up                                         # infra, waits until healthy
+pnpm stack:up:full                                    # infra + apps as containers (Mode B; stop pnpm dev first)
 pnpm dev [web|api|ai …]                               # apps with hot reload; loads .env
 pnpm lint            # angular-eslint · oxlint · prettier --check · ruff · pyright
 pnpm test            # all tests
 pnpm build           # web + api
 pnpm format          # prettier + ruff fix
-pnpm contracts:generate                   # after changing any route or SSE model; commit packages/contracts
+pnpm contracts:generate                   # after changing any route or SSE model; commit packages/contracts (CI checks drift)
+pnpm e2e                                  # Playwright smoke; needs a running stack, LLM_PROVIDER=fake
 pnpm --filter @fs100/api db:generate      # Drizzle migration after editing apps/api/src/db/schema.ts
 ```
 
@@ -130,7 +134,10 @@ Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
   `minimumReleaseAgeExclude` entry.
 - **Env:** single root `.env` (from `.env.example`). Only `pnpm dev` and `pnpm stack:*` load it — a single
   app started on its own does not. New variables go into `.env.example` (dev-only placeholder) and plan.md
-  Appendix A.
+  Appendix A, and into the app's `environment:` list in `infra/compose/docker-compose.yml` (Mode B passes
+  only listed variables).
+- **Images:** all three Dockerfiles build with the repo root as context; `.dockerignore` is an allow-list,
+  so a new top-level folder an image needs must be added there.
 - **Infra state:** realm JSON and `init.sql` only apply to empty volumes → `pnpm stack:reset && pnpm stack:up`
   (wipes all local data; ask first). Use `localhost`, not `127.0.0.1`, for anything Keycloak-related.
 - **API DB:** Drizzle; migrations in `apps/api/drizzle/` run on API boot. API tests use `API_DATABASE_URL=:memory:`

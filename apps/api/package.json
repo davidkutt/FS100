@@ -4,6 +4,10 @@
   "private": true,
   "license": "MIT",
   "type": "module",
+  "files": [
+    "dist",
+    "drizzle"
+  ],
   "scripts": {
     "build": "nest build",
     "start": "nest start",
