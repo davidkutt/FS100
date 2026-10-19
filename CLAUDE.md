@@ -46,14 +46,16 @@ When creating or updating a skill:
 ## What this is
 
 FS100 is a RAG/agent assistant: upload domain-tagged documents, ask questions, get streamed answers with
-citations, with every retrieval change measured by evals and every request traced. Built in six phases;
-**Phase 1 is in progress** — M1.0 (repo, skeletons, local infra, CI), M1.1 (auth walking skeleton),
+citations, with every retrieval change measured by evals and every request traced. Built in six phases.
+**Phase 1 is done except M1.7**: M1.0 (repo, skeletons, local infra, CI), M1.1 (auth walking skeleton),
 M1.2 (ingest/search/delete in the AI service, golden set, `pnpm eval:retrieval`), M1.3 (grounded chat
 `POST /v1/chat` as SSE), M1.4 (documents + chat/search relays in NestJS, contracts), M1.5 (Angular UI:
 documents, chat, inspector) and M1.6 (Dockerfiles, Compose `--profile full`, CI workflows, Playwright e2e)
-are done. M1.7 (Azure spike) is postponed while the project runs locally; next is Phase 2.
-Check the milestone in [plan.md §8](plan.md#8-milestones-and-tasks) before building something: many
-features are deliberately scheduled for later milestones.
+are done. M1.7 (Azure spike) is postponed while the project runs locally, so Phase 2 has no Azure parts.
+**Phase 2 (agent, MCP, approvals) is in progress** — M2.0 (pins, spikes, ADR-0007…0010 drafts) is done
+apart from the GitHub PATs. Check the milestone in [plan.md §8](plan.md#8-milestones-and-tasks) or
+[plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks) before building something: many features
+are deliberately scheduled for later milestones.
 
 The plan's working title `kb-agent` lives on in identifiers (realm `kb`, clients `kb-web`/`kb-api`/`kb-ai`,
 Qdrant alias `kb_current`). Keep those names.
@@ -66,7 +68,7 @@ Qdrant alias `kb_current`). Keep those names.
 | `apps/api` | Product API / BFF: auth, RBAC, document metadata, SSE relay. Browser-facing | NestJS 12 (ESM), Vitest + supertest, oxlint |
 | `apps/ai-service` | **All AI code**: parse, chunk, embed, retrieve, prompt, LLM, evals, tracing. Internal only | FastAPI, Python 3.13 (uv), pydantic-settings, ruff, pyright strict, pytest |
 | `packages/contracts` | **Generated**, committed: OpenAPI of both services (+ SSE event schemas) and TS types | openapi-typescript |
-| `infra/` | Compose (Postgres 17, Qdrant 1.18, Keycloak 26.7, Phoenix; `--profile full` adds the apps), realm export, DB init | Docker Compose |
+| `infra/` | Compose (Postgres 17, Qdrant 1.19, Keycloak 26.8, Phoenix; `--profile full` adds the apps), realm export, DB init | Docker Compose |
 | `e2e/` | Playwright smoke (login → upload → ask → citation), runs against :4200 | Playwright |
 | `data/sample-docs/` | Demo + eval corpus; `domains.json` = file → domain tags; repo docs are frozen snapshots | — |
 | `evals/` | Golden datasets (`datasets/*.jsonl`, frozen per version); `runs/` git-ignored | — |
@@ -74,6 +76,7 @@ Qdrant alias `kb_current`). Keep those names.
 | `docs/adr/` | Architecture Decision Records — copy `template.md`, next free number, add to the index | — |
 | `docs/setup/` | `installation.md` (toolchain), `startup.md` (URLs, seed users, troubleshooting) | — |
 | `plan.md` | Phase 1 source of truth: decisions D1–D26, contracts §7, milestones §8, target layout §6 | — |
+| `plan-phase-2.md` | Phase 2 source of truth: decisions D27–D49, contracts §7, milestones M2.0–M2.8 | — |
 | `architechture.md` | Cross-phase decisions by ID (REPO-*, DEV-* …). Filename is misspelled; keep it | — |
 | `_meta/ai-theory/` | Study notes, not product docs. Ignore unless asked | — |
 

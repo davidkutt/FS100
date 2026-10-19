@@ -24,8 +24,8 @@ The project is built in six phases; the full plan for Phase 1 lives in **[plan.m
 | Web | Angular 22 (standalone, signals, zoneless) · Bootstrap 5.3 via SCSS · Vitest · angular-eslint |
 | Product API / BFF | NestJS 12 (ESM) on Node 24 · Vitest + supertest · oxlint |
 | AI service | FastAPI on Python 3.13 (uv) · pydantic-settings · ruff · pyright (strict) · pytest |
-| Identity | Keycloak 26.7 — realm `kb`, OIDC Authorization Code + PKCE, roles `viewer` < `editor` < `admin` |
-| Data | Postgres 17 (`app`, `keycloak`) · Qdrant 1.18 (vectors) |
+| Identity | Keycloak 26.8 — realm `kb`, OIDC Authorization Code + PKCE, roles `viewer` < `editor` < `admin` |
+| Data | Postgres 17 (`app`, `keycloak`) · Qdrant 1.19 (vectors) |
 | LLM & tracing | OpenRouter / Hugging Face router via one OpenAI-compatible adapter · Arize Phoenix (OpenTelemetry) |
 | Tooling | pnpm 12 workspaces + catalogs · uv · Docker Compose · GitHub Actions |
 

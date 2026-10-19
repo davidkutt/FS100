@@ -30,9 +30,9 @@
 | web | UI: login, documents, chat, retrieval inspector | Angular 22, Bootstrap 5.3 + SCSS, served by nginx |
 | api | Auth, RBAC, document metadata, stream relay; later conversations, audit, quotas | NestJS 12 on Node 24, Drizzle |
 | ai-service | Parsing, chunking, embeddings, retrieval, prompting, LLM calls, evaluation, tracing; later agent loop, tools, MCP | FastAPI on Python 3.13, fastembed |
-| keycloak | Identity, roles, tokens | Keycloak 26.7 |
+| keycloak | Identity, roles, tokens | Keycloak 26.8 |
 | postgres | Databases `keycloak` and `app` | Postgres 17 |
-| qdrant | Vector index | Qdrant 1.18 |
+| qdrant | Vector index | Qdrant 1.19 |
 | phoenix | LLM traces | Arize Phoenix (OpenTelemetry) |
 | LLM API | Text generation | OpenRouter (default), Hugging Face router, `fake` for tests |
 
@@ -59,7 +59,7 @@
 | REPO-3 | uv for the Python service | Fast resolver, lockfile and Python version management in one tool | 1 |
 | REPO-4 | No Nx / Turborepo | Two Node apps don't justify a build orchestrator | 1 |
 | REPO-5 | Root `package.json` scripts as task entry points, no Makefile | Works the same on macOS, Linux and Windows/WSL2 | 1 |
-| REPO-6 | Pinned versions: Node 24 LTS, Angular 22, NestJS 12, Python 3.13, Keycloak 26.7.x, Qdrant 1.18.x, Postgres 17, Bootstrap 5.3 | Current stable lines; Node 26 reconsidered once it enters LTS (28 Oct 2026); Dependabot keeps pins fresh | 1 |
+| REPO-6 | Pinned versions: Node 24 LTS, Angular 22, NestJS 12, Python 3.13, Keycloak 26.8.x, Qdrant 1.19.x, Postgres 17, Bootstrap 5.3 | Current stable lines; Node 26 reconsidered once it enters LTS (28 Oct 2026); Dependabot keeps pins fresh | 1 |
 | REPO-7 | Compatibility spikes with named fallbacks before building (Zod in Nest 12, Drizzle, keycloak-angular, Angular test runner) | Angular 22 and NestJS 12 are new majors; the ecosystem may lag | 1 |
 | REPO-8 | Trunk-based development with short-lived branches and PRs (also solo), Conventional Commits | CI gates every change; readable history and changelog | 1 |
 | REPO-9 | Architecture Decision Records in `docs/adr/` | Documents the reasoning, not only the result — valuable for reviewers | 1 |

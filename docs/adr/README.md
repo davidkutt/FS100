@@ -1,7 +1,8 @@
 # Architecture Decision Records
 
 Short, numbered records of decisions that shape FS100. Each ADR references the decision ids of
-[plan.md §3](../../plan.md#3-decisions) (`D1` … `D26`).
+[plan.md §3](../../plan.md#3-decisions) (`D1` … `D26`) or
+[plan-phase-2.md §3](../../plan-phase-2.md#3-decisions) (`D27` …).
 
 | ADR | Title | Status |
 |---|---|---|
@@ -11,6 +12,10 @@ Short, numbered records of decisions that shape FS100. Each ADR references the d
 | [0004](0004-embedding-model-chunking-threshold.md) | Embedding model `bge-m3`, chunking 1000/150, score threshold 0.55 (benchmark) | Accepted |
 | [0005](0005-llm-access-and-model.md) | LLM access via one OpenAI-compatible adapter; dev model `gpt-6-luna`, demo model `deepseek-v4.1-flash` | Accepted |
 | 0006 | Azure region and quota | Planned — M1.7, postponed |
+| [0007](0007-agent-harness-and-limits.md) | Own agent harness with hard limits; dev model for agent mode `gpt-6-luna` (tool-calling shortlist) | Proposed |
+| [0008](0008-run-state-and-approvals.md) | Stateless agent turns; approvals as HMAC-signed actions, at-most-once | Proposed |
+| [0009](0009-token-exchange-internal-hops.md) | Keycloak standard token exchange on the internal hops (spike results) | Proposed |
+| [0010](0010-own-mcp-server-sdk-v2.md) | Own MCP server and client on Python SDK v2 (spike results, GitHub MCP check) | Proposed |
 
 ## Writing a new ADR
 

@@ -89,7 +89,7 @@ Status: **L** = locked · **C** = changed in v2 · **N** = new in v2. ADR number
 | # | St. | Topic | Decision | Why / alternatives |
 |---|---|---|---|---|
 | D1 | L | Repo & tooling | **Monorepo.** **pnpm** workspaces for `apps/web` + `apps/api`, pinned via `packageManager`; `onlyBuiltDependencies` allow-list (pnpm 10 blocks dependency install scripts by default, e.g. `esbuild`); **catalogs** for shared versions. **uv** for the AI service. Root `package.json` scripts as task entry points. (ADR-0001) | pnpm: strict `node_modules` (no phantom deps between apps), `--filter`, `pnpm deploy` for slim Docker images, fast cached installs. npm works but is looser and slower; Yarn PnP adds tooling friction; Bun is a runtime bet unrelated to the learning goals. No Nx/Turbo for two Node apps. |
-| D2 | L | Versions (pin exact at M1.0) | Node 24 LTS (revisit Node 26 after it enters LTS on 28 Oct 2026) · Angular 22 · NestJS 12 · Python 3.13 · Keycloak 26.7.x · Qdrant 1.18.x + `qdrant-client` 1.18 · Postgres 17 · Bootstrap 5.3 | Current stable lines. Angular 22 / Nest 12 are new → compatibility spikes in M1.0. Dependabot keeps pins fresh. |
+| D2 | L | Versions (pin exact at M1.0) | Node 24 LTS (revisit Node 26 after it enters LTS on 28 Oct 2026) · Angular 22 · NestJS 12 · Python 3.13 · Keycloak 26.7.x · Qdrant 1.18.x + `qdrant-client` 1.18 · Postgres 17 · Bootstrap 5.3 (bumped in M2.0 to Keycloak 26.8.x, Qdrant 1.19.x + `qdrant-client` 1.19 — `plan-phase-2.md` D47) | Current stable lines. Angular 22 / Nest 12 are new → compatibility spikes in M1.0. Dependabot keeps pins fresh. |
 | D3 | **C** | Service split | **NestJS = product API / BFF**: auth, RBAC, document metadata, (P2: conversations, audit, quotas), stream relay. **Python AI service = all AI**: parsing, chunking, embeddings, retrieval, prompting, LLM calls, eval, tracing; in P2 the agent loop, tools and MCP client. Only NestJS is browser-facing. (ADR-0002) | AI code, evals and traces in one language and process; retrieval tuning without a network hop. NestJS keeps a real job: the product domain and the security boundary — a common enterprise pattern. |
 | D4 | L | AuthN | Angular: Authorization Code + **PKCE**, public client `kb-web` via `keycloak-js` (+ `keycloak-angular` if compatible). NestJS validates JWT via JWKS (`jose`): `iss`, `aud=kb-api`, `exp`, signature. | Standard; a small own guard is easier to explain and test than a wrapper library. BFF-cookie pattern is a possible Phase 6 hardening. |
 | D5 | **C** | Service-to-service auth | Phase 1: NestJS → AI service with a **client-credentials** token (`kb-api`, audience `kb-ai`) plus a `user` context object (`sub`, `roles`, later `groups`). **Phase 2/3: Keycloak token exchange** so the AI layer and MCP tools act *on behalf of the user*. | Defense in depth now; on-behalf-of delegation is the right model once tools touch real systems. |
@@ -129,10 +129,10 @@ Status: **L** = locked · **C** = changed in v2 · **N** = new in v2. ADR number
 | A6 | An Azure subscription can be created in week 2 (M1.7) | Move M1.7 later; Phase 5 risk increases |
 
 **Still open (decide during M1.0):**
-- **RAM size** of the Mac (affects A1).
+- ~~**RAM size** of the Mac~~ — **16 GB** (checked 2026-10-19), A1 holds.
 - **Monthly token cap** for the OpenRouter key (suggestion: 10–20 USD while building Phase 1).
 - **Project name** — `kb-agent` undersells the "Dev of the future" idea; pick a real name before the repo goes public.
-- **Dev and demo model** on OpenRouter — pick by price/quality in M1.3, record in ADR-0005, re-check with the eval harness.
+- ~~**Dev and demo model**~~ — decided in [ADR-0005](docs/adr/0005-llm-access-and-model.md); agent mode in ADR-0007.
 
 ---
 
@@ -160,9 +160,9 @@ Status: **L** = locked · **C** = changed in v2 · **N** = new in v2. ADR number
 | web | 4200 (dev server, or nginx `:80` mapped to `4200` in full profile) | Angular 22 → nginx | yes |
 | api | 3000 | NestJS 12 on Node 24 | yes |
 | ai-service | 8000 | FastAPI on Python 3.13 | **no** |
-| keycloak | 8080 | `quay.io/keycloak/keycloak:26.7.x` (`start-dev --import-realm`) | yes (login) |
+| keycloak | 8080 | `quay.io/keycloak/keycloak:26.8.x` (`start-dev --import-realm`) | yes (login) |
 | postgres | 5432 | `postgres:17` + init script | no |
-| qdrant | 6333 / 6334 | `qdrant/qdrant:1.18.x` | no (dashboard on localhost) |
+| qdrant | 6333 / 6334 | `qdrant/qdrant:1.19.x` | no (dashboard on localhost) |
 | phoenix | 6006 (UI) / 4317 (OTLP gRPC) | `arizephoenix/phoenix` (pin version) | no (localhost only) |
 
 Ports are identical in Mode A and Mode B, so Keycloak redirect URIs never change. Every image must exist for arm64 (verify Phoenix in M1.1).

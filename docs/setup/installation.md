@@ -110,10 +110,10 @@ Measured idle usage of the Phase 1 infra:
 
 | Container | Idle RAM | Image size |
 |---|---|---|
-| Keycloak 26.7 | ~700 MB | ~750 MB |
+| Keycloak 26.x | ~700 MB | ~750 MB |
 | Phoenix 20.x | ~450 MB | ~1.4 GB |
 | Postgres 17 | ~60 MB | ~650 MB |
-| Qdrant 1.18 | ~25 MB (grows with vectors) | ~270 MB |
+| Qdrant 1.x | ~25 MB (grows with vectors) | ~270 MB |
 
 The native dev servers (Angular, Nest, FastAPI) need another ~1–1.5 GB, and the embedding model in the
 AI service (M1.2) another 0.5–2.5 GB depending on the model. On a 16 GB Mac that fits comfortably; on 8 GB
@@ -218,12 +218,12 @@ SDK + OpenInference/OpenTelemetry (M1.1/M1.3), `pypdf` (M1.2), Drizzle + `jose` 
 | Service | Image | Ports (localhost only) | Notes |
 |---|---|---|---|
 | Postgres | `postgres:17.11` | 5432 | `infra/postgres/init.sql` creates the `keycloak` and `app` databases on first start |
-| Keycloak | `quay.io/keycloak/keycloak:26.7.5` | 8080 | `start-dev --import-realm` with `infra/keycloak/realm-kb.json`; state lives in Postgres |
-| Qdrant | `qdrant/qdrant:v1.18.3` | 6333 (REST, dashboard), 6334 (gRPC) | Telemetry disabled |
-| Phoenix | `arizephoenix/phoenix:version-20.21.0` | 6006 (UI, OTLP/HTTP), 4317 (OTLP/gRPC) | SQLite in a named volume |
+| Keycloak | `quay.io/keycloak/keycloak:26.8.1` | 8080 | `start-dev --import-realm` with `infra/keycloak/realm-kb.json`; state lives in Postgres |
+| Qdrant | `qdrant/qdrant:v1.19.2` | 6333 (REST, dashboard), 6334 (gRPC) | Telemetry disabled |
+| Phoenix | `arizephoenix/phoenix:version-20.23.0` | 6006 (UI, OTLP/HTTP), 4317 (OTLP/gRPC) | SQLite in a named volume |
 
-Newer minor lines exist at the time of writing (Keycloak 26.8, Qdrant 1.19). The plan locks
-Keycloak 26.7.x and Qdrant 1.18.x (D2); bump them deliberately, together with `qdrant-client`.
+Pinned in M2.0 (`plan-phase-2.md` D47). Bump minor lines deliberately; Qdrant always together with
+`qdrant-client`. Existing volumes migrate in place on the next `pnpm stack:up` (there is no downgrade).
 
 ---
 

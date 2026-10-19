@@ -1,0 +1,15 @@
+# All three images build with the repo root as context (pnpm workspace). Allow-list, so `.env`,
+# the corpus, caches and local builds never reach a build context.
+*
+!package.json
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
+!apps/
+!packages/
+**/node_modules
+**/dist
+**/.angular
+**/.venv
+**/.cache
+**/__pycache__
+**/*.tsbuildinfo

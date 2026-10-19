@@ -1,0 +1,48 @@
+# Weekly, grouped updates (plan.md D2). Major versions are deliberate decisions (Node LTS line,
+# Postgres data format, Keycloak realm format), so container images only get minor/patch bumps.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    # pnpm 12 refuses releases younger than its minimum release age.
+    cooldown:
+      default-days: 7
+    groups:
+      npm:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: uv
+    directory: /apps/ai-service
+    schedule:
+      interval: weekly
+    groups:
+      python:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directories: [/apps/web, /apps/api, /apps/ai-service]
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker-compose
+    directory: /infra/compose
+    schedule:
+      interval: weekly
+    ignore:
+      - dependency-name: '*'
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ['*']

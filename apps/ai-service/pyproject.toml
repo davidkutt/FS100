@@ -15,7 +15,7 @@ dependencies = [
     "pyjwt[crypto]>=2.15.1",
     "pypdf>=6.20.1",
     "python-multipart>=0.0.32",
-    "qdrant-client>=1.18,<1.19",
+    "qdrant-client>=1.19,<1.20",
     "uvicorn[standard]>=0.54",
 ]
 

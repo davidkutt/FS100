@@ -1,0 +1,48 @@
+# Playwright smoke (login → upload → ask) against the full Compose profile with the fake LLM
+# (plan.md D20). Also the PR check that all three images build.
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: e2e smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
+      LLM_PROVIDER: fake
+      # ≈ 0.5 GB instead of 2.3 GB; retrieval quality is the eval job's concern, not this one's.
+      EMBEDDING_MODEL: intfloat/multilingual-e5-small
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: .nvmrc
+          package-manager-cache: false
+      - run: corepack enable pnpm
+      - run: pnpm install --frozen-lockfile --filter @fs100/e2e
+      - run: pnpm --filter @fs100/e2e exec playwright install --with-deps chromium
+      - run: pnpm stack:up:full
+      - run: pnpm e2e
+      - if: failure()
+        run: node scripts/stack.mjs --profile full logs --no-color > stack.log
+      - if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-report
+          path: |
+            e2e/playwright-report/
+            e2e/test-results/
+            stack.log

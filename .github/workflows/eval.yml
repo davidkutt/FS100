@@ -1,0 +1,48 @@
+# Retrieval eval on the golden set (plan.md D19, D23): report only, never blocks a merge.
+# The summary lands in the job summary, the run files in the `retrieval-eval` artifact.
+name: Eval
+
+on:
+  pull_request:
+    paths:
+      - apps/ai-service/**
+      - evals/**
+      - data/sample-docs/**
+      - .github/workflows/eval.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eval-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  retrieval:
+    name: retrieval eval
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: true
+    defaults:
+      run:
+        working-directory: apps/ai-service
+    steps:
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/ai-service/uv.lock
+      # EMBEDDING_MODEL defaults to bge-m3 (ADR-0004, ≈ 2.3 GB): download it once, not per run.
+      - uses: actions/cache@v6
+        with:
+          path: apps/ai-service/.cache/fastembed
+          key: fastembed-bge-m3
+      - run: uv sync --locked
+      - run: uv run kb-eval retrieval
+      - name: Job summary
+        run: cat ../../evals/runs/*.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: retrieval-eval
+          path: evals/runs/
