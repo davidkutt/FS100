@@ -23,8 +23,8 @@ jobs:
     env:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           # setup-node would detect pnpm from package.json#packageManager and fail, because pnpm
@@ -48,8 +48,8 @@ jobs:
       run:
         working-directory: apps/ai-service
     steps:
-      - uses: actions/checkout@v5
-      - uses: astral-sh/setup-uv@v6
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-dependency-glob: apps/ai-service/uv.lock
@@ -68,13 +68,13 @@ jobs:
     env:
       COREPACK_ENABLE_DOWNLOAD_PROMPT: '0'
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
           package-manager-cache: false
       - run: corepack enable pnpm
-      - uses: astral-sh/setup-uv@v6
+      - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
           cache-dependency-glob: apps/ai-service/uv.lock
@@ -93,5 +93,5 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - run: docker compose --file infra/compose/docker-compose.yml --profile full config --quiet
