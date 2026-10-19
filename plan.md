@@ -130,8 +130,8 @@ Status: **L** = locked · **C** = changed in v2 · **N** = new in v2. ADR number
 
 **Still open (decide during M1.0):**
 - ~~**RAM size** of the Mac~~ — **16 GB** (checked 2026-10-19), A1 holds.
-- **Monthly token cap** for the OpenRouter key (suggestion: 10–20 USD while building Phase 1).
-- **Project name** — `kb-agent` undersells the "Dev of the future" idea; pick a real name before the repo goes public.
+- ~~**Monthly token cap**~~ — **20 USD/month** as the OpenRouter key limit with monthly reset (decided 2026-10-19).
+- ~~**Project name**~~ — **FS100** for now (decided 2026-10-19); identifiers keep `kb-*`.
 - ~~**Dev and demo model**~~ — decided in [ADR-0005](docs/adr/0005-llm-access-and-model.md); agent mode in ADR-0007.
 
 ---

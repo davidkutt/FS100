@@ -52,8 +52,7 @@ M1.2 (ingest/search/delete in the AI service, golden set, `pnpm eval:retrieval`)
 `POST /v1/chat` as SSE), M1.4 (documents + chat/search relays in NestJS, contracts), M1.5 (Angular UI:
 documents, chat, inspector) and M1.6 (Dockerfiles, Compose `--profile full`, CI workflows, Playwright e2e)
 are done. M1.7 (Azure spike) is postponed while the project runs locally, so Phase 2 has no Azure parts.
-**Phase 2 (agent, MCP, approvals) is in progress** — M2.0 (pins, spikes, ADR-0007…0010 drafts) is done
-apart from the GitHub PATs. Check the milestone in [plan.md §8](plan.md#8-milestones-and-tasks) or
+**Phase 2 (agent, MCP, approvals) is in progress** — M2.0 (pins, spikes, identities, ADR-0007…0010 drafts) is done. Check the milestone in [plan.md §8](plan.md#8-milestones-and-tasks) or
 [plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks) before building something: many features
 are deliberately scheduled for later milestones.
 

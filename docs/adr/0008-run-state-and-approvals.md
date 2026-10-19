@@ -29,7 +29,7 @@ and broken streams. NestJS already owns product data and the security boundary
   A stream that breaks after `executing` without a result becomes `unknown`: shown to the user, never
   retried automatically.
 - **Idempotency at the target:** `create_issue` writes a hidden marker `kb-agent:{approvalId}` into the
-  issue body and searches for it before creating.
+  issue body and searches for it before creating (`/search/issues` needs `is:issue` in `q`, otherwise 422).
 - **Signing key** from env (`APPROVAL_SIGNING_KEY`), rotatable.
 
 ## Alternatives considered

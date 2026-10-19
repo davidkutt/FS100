@@ -150,17 +150,17 @@ Numbering continues from `plan.md`. Status: **N** = new in Phase 2 · **C** = ch
 
 | # | Assumption | If wrong |
 |---|---|---|
-| A7 | **Held:** M1.6 code-complete 2026-10-19, deviations recorded in `plan.md` (M1.7 postponed); the first CI run still needs a push | Do not start M2.1 before CI is green |
+| A7 | **Held:** M1.6 code-complete 2026-10-19, deviations recorded in `plan.md` (M1.7 postponed); CI green on `main` (2026-10-19), but `.dockerignore` and the `docker`/`e2e`/`eval` workflows are not committed yet | Do not start M2.1 before CI is green |
 | A8 | The dev model on OpenRouter handles streamed and parallel tool calls reliably (**checked** in M2.0, ADR-0007) | Switch model via env; keep `provider.require_parameters` |
-| A9 | The GitHub MCP server runs locally as an arm64 container in HTTP mode with PAT auth (**checked** in M2.0 with a fake token; real PAT pending) | Fall back to a stdio child process (`docker run -i`) |
+| A9 | The GitHub MCP server runs locally as an arm64 container in HTTP mode with PAT auth (**checked** in M2.0, real PAT call ✓) | Fall back to a stdio child process (`docker run -i`) |
 | A10 | *(postponed with M1.7)* Azure MCP Server 3.0 runs read-only with service-principal env credentials | Fall back to 2–3 own read-only Azure SDK tools |
 | A11 | Keycloak standard token exchange covers the audience setup in §7.7 without the legacy feature (**holds**, ADR-0009) | Adjust client scopes; worst case keep client credentials + `user` context for hop 2 and document it |
 | A12 | Mac has ≥ 16 GB RAM (**confirmed** 16 GB; the OrbStack VM gets 8 GB) | Keep Phoenix and Keycloak on minimal settings |
-| A13 | ~20 USD/month OpenRouter budget during P2, including eval runs | Lower `EVAL_AGENT_REPEATS` to 1; cheaper dev model |
+| A13 | 20 USD/month OpenRouter budget during P2, including eval runs (**decided**; key limit, monthly reset) | Lower `EVAL_AGENT_REPEATS` to 1; cheaper dev model |
 
 **Still open (decide during M2.0):**
-- From Phase 1: monthly token cap; project name (repo and README already use FS100 — confirm). RAM: 16 GB.
-- Sandbox repo name. GitHub allow-list: candidates from the pinned `tools/list` in ADR-0010, final in M2.5.
+- ~~From Phase 1~~: RAM 16 GB · token cap 20 USD/month (OpenRouter key limit) · project name FS100 for now.
+- ~~Sandbox repo name~~: `davidkutt/fs-100-sandbox` (private). GitHub allow-list: candidates from the pinned `tools/list` in ADR-0010, final in M2.5.
 - Dev model for agent mode → `gpt-6-luna` (ADR-0007, proposed; re-checked by the agent eval).
 - Sub-topic list v1 for devops, cloud, security, architecture (M2.2).
 
@@ -455,17 +455,17 @@ Hours are ideal single-person hours, ±30 %.
 
 ### M2.0 — Kick-off: versions, spikes, identities (~5 h)
 
-- [ ] Record Phase 1 deviations in `plan.md`; resolve open items (RAM ✓ 16 GB; token cap and project name still open)
+- [x] Record Phase 1 deviations in `plan.md`; resolve open items (RAM 16 GB, token cap 20 USD/month, name FS100)
 - [x] Confirm Phase 1 uses `query_points` (it does); upgrade Qdrant 1.19.2 + `qdrant-client` 1.19.1; re-run the retrieval
   eval → identical to the baseline (hit@5 0.98, nDCG@10 0.86, same misses)
 - [x] Upgrade Keycloak to 26.8.1 — no realm diff needed (in-place migration and fresh import both checked); Phoenix 20.23.0
 - [x] **Spikes (≤ 1 h each, outcomes into ADRs):** MCP SDK v2 server mounted in FastAPI + SDK v2 client (ADR-0010) ·
   standard token exchange `kb-api → kb-ai → MCP audience` (ADR-0009) · GitHub MCP server container in HTTP mode, list
-  tools (ADR-0010; fake token — one call with the real PAT still open) · ~~Azure MCP Server~~ postponed with M1.7
+  tools (ADR-0010; `actions_list` with the real PAT ✓) · ~~Azure MCP Server~~ postponed with M1.7
 - [x] **Tool-calling shortlist** on OpenRouter: 3 models × 5 scripted prompts (streamed deltas, parallel calls, JSON
   validity, refusal), price → dev model in ADR-0007
-- [ ] Identities: sandbox repo; PAT #1 read-only on this repo; PAT #2 `issues:write` on the sandbox only; all in
-  `.env.local` (git-ignored), expiry dates noted
+- [x] Identities: sandbox repo `davidkutt/fs-100-sandbox` (private); PAT #1 read-only on this repo; PAT #2
+  `issues:write` on the sandbox only; all in `.env.local` (git-ignored); both expire 2026-11-18
 - [x] Drafts of ADR-0007 (harness & limits) and ADR-0008 (run state & approvals)
 
 **Acceptance:** pins updated; retrieval eval within ±0.01 of the Phase 1 baseline; spike notes in ADRs; identities have
