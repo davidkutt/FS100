@@ -1,6 +1,6 @@
 # ADR-0007: Own agent harness with hard limits; dev model for agent mode
 
-- **Status:** Proposed (M2.0 draft; accepted when M2.1 lands)
+- **Status:** Accepted (M2.1, 2026-10-19; the dev model is re-checked by the agent eval in M2.6)
 - **Date:** 2026-10-19
 - **Plan reference:** D11, D27, D40, D41 ([plan-phase-2.md §3](../../plan-phase-2.md#3-decisions))
 
@@ -50,6 +50,22 @@ the write tool).
 - **Claude Haiku 5.5** is the fastest and most precise. Its reasoning counts against `max_tokens`
   (ADR-0005), so it needs a higher output cap in agent mode.
 - One run per prompt, so these numbers only shortlist; the agent eval decides.
+
+## Implementation (M2.1)
+
+- `agent.py` (loop, `mode=rag` adapter), `tools.py` (`ToolSpec`, role policy, untrusted wrapper, native KB
+  search), `POST /v1/agent` with SSE v2. Limits come from `AGENT_*` env vars.
+- **Stop reasons:** `max_steps` for steps; wall clock, input tokens and cost all end with `budget` (the D29
+  enum), and the `agent.run` span names which one (`agent.limit`). Budgets are checked before every LLM
+  call, so a run can overshoot by one step; the wall clock is also checked per streamed event and caps
+  each tool's timeout.
+- **Transient** = `TransientToolError` or `ConnectionError`; retried 2× (0.5 s, 1 s) inside the tool's
+  timeout. Unknown tools and invalid arguments go back to the model as observations.
+- A write tool call ends the turn with `awaiting_approval` and is not executed; the signed
+  `approval_required` event follows in M2.3 ([ADR-0008](0008-run-state-and-approvals.md)).
+- `tool_choice` is not sent; nothing needs it yet.
+- First real turn (`gpt-6-luna`, 2026-10-19): three parallel searches in one step from streamed deltas;
+  OpenRouter reported 1,916 of 4,968 input tokens as cached with `session_id` set.
 
 ## Alternatives considered
 

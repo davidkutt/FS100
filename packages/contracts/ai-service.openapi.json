@@ -273,6 +273,68 @@
         ]
       }
     },
+    "/v1/agent": {
+      "post": {
+        "tags": [
+          "agent"
+        ],
+        "summary": "Agent",
+        "description": "Agent turn, SSE v2: `step`, `tool_call`, `tool_result`, `sources`, `token`…, `done`\n(plan-phase-2 §7.3). `mode=rag` runs the Phase 1 pipeline and ends with the same `done`.",
+        "operationId": "agent_v1_agent_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AgentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "text/event-stream": {
+                "itemSchema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "string"
+                    },
+                    "event": {
+                      "type": "string"
+                    },
+                    "id": {
+                      "type": "string"
+                    },
+                    "retry": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/": {
       "get": {
         "tags": [
@@ -297,6 +359,93 @@
   },
   "components": {
     "schemas": {
+      "AgentMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "assistant"
+            ],
+            "title": "Role"
+          },
+          "parts": {
+            "items": {
+              "$ref": "#/components/schemas/TextPart"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Parts"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "parts"
+        ],
+        "title": "AgentMessage"
+      },
+      "AgentRequest": {
+        "properties": {
+          "conversation_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Conversation Id"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/AgentMessage"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Messages"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "agent",
+              "rag"
+            ],
+            "title": "Mode",
+            "default": "agent"
+          },
+          "domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "db",
+                    "dev",
+                    "cloud",
+                    "devops",
+                    "mlops",
+                    "ai",
+                    "security",
+                    "architecture",
+                    "sre"
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domains"
+          },
+          "user": {
+            "$ref": "#/components/schemas/UserContext"
+          }
+        },
+        "type": "object",
+        "required": [
+          "conversation_id",
+          "messages",
+          "user"
+        ],
+        "title": "AgentRequest"
+      },
       "Body_ingest_v1_ingest_post": {
         "properties": {
           "file": {
@@ -706,6 +855,26 @@
         ],
         "title": "ServiceStatus"
       },
+      "TextPart": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "const": "text",
+            "title": "Type"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "TextPart"
+      },
       "UserContext": {
         "properties": {
           "sub": {
@@ -766,6 +935,134 @@
           "type"
         ],
         "title": "ValidationError"
+      },
+      "AgentDoneEvent": {
+        "properties": {
+          "stopReason": {
+            "enum": [
+              "end",
+              "max_steps",
+              "budget",
+              "awaiting_approval",
+              "cancelled",
+              "error"
+            ],
+            "title": "Stopreason",
+            "type": "string"
+          },
+          "answerStatus": {
+            "enum": [
+              "answered",
+              "abstained",
+              "no_kb"
+            ],
+            "title": "Answerstatus",
+            "type": "string"
+          },
+          "topScore": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topscore"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/AgentUsage"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "promptVersion": {
+            "title": "Promptversion",
+            "type": "string"
+          },
+          "traceId": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Traceid"
+          },
+          "protocolVersion": {
+            "const": 2,
+            "default": 2,
+            "title": "Protocolversion",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "stopReason",
+          "answerStatus",
+          "topScore",
+          "usage",
+          "model",
+          "promptVersion",
+          "traceId",
+          "protocolVersion"
+        ],
+        "title": "AgentDoneEvent",
+        "type": "object"
+      },
+      "AgentUsage": {
+        "properties": {
+          "inputTokens": {
+            "title": "Inputtokens",
+            "type": "integer"
+          },
+          "cachedTokens": {
+            "title": "Cachedtokens",
+            "type": "integer"
+          },
+          "outputTokens": {
+            "title": "Outputtokens",
+            "type": "integer"
+          },
+          "costUsd": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Costusd"
+          },
+          "steps": {
+            "title": "Steps",
+            "type": "integer"
+          },
+          "toolCalls": {
+            "title": "Toolcalls",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "cachedTokens",
+          "outputTokens",
+          "costUsd",
+          "steps",
+          "toolCalls"
+        ],
+        "title": "AgentUsage",
+        "type": "object"
       },
       "DoneEvent": {
         "properties": {
@@ -926,6 +1223,19 @@
         "title": "SourcesEvent",
         "type": "object"
       },
+      "StepEvent": {
+        "properties": {
+          "n": {
+            "title": "N",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "n"
+        ],
+        "title": "StepEvent",
+        "type": "object"
+      },
       "TokenEvent": {
         "properties": {
           "text": {
@@ -937,6 +1247,90 @@
           "text"
         ],
         "title": "TokenEvent",
+        "type": "object"
+      },
+      "ToolCallEvent": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "read",
+              "write"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "risk": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Risk",
+            "type": "string"
+          },
+          "args": {
+            "title": "Args"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "kind",
+          "risk",
+          "args"
+        ],
+        "title": "ToolCallEvent",
+        "type": "object"
+      },
+      "ToolResultEvent": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "ok",
+              "error",
+              "denied"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "content": {
+            "title": "Content",
+            "type": "string"
+          },
+          "truncated": {
+            "title": "Truncated",
+            "type": "boolean"
+          },
+          "durationMs": {
+            "title": "Durationms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "summary",
+          "content",
+          "truncated",
+          "durationMs"
+        ],
+        "title": "ToolResultEvent",
         "type": "object"
       },
       "UsageInfo": {

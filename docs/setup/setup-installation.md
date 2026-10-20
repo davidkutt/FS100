@@ -16,10 +16,10 @@ You install **five tools** on the host. Everything else is either a project depe
 |---|---|---|---|
 | **Git** | ≥ 2.40 | Source control | — |
 | **Node.js** | **24 LTS** (≥ 24.15) | Runtime for the Angular and NestJS apps and the root scripts | `.nvmrc`, `package.json#engines` |
-| **pnpm** | **12.11.2** (via Corepack) | Workspace package manager for `apps/web` + `apps/api` | `package.json#packageManager` |
+| **pnpm** | **12.11.2** (via Corepack) | Workspace package manager for `../../apps/web` + `apps/api` | `package.json#packageManager` |
 | **uv** | ≥ 0.11 | Python package/project manager; also installs Python itself | — |
-| **Python** | **3.13** (installed by uv) | Runtime for the AI service | `.python-version`, `apps/ai-service/pyproject.toml` |
-| **Docker** + Compose v2 | Engine ≥ 25, Compose ≥ 2.24 | Runs Postgres, Qdrant, Keycloak, Phoenix | `infra/compose/docker-compose.yml` |
+| **Python** | **3.13** (installed by uv) | Runtime for the AI service | `.python-version`, `../../apps/ai-service/pyproject.toml` |
+| **Docker** + Compose v2 | Engine ≥ 25, Compose ≥ 2.24 | Runs Postgres, Qdrant, Keycloak, Phoenix | `../../infra/compose/docker-compose.yml` |
 
 **Do not install globally:** Angular CLI, Nest CLI, TypeScript, ESLint, Prettier, ruff, pyright, pytest.
 They are project dev-dependencies, versioned in the lockfiles, and invoked through `pnpm` / `uv run`
@@ -92,7 +92,7 @@ brew install uv                # or: curl -LsSf https://astral.sh/uv/install.sh 
 uv python install 3.13         # uv-managed CPython, independent of the macOS system Python
 ```
 
-You never activate a virtualenv by hand: `uv sync` creates `apps/ai-service/.venv`, and `uv run …` uses it.
+You never activate a virtualenv by hand: `uv sync` creates `../../apps/ai-service/.venv`, and `uv run …` uses it.
 
 ### 2.5 Docker
 
@@ -179,7 +179,7 @@ uv sync --directory apps/ai-service       # ai-service (lockfile: apps/ai-servic
 How each technology is installed and used **in this repo**. Versions are the ones pinned at M1.0
 (plan.md D2); Dependabot keeps them fresh from M1.6.
 
-### Frontend — `apps/web`
+### Frontend — `../../apps/web`
 
 | Technology | Version | Installed by | Notes |
 |---|---|---|---|
@@ -189,7 +189,7 @@ How each technology is installed and used **in this repo**. Versions are the one
 | ESLint + angular-eslint | 10.x / 22.x | `pnpm install` | `ng lint`, includes template accessibility rules |
 | TypeScript | 6.0 | `pnpm install` (catalog) | Angular 22 requires `>=6.0 <6.1` |
 
-### API — `apps/api`
+### API — `../../apps/api`
 
 | Technology | Version | Installed by | Notes |
 |---|---|---|---|
@@ -198,7 +198,7 @@ How each technology is installed and used **in this repo**. Versions are the one
 | oxlint | 1.x | `pnpm install` | Nest 12's default linter, type-aware via `oxlint-tsgolint` |
 | Express | 5 | `pnpm install` | Via `@nestjs/platform-express` |
 
-### AI service — `apps/ai-service`
+### AI service — `../../apps/ai-service`
 
 | Technology | Version | Installed by | Notes |
 |---|---|---|---|
@@ -213,12 +213,12 @@ Coming with later milestones (not installed yet): `qdrant-client` 1.18 + `fastem
 SDK + OpenInference/OpenTelemetry (M1.1/M1.3), `pypdf` (M1.2), Drizzle + `jose` + Zod in the API (M1.1/M1.4),
 `keycloak-js` + `keycloak-angular` in the web app (M1.1).
 
-### Infrastructure — Docker images (`infra/compose/docker-compose.yml`)
+### Infrastructure — Docker images (`../../infra/compose/docker-compose.yml`)
 
 | Service | Image | Ports (localhost only) | Notes |
 |---|---|---|---|
-| Postgres | `postgres:17.11` | 5432 | `infra/postgres/init.sql` creates the `keycloak` and `app` databases on first start |
-| Keycloak | `quay.io/keycloak/keycloak:26.7.5` | 8080 | `start-dev --import-realm` with `infra/keycloak/realm-kb.json`; state lives in Postgres |
+| Postgres | `postgres:17.11` | 5432 | `../../infra/postgres/init.sql` creates the `keycloak` and `app` databases on first start |
+| Keycloak | `quay.io/keycloak/keycloak:26.7.5` | 8080 | `start-dev --import-realm` with `../../infra/keycloak/realm-kb.json`; state lives in Postgres |
 | Qdrant | `qdrant/qdrant:v1.18.3` | 6333 (REST, dashboard), 6334 (gRPC) | Telemetry disabled |
 | Phoenix | `arizephoenix/phoenix:version-20.21.0` | 6006 (UI, OTLP/HTTP), 4317 (OTLP/gRPC) | SQLite in a named volume |
 
@@ -230,18 +230,18 @@ Keycloak 26.7.x and Qdrant 1.18.x (D2); bump them deliberately, together with `q
 ## 7. pnpm 12 specifics worth knowing
 
 - **Build scripts are opt-in.** Dependency `postinstall` scripts only run for packages listed as `true`
-  under `allowBuilds` in `pnpm-workspace.yaml` (pnpm ≥ 11 replaced `onlyBuiltDependencies` with this
+  under `allowBuilds` in `../../pnpm-workspace.yaml` (pnpm ≥ 11 replaced `onlyBuiltDependencies` with this
   map). Today only `esbuild` is allowed. If an install fails with `ERR_PNPM_IGNORED_BUILDS`, run
   `pnpm approve-builds` and commit the reviewed change.
 - **Fresh releases are held back.** pnpm 12 applies a minimum release age to newly published versions. If
   you pin a version that is only hours old, pnpm adds it to `minimumReleaseAgeExclude` in
-  `pnpm-workspace.yaml`. Prefer a slightly older version over committing such an exclusion.
+  `../../pnpm-workspace.yaml`. Prefer a slightly older version over committing such an exclusion.
 - **Catalogs.** Shared versions (`typescript`, `vitest`, `prettier`, `@types/node`) are defined once under
-  `catalog:` in `pnpm-workspace.yaml` and referenced as `"catalog:"` in the apps.
+  `catalog:` in `../../pnpm-workspace.yaml` and referenced as `"catalog:"` in the apps.
 
 ## 8. Editor setup (VS Code)
 
-Open the repo root and accept the recommended extensions (`.vscode/extensions.json`): Angular Language
+Open the repo root and accept the recommended extensions (`../../.vscode/extensions.json`): Angular Language
 Service, ESLint, oxc, Prettier, Vitest, Python, Ruff, Container Tools, EditorConfig. For Python, select the
 interpreter at `apps/ai-service/.venv` (*Python: Select Interpreter*).
 

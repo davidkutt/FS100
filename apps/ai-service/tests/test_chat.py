@@ -1,30 +1,25 @@
 """Grounded chat: prompt, citations, SSE stream with the fake provider, cancellation."""
 
 import asyncio
-import json
-from collections.abc import AsyncGenerator, Iterator
+from collections.abc import AsyncGenerator
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-import jwt
 import pytest
 from fastapi.sse import ServerSentEvent
 from fastapi.testclient import TestClient
+from openai.types.chat import ChatCompletionToolParam
 from qdrant_client import QdrantClient
 
 from ai_service import embeddings
-from ai_service.core.settings import Settings
 from ai_service.embeddings import Embedder
 from ai_service.knowledge_base import Hit, KnowledgeBase
 from ai_service.llm import LlmError, LlmEvent, Message, Token
-from ai_service.main import create_app
-from ai_service.rag import ChatPipeline, ChatTurn, build_messages, invalid_citations
-from support import FakeTextEmbedding, fetch_jwks, token
+from ai_service.rag import ChatPipeline, ChatTurn, answer_status, build_messages, invalid_citations
+from support import USER, FakeTextEmbedding, sse
 
 SNAPSHOT = Path(__file__).parent / "fixtures/chat-prompt.txt"
-MARKDOWN = b"# Runbook\n\n## Rollback\nUndo the release with kubectl rollout undo.\n"
-USER = {"sub": "carol", "roles": ["viewer"]}
 
 
 def hit(**fields: Any) -> Hit:
@@ -73,29 +68,24 @@ def test_invalid_citations_finds_numbers_without_a_source() -> None:
     assert invalid_citations("A [1], B [2][3], C [0].", 2) == [3, 0]
 
 
-@pytest.fixture
-def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    monkeypatch.setattr(jwt.PyJWKClient, "fetch_data", fetch_jwks)
-    monkeypatch.setattr(embeddings, "TextEmbedding", FakeTextEmbedding)
-    app = create_app(Settings(qdrant_url=":memory:", llm_provider="fake"))
-    with TestClient(app, headers={"Authorization": f"Bearer {token()}"}) as client:
-        client.post(
-            "/v1/ingest",
-            files={"file": ("runbook.md", MARKDOWN)},
-            data={"doc_id": str(uuid4()), "owner_id": "bob", "domains": ["devops"]},
-        )
-        yield client
+@pytest.mark.parametrize(
+    ("answer", "searched", "status"),
+    [
+        ("Roll back with kubectl [1].", True, "answered"),
+        ("Not in the knowledge base.", True, "abstained"),
+        ("Made up [3].", True, "abstained"),
+        ("Hello!", False, "no_kb"),
+    ],
+)
+def test_answer_status_counts_only_valid_citations(
+    answer: str, searched: bool, status: str
+) -> None:
+    assert answer_status(answer, 2, searched) == status
 
 
 def chat(client: TestClient, question: str) -> list[tuple[str, Any]]:
     body = {"messages": [{"role": "user", "content": question}], "user": USER}
-    response = client.post("/v1/chat", json=body)
-    assert response.status_code == 200
-    assert response.headers["content-type"].startswith("text/event-stream")
-    blocks = [
-        dict(line.split(": ", 1) for line in b.splitlines()) for b in response.text.split("\n\n")
-    ]
-    return [(b["event"], json.loads(b["data"])) for b in blocks if b]
+    return sse(client.post("/v1/chat", json=body))
 
 
 def answer(events: list[tuple[str, Any]]) -> str:
@@ -152,7 +142,12 @@ class ScriptedProvider:
         self.events = events
         self.closed = False
 
-    async def stream_chat(self, messages: list[Message]) -> AsyncGenerator[LlmEvent]:
+    async def stream_chat(
+        self,
+        messages: list[Message],
+        tools: list[ChatCompletionToolParam] | None = None,
+        session_id: str | None = None,
+    ) -> AsyncGenerator[LlmEvent]:
         try:
             for event in self.events:
                 yield event

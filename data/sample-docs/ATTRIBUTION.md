@@ -10,7 +10,7 @@ keep them in sync: the retrieval eval (`pnpm eval:retrieval`) ingests exactly th
 |---|---|---|
 | `fs100-readme.md`, `fs100-plan.md` | Snapshot of this repo's `README.md` and `plan.md` (2026-10-15) | MIT (this repo) |
 | `adr-0001-…`, `adr-0002-…`, `adr-0003-…` | Snapshot of `docs/adr/` (2026-10-15) | MIT (this repo) |
-| `setup-installation.md`, `setup-startup.md` | Snapshot of `docs/setup/` (2026-10-15) | MIT (this repo) |
+| `../../docs/setup/setup-installation.md`, `../../docs/setup/setup-startup.md` | Snapshot of `docs/setup/` (2026-10-15) | MIT (this repo) |
 | `runbook-*.md`, `slo-handbook.pdf` | Written for this project; procedures are generic, hostnames are examples | MIT (this repo) |
 
 The repo documents are **snapshots** on purpose: golden-set labels (`evals/datasets/`) point at their

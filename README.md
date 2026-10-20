@@ -7,13 +7,13 @@ run and every request **traceable** from retrieval to prompt to model.
 
 The project is built in six phases; the full plan for Phase 1 lives in **[plan.md](plan.md)**.
 
-> **Status:** Phase 1 · **M1.6 containers, CI, e2e** — the AI service ingests PDF/Markdown/TXT into
-> Qdrant, searches it with domain filters (measured by a 60-question golden set, `pnpm eval:retrieval`) and
-> streams cited answers over SSE (OpenRouter or `fake`). The NestJS API in front of it handles uploads
-> (RBAC, dedupe, background ingest, metadata in Postgres) and relays chat and search; both services publish
-> their contracts to `packages/contracts`. The Angular UI has document upload, streamed chat with clickable
-> citations and a retrieval inspector. Everything also runs as containers (`pnpm stack:up:full`), CI checks
-> contracts, runs a Playwright smoke and reports the retrieval eval — see [roadmap](#roadmap).
+> **Status:** Phase 2 · **M2.1 agent harness core** — Phase 1 is in place: the AI service ingests
+> PDF/Markdown/TXT into Qdrant, searches it with domain filters (measured by a 60-question golden set,
+> `pnpm eval:retrieval`) and streams cited answers over SSE; the NestJS API handles uploads (RBAC, dedupe,
+> background ingest) and relays chat and search; the Angular UI has upload, chat with clickable citations and a
+> retrieval inspector; everything also runs as containers, with contracts, e2e and the retrieval eval in CI.
+> New in Phase 2: an own agent loop (`POST /v1/agent`) that searches the knowledge base as a tool, streams its
+> tool activity as SSE v2 events and stops at hard limits (steps, time, tokens, cost) — see [roadmap](#roadmap).
 
 ---
 
@@ -150,6 +150,7 @@ plan.md           Phase 1 plan (decisions, contracts, milestones)
 ## Documentation
 
 - [plan.md](plan.md) — Phase 1 plan: scope, decisions D1–D26, contracts, milestones, risks
+- [plan-phase-2.md](plan-phase-2.md) — Phase 2 plan: agent, MCP, approvals; decisions D27–D49, milestones M2.0–M2.8
 - [Architecture](docs/architecture.md) — components, ingest and chat flows, Mode A vs. Mode B
 - [Installation guide](docs/setup/installation.md) — toolchain for macOS (Apple Silicon), Linux, Windows/WSL2
 - [Startup guide](docs/setup/startup.md) — first start, daily routine, URLs, seed users, troubleshooting
@@ -162,8 +163,8 @@ plan.md           Phase 1 plan (decisions, contracts, milestones)
 
 | Phase | Theme |
 |---|---|
-| **1** | Foundation + RAG slice + eval + tracing — *in progress: M1.0 – M1.6 done; M1.7 Azure spike postponed (local only for now)* |
-| 2 | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals |
+| 1 | Foundation + RAG slice + eval + tracing — *M1.0 – M1.6 done; M1.7 Azure spike postponed (local only for now)* |
+| **2** | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals — *in progress: M2.0 – M2.1 done* |
 | 3 | Hybrid search, reranking, code-aware RAG, guardrails, routing + semantic cache, memory |
 | 4 | Kubernetes: Helm, k3d, GitOps-ready manifests |
 | 5 | Azure: Terraform, ACR, AKS / Container Apps, Key Vault, OIDC from GitHub |

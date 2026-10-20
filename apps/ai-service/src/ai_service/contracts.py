@@ -6,15 +6,19 @@ from pathlib import Path
 
 from pydantic.json_schema import models_json_schema
 
+from ai_service.agent import AgentDoneEvent, StepEvent, ToolCallEvent, ToolResultEvent
 from ai_service.main import app
 from ai_service.rag import DoneEvent, ErrorEvent, SourcesEvent, TokenEvent
+
+V1_EVENTS = (SourcesEvent, TokenEvent, DoneEvent, ErrorEvent)
+V2_EVENTS = (StepEvent, ToolCallEvent, ToolResultEvent, AgentDoneEvent)  # plan-phase-2 §7.3
 
 
 def main() -> None:
     openapi = app.openapi()
     # OpenAPI cannot describe SSE payloads, so they ride along as plain component schemas.
     _, events = models_json_schema(
-        [(model, "serialization") for model in (SourcesEvent, TokenEvent, DoneEvent, ErrorEvent)],
+        [(model, "serialization") for model in (*V1_EVENTS, *V2_EVENTS)],
         ref_template="#/components/schemas/{model}",
     )
     openapi["components"]["schemas"].update(events["$defs"])
