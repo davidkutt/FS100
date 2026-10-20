@@ -16,6 +16,7 @@ describe('Documents (e2e)', () => {
       embedding_model: 'test-model',
     })),
     deleteDocument: vi.fn(async () => undefined),
+    updateLabels: vi.fn(async () => undefined),
   };
 
   beforeAll(async () => {
@@ -30,12 +31,13 @@ describe('Documents (e2e)', () => {
     filename: string,
     content: string | Buffer,
     status: number,
-    { roles = EDITOR, sub = 'user-1', domains = ['devops'] } = {},
+    { roles = EDITOR, sub = 'user-1', domains = ['devops'], topics = [] as string[] } = {},
   ) => {
     const req = request(app.getHttpServer())
       .post('/api/documents')
       .auth(await token(roles, { sub }), { type: 'bearer' });
     for (const domain of domains) void req.field('domains', domain);
+    for (const topic of topics) void req.field('topics', topic);
     return req.attach('file', Buffer.from(content), filename).expect(status);
   };
 
@@ -53,6 +55,19 @@ describe('Documents (e2e)', () => {
       expect(doc?.status).toBe(status);
       return doc!;
     });
+
+  const relabel = async (
+    id: string,
+    body: object,
+    status: number,
+    roles = EDITOR,
+    sub = 'user-1',
+  ) =>
+    request(app.getHttpServer())
+      .patch(`/api/documents/${id}`)
+      .auth(await token(roles, { sub }), { type: 'bearer' })
+      .send(body)
+      .expect(status);
 
   const remove = async (id: string, roles: string[], status: number, sub = 'user-1') =>
     request(app.getHttpServer())
@@ -78,6 +93,37 @@ describe('Documents (e2e)', () => {
     expect(form.get('doc_id')).toBe(doc.id);
     expect(form.getAll('domains')).toEqual(['devops', 'sre']);
     expect((form.get('file') as File).name).toBe('Übersicht.md');
+  });
+
+  it('topics from the taxonomy go along to the ingest; unknown ones → 400', async () => {
+    const res = await upload('topics.md', `# T ${randomUUID()}`, 202, {
+      topics: ['devops/ci-cd'],
+    });
+
+    expect((await settled(res.body.id, 'ready')).topics).toEqual(['devops/ci-cd']);
+    expect(ai.ingest.mock.calls.at(-1)![0].getAll('topics')).toEqual(['devops/ci-cd']);
+    const bad = await upload('bad.md', `# B ${randomUUID()}`, 400, { topics: ['devops/nope'] });
+    expect(bad.body.detail).toBe('Unknown topics: devops/nope');
+  });
+
+  it('owners relabel without re-ingesting; others, viewers and bad labels are refused', async () => {
+    const { body } = await upload('labels.md', `# L ${randomUUID()}`, 202, { sub: 'user-4' });
+    await settled(body.id, 'ready');
+    const ingests = ai.ingest.mock.calls.length;
+    const labels = { domains: ['devops', 'sre'], topics: ['devops/deployment'] };
+
+    const res = await relabel(body.id, labels, 200, EDITOR, 'user-4');
+
+    expect(DocumentDto.parse(res.body)).toMatchObject(labels);
+    expect(ai.updateLabels).toHaveBeenLastCalledWith(body.id, labels, expect.any(String));
+    expect(ai.ingest.mock.calls.length).toBe(ingests);
+    await relabel(body.id, { topics: [] }, 200, ADMIN);
+    await relabel(body.id, { topics: [] }, 403);
+    await relabel(body.id, { topics: [] }, 403, ['viewer'], 'user-4');
+    await relabel(body.id, {}, 400, EDITOR, 'user-4');
+    await relabel(body.id, { domains: [] }, 400, EDITOR, 'user-4');
+    await relabel(body.id, { topics: ['sre/x'] }, 400, EDITOR, 'user-4');
+    await relabel(randomUUID(), { topics: [] }, 404, ADMIN);
   });
 
   it('the same content again → 409, whatever the filename', async () => {
@@ -145,6 +191,7 @@ describe('Documents (e2e)', () => {
     await settled(body.id, 'processing');
 
     await remove(body.id, EDITOR, 409);
+    await relabel(body.id, { topics: [] }, 409);
 
     await app.get(DocumentsService).onApplicationBootstrap();
     const doc = await settled(body.id, 'failed');

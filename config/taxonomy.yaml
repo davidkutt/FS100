@@ -1,0 +1,48 @@
+# Taxonomy (D48), read by the API and the AI service (TAXONOMY_CONFIG). The nine domains must match
+# the Domain enum of both apps. Sub-topic ids are `domain/topic`; they label documents only, search
+# filters stay at domain level in Phase 2. Descriptions feed the embedding router (M2.5).
+version: 1
+domains:
+  db:
+    description: Databases — PostgreSQL, schemas and migrations, backups and restores, query tuning.
+  dev:
+    description: Software development — local setup, toolchain, frameworks, code conventions, testing.
+  cloud:
+    description: Cloud platforms — Azure resources, managed services, networking, identity, costs.
+    topics:
+      compute: Virtual machines, container apps, managed Kubernetes and serverless runtimes.
+      networking: Virtual networks, DNS, ingress, load balancers and private endpoints.
+      storage: Blob storage, managed disks, file shares and their backups.
+      identity: Cloud identities, managed identities, service principals and role assignments.
+      cost: Budgets, cost alerts, cost guards and resource cleanup.
+  devops:
+    description: Delivery tooling — CI/CD, containers, Kubernetes, deployments and rollbacks, IaC.
+    topics:
+      ci-cd: Build and deploy pipelines, GitHub Actions, release automation.
+      containers: Docker images, Compose, registries and image builds.
+      kubernetes: Clusters, Helm charts, manifests and kubectl operations.
+      deployment: Rollouts, rollbacks and release strategies.
+      iac: Infrastructure as code with Terraform and Bicep.
+      local-env: Local development stack, dev containers and environment setup.
+  mlops:
+    description: ML operations — model lifecycle, embedding model swaps, evaluation pipelines, serving.
+  ai:
+    description: AI applications — RAG, agents, prompts, LLM providers, embeddings and evals.
+  security:
+    description: Security — secrets, authentication and authorization, certificates, supply chain.
+    topics:
+      secrets: Secret storage, rotation and leak response.
+      identity-access: OIDC, OAuth, Keycloak, tokens, roles and permissions.
+      certificates: TLS certificates, renewal and trust stores.
+      supply-chain: Dependencies, SBOMs, image signing and vulnerability scanning.
+      ai-security: Prompt injection, tool misuse and the OWASP LLM and agentic risks.
+  architecture:
+    description: Software architecture — decision records, service boundaries, API contracts, trade-offs.
+    topics:
+      decisions: Architecture decision records and their alternatives.
+      service-boundaries: Which service owns what, and how services talk to each other.
+      api-design: REST and streaming contracts, versioning, generated schemas.
+      data: Data models, storage choices and data flow.
+      ai-architecture: How the RAG pipeline, agent loop and tools fit together.
+  sre:
+    description: Site reliability — incidents, on-call, SLOs and error budgets, monitoring, capacity.

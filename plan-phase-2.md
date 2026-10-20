@@ -162,7 +162,7 @@ Numbering continues from `plan.md`. Status: **N** = new in Phase 2 · **C** = ch
 - ~~From Phase 1~~: RAM 16 GB · token cap 20 USD/month (OpenRouter key limit) · project name FS100 for now.
 - ~~Sandbox repo name~~: `davidkutt/fs-100-sandbox` (private). GitHub allow-list: candidates from the pinned `tools/list` in ADR-0010, final in M2.5.
 - Dev model for agent mode → `gpt-6-luna` (ADR-0007, proposed; re-checked by the agent eval).
-- Sub-topic list v1 for devops, cloud, security, architecture (M2.2).
+- ~~Sub-topic list v1 for devops, cloud, security, architecture~~: `config/taxonomy.yaml` v1 (M2.2), 5–6 per domain.
 
 ---
 
@@ -503,24 +503,38 @@ delimiter tags only, full HTML → text comes with `web.fetch`. Task set: `evals
 
 ### M2.2 — Conversations, protocol v2, UI, taxonomy (~15 h)
 
-- [ ] Drizzle: `conversations`, `messages` (incl. `answer_status`, `top_score`), `usage`, `feedback`, `documents.topics`
+- [x] Drizzle: `conversations`, `messages` (incl. `answer_status`, `top_score`), `usage`, `feedback`, `documents.topics`
   + migrations
-- [ ] NestJS `ConversationsModule`: CRUD, transcript assembly (last N messages), SSE relay with event tee into the DB,
+- [x] NestJS `ConversationsModule`: CRUD, transcript assembly (last N messages), SSE relay with event tee into the DB,
   abort propagation kept; `/api/tools` and `/api/models` relays
-- [ ] Contracts: SSE v2 JSON Schemas + generated types; drift check covers them
-- [ ] Model registry (`models.yaml`), per-conversation selection, role filter; *(optional)* `local` Ollama entry
-- [ ] `config/taxonomy.yaml` v1 (nine domains with descriptions; sub-topics for devops, cloud, security, architecture),
+- [x] Contracts: SSE v2 JSON Schemas + generated types; drift check covers them
+- [x] Model registry (`models.yaml`), per-conversation selection, role filter; *(optional)* `local` Ollama entry
+- [x] `config/taxonomy.yaml` v1 (nine domains with descriptions; sub-topics for devops, cloud, security, architecture),
   loaded and validated by NestJS and the AI service; `GET /api/taxonomy`
-- [ ] Document labels: optional `topics[]` on upload and via `PATCH /api/documents/:id` → AI service payload update (no
+- [x] Document labels: optional `topics[]` on upload and via `PATCH /api/documents/:id` → AI service payload update (no
   re-embedding); Qdrant `topics` keyword index with prefix matching; sub-topic pick-list in the documents UI
-- [ ] Angular: conversation sidebar; chat with tool-activity timeline (collapsible args/results, durations); route chip;
+- [x] Angular: conversation sidebar; chat with tool-activity timeline (collapsible args/results, durations); route chip;
   model picker; stop button; thumbs up/down with comment; usage widget
-- [ ] Tests: transcript assembly, event tee, SSE parser v2, timeline component, feedback API, taxonomy validation, label
+- [x] Tests: transcript assembly, event tee, SSE parser v2, timeline component, feedback API, taxonomy validation, label
   update without re-embedding
 
 **Acceptance:** conversations survive reloads and restarts; tool activity is visible live; switching the model per
 conversation needs no code change; a document's topics change without re-embedding; every assistant message stores
 `answerStatus`; *(optional)* the same question answered by the local model.
+
+**Done 2026-10-20.** Deviations: `messages.role` is `user`/`assistant` only — tool calls, results, sources and errors
+are `parts` of the assistant message (SSE payloads under their event name, tokens merged into `text`); the transcript
+sent to the model is the last 20 messages as **text only** (tool parts stay in the database, the AI service still
+accepts text parts); the user message is stored only once the AI service accepted the turn, the answer before the
+stream ends; a stopped run has no `done`, so it is stored with `stopReason: cancelled`, no `answerStatus` and no usage
+row. Models: `id` is the model id at `LLM_BASE_URL`, `min_role` instead of a role list, no per-entry base URL (comes
+with the optional `local` entry, not built), `LLM_MODEL` stays the default; a model the role does not reach → 422.
+`/v1/models` and `/v1/tools` list everything with `min_role` and NestJS cuts the lists to the caller's role (a GET
+carries no `user` object before M2.4); tools have no `server` / `domains` / `available` until M2.5. The route chip
+waits for the `route` event (M2.5). The usage widget shows today (UTC) via `GET /api/me/usage`; 30 days, caps and the
+admin page stay in M2.7. Relabelling is not audited yet (`audit_log`, M2.3); no retention job yet. The Phase 1 chat
+page is replaced by the conversation page (`/chat`, `/chat/:id`); `/api/chat` stays for P3. Also restored the eval
+snapshots `data/sample-docs/setup-*.md`, which M2.1 had moved to `docs/setup/` by accident.
 
 ### M2.3 — Approvals, permissions, audit (~11 h)
 

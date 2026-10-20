@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { Global, Module } from '@nestjs/common';
 import { z } from 'zod';
 
@@ -14,6 +15,10 @@ const schema = z.object({
   AI_SERVICE_URL: z.url().default('http://localhost:8000'),
   UPLOAD_MAX_MB: z.coerce.number().positive().default(20),
   CHAT_THROTTLE_PER_MIN: z.coerce.number().int().positive().default(20),
+  // The repo's file, from src/ and dist/ alike; the image sets its own path.
+  TAXONOMY_CONFIG: z
+    .string()
+    .default(fileURLToPath(new URL('../../../config/taxonomy.yaml', import.meta.url))),
   CORS_ORIGINS: z
     .string()
     .default('http://localhost:4200')

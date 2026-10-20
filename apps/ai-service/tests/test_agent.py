@@ -28,6 +28,7 @@ class ScriptedLlm:
     def __init__(self, *steps: list[LlmEvent | Literal["hang"]]) -> None:
         self.steps = list(steps)
         self.requests: list[tuple[list[Message], list[ChatCompletionToolParam] | None]] = []
+        self.models: list[str | None] = []
         self.closed = 0
 
     async def stream_chat(
@@ -35,8 +36,10 @@ class ScriptedLlm:
         messages: list[Message],
         tools: list[ChatCompletionToolParam] | None = None,
         session_id: str | None = None,
+        model: str | None = None,
     ) -> AsyncGenerator[LlmEvent]:
         self.requests.append((list(messages), tools))
+        self.models.append(model)
         try:
             for event in self.steps.pop(0) if self.steps else [Token("Done.")]:
                 if isinstance(event, str):
@@ -152,6 +155,21 @@ BAD_REQUESTS: list[dict[str, Any]] = [
 )
 def test_agent_rejects_bad_requests(client: TestClient, fields: dict[str, Any]) -> None:
     assert client.post("/v1/agent", json=body("Q") | fields).status_code == 422
+
+
+def test_the_selected_model_is_used_for_every_step() -> None:
+    llm = ScriptedLlm([call("t.echo")])
+
+    async def collect() -> None:
+        turns = [ChatTurn(role="user", content="Q")]
+        async for _ in agent(llm, [tool("t.echo")]).stream(
+            turns, None, ["viewer"], "bob", uuid4(), "vendor/model"
+        ):
+            pass
+
+    asyncio.run(collect())
+
+    assert llm.models == ["vendor/model", "vendor/model"]
 
 
 def test_max_steps_stops_before_running_more_tools() -> None:

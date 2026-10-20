@@ -181,11 +181,12 @@ class Agent:
         roles: list[str],
         user_id: str,
         conversation_id: UUID,
+        model_id: str | None = None,
     ) -> AsyncGenerator[ServerSentEvent]:
         settings = self.settings
         tools = sorted(self.tools(domains), key=lambda tool: tool.name)
         by_name = {tool.wire_name: tool for tool in tools}
-        offered = [tool.definition() for tool in tools if permitted(tool, roles)]
+        offered = [tool.definition() for tool in tools if permitted(tool.min_role, roles)]
         *history, question = turns
         # Stable prefix first (system, sorted tools), so providers can cache it (D41).
         messages: list[Message] = [
@@ -228,7 +229,9 @@ class Agent:
                         "llm.prompt_template.version": PROMPT_VERSION,
                     }
                     with tracer.start_as_current_span("llm", attributes=llm_attributes) as llm_span:
-                        events = self.llm.stream_chat(messages, offered, str(conversation_id))
+                        events = self.llm.stream_chat(
+                            messages, offered, str(conversation_id), model_id
+                        )
                         # aclosing: a client disconnect closes the provider stream (D27).
                         async with aclosing(events) as events:
                             async for event in events:
@@ -395,7 +398,7 @@ class Agent:
         """One call → an observation for the model (errors included); None = needs approval."""
         if spec is None:
             return _failed("error", f"Unknown tool {call.name}")
-        if not permitted(spec, roles):
+        if not permitted(spec.min_role, roles):
             return _failed("denied", f"{spec.name} is not permitted for your role")
         if spec.requires_approval:
             return None  # shortcut: no signed approval request yet, M2.3 adds it
@@ -431,13 +434,17 @@ class Agent:
 
 
 async def rag_turn(
-    pipeline: ChatPipeline, turns: list[ChatTurn], domains: list[Domain] | None, user_id: str
+    pipeline: ChatPipeline,
+    turns: list[ChatTurn],
+    domains: list[Domain] | None,
+    user_id: str,
+    model_id: str | None = None,
 ) -> AsyncGenerator[ServerSentEvent]:
     """`mode=rag`: the Phase 1 pipeline as measured baseline (D32), ending with a v2 `done`."""
     sources: list[Source] = []
     answer: list[str] = []
     done: DoneEvent | None = None
-    async with aclosing(pipeline.stream(turns, domains, user_id)) as events:
+    async with aclosing(pipeline.stream(turns, domains, user_id, model_id)) as events:
         async for event in events:
             match event.data:
                 case SourcesEvent() as data:

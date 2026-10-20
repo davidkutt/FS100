@@ -3,6 +3,11 @@
   white-space: pre-wrap;
 }
 
+.active-conversation {
+  background: var(--bs-primary-bg-subtle);
+  font-weight: 600;
+}
+
 .source-panel {
   width: min(28rem, 100%);
   max-width: 100%;

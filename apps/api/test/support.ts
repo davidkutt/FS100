@@ -1,3 +1,6 @@
+import { once } from 'node:events';
+import { createServer, type IncomingHttpHeaders, type ServerResponse } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from 'jose';
@@ -6,6 +9,7 @@ import { AiClient } from '../src/ai-client/ai-client.service.js';
 import { AppModule } from '../src/app.module.js';
 import { configureApp } from '../src/app.setup.js';
 import { JWKS } from '../src/auth/auth.guard.js';
+import type { Config } from '../src/config.js';
 
 // Keycloak expands composite roles into the token.
 export const EDITOR = ['editor', 'viewer'];
@@ -42,4 +46,50 @@ export async function createApp(ai: unknown): Promise<INestApplication<App>> {
   configureApp(app);
   await app.init();
   return app;
+}
+
+export interface Received {
+  url: string;
+  headers: IncomingHttpHeaders;
+  body: unknown;
+  closed: Promise<unknown>;
+}
+
+/** A fake AI service (and its token endpoint) on a real socket; `respond` answers each call. */
+export async function fakeAiService() {
+  const upstream = {
+    received: [] as Received[],
+    respond: (res: ServerResponse): void => void res.end(),
+    ai: undefined as unknown as AiClient,
+    close: () => {
+      server.closeAllConnections();
+      server.close();
+    },
+  };
+  const server = createServer(async (req, res) => {
+    const chunks: Buffer[] = [];
+    for await (const chunk of req) chunks.push(chunk as Buffer);
+    if (req.url!.endsWith('/token')) {
+      res.end(JSON.stringify({ access_token: 'svc-token', expires_in: 300 }));
+      return;
+    }
+    const text = Buffer.concat(chunks).toString();
+    upstream.received.push({
+      url: req.url!,
+      headers: req.headers,
+      body: text ? JSON.parse(text) : undefined,
+      closed: once(res, 'close'),
+    });
+    upstream.respond(res);
+  });
+  server.listen(0, '127.0.0.1');
+  await once(server, 'listening');
+  const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  upstream.ai = new AiClient({
+    AI_SERVICE_URL: url,
+    KEYCLOAK_ISSUER: `${url}/realms/kb`,
+    KEYCLOAK_CLIENT_ID: 'kb-api',
+    KEYCLOAK_CLIENT_SECRET: 'test-only',
+  } as Config);
+  return upstream;
 }

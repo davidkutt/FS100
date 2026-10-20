@@ -34,6 +34,9 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_max_output_tokens: int = 800
     llm_timeout_s: float = 60
+    # Relative to the app directory (`pnpm dev`, tests); the image sets absolute paths.
+    models_config: str = "../../config/models.yaml"
+    taxonomy_config: str = "../../config/taxonomy.yaml"
     agent_max_steps: int = 8
     agent_max_parallel_tools: int = 4
     agent_tool_timeout_s: float = 20

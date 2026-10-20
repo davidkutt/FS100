@@ -17,10 +17,12 @@ API's service token, `aud=kb-ai`):
 | Endpoint | What it does |
 |---|---|
 | `GET /healthz` · `GET /readyz` | liveness · readiness (embedding model loaded, Qdrant alias reachable) |
-| `POST /v1/ingest` | multipart `file` (PDF/MD/TXT), `doc_id`, `owner_id`, `domains` (repeat the field), `title?` → parse, chunk, embed, upsert; re-ingest replaces |
+| `POST /v1/ingest` | multipart `file` (PDF/MD/TXT), `doc_id`, `owner_id`, `domains` (repeat the field), `topics?` (taxonomy ids), `title?` → parse, chunk, embed, upsert; re-ingest replaces |
 | `POST /v1/search` | `{query, top_k=5, score_threshold?, domains?, doc_ids?}` → hits with score, page, heading path |
 | `POST /v1/chat` | `{messages:[{role, content}], domains?, user:{sub, roles}}` → SSE `sources`, `token`…, `done` \| `error` (plan.md §7.3); retrieval uses `RETRIEVAL_TOP_K` / `RETRIEVAL_SCORE_THRESHOLD` |
-| `POST /v1/agent` | `{conversation_id, messages:[{role, parts:[{type:"text", text}]}], mode="agent"\|"rag", domains?, user:{sub, roles}}` → SSE v2 `step`, `tool_call`, `tool_result`, `sources`, `token`…, `done` (+ `error`) (plan-phase-2 §7.3); `mode=rag` runs the `/v1/chat` pipeline as baseline; limits `AGENT_*` (ADR-0007) |
+| `POST /v1/agent` | `{conversation_id, messages:[{role, parts:[{type:"text", text}]}], mode="agent"\|"rag", model?, domains?, user:{sub, roles}}` → SSE v2 `step`, `tool_call`, `tool_result`, `sources`, `token`…, `done` (+ `error`) (plan-phase-2 §7.3); `mode=rag` runs the `/v1/chat` pipeline as baseline; limits `AGENT_*` (ADR-0007) |
+| `PATCH /v1/documents/{doc_id}/labels` | `{domains?, topics?}` → payload update on every chunk, no re-embedding → 204; unknown topics → 422 |
+| `GET /v1/models` · `GET /v1/tools` | model registry (`MODELS_CONFIG`) and tool registry with `min_role`; `model` on `/v1/agent` must be a registry id the caller's role reaches (tool-capable in agent mode), else 422; none = `LLM_MODEL` |
 | `DELETE /v1/documents/{doc_id}` | removes all points of a document → 204 |
 | `GET /v1/status` | authenticated status for the API's admin card (one span to Phoenix) |
 | `GET /` · `/docs` | service info · OpenAPI UI |

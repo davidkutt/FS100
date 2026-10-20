@@ -61,10 +61,14 @@ class KnowledgeBase:
         if not self.client.collection_exists(self.collection):
             dense = models.VectorParams(size=self.embedder.dim, distance=models.Distance.COSINE)
             self.client.create_collection(self.collection, vectors_config={"dense": dense})
-            for field in ("doc_id", "owner_id", "domains"):
-                self.client.create_payload_index(
-                    self.collection, field, models.PayloadSchemaType.KEYWORD
-                )
+        # Outside the branch, so collections from before a new index get it too (no-op if present).
+        for field in ("doc_id", "owner_id", "domains"):
+            self.client.create_payload_index(
+                self.collection, field, models.PayloadSchemaType.KEYWORD
+            )
+        # Prefix matching: `devops/` selects a whole domain (D48).
+        topics = models.KeywordIndexParams(type=models.KeywordIndexType.KEYWORD, prefix=True)
+        self.client.create_payload_index(self.collection, "topics", topics)
         alias = models.CreateAlias(collection_name=self.collection, alias_name=self.alias)
         self.client.update_collection_aliases(
             change_aliases_operations=[models.CreateAliasOperation(create_alias=alias)]
@@ -78,6 +82,7 @@ class KnowledgeBase:
         data: bytes,
         owner_id: str,
         domains: list[Domain],
+        topics: list[str] | None = None,
         title: str | None = None,
     ) -> IngestResult:
         attributes = {SPAN_KIND: "CHAIN", "doc_id": str(doc_id), "filename": filename}
@@ -94,6 +99,7 @@ class KnowledgeBase:
                 "title": title or filename,
                 "filename": filename,
                 "domains": domains,
+                "topics": topics or [],
                 "owner_id": owner_id,
                 "visibility": "org",
                 "allowed_groups": [],
@@ -157,8 +163,19 @@ class KnowledgeBase:
             for p in response.points
         ]
 
+    def update_labels(
+        self, doc_id: UUID, domains: list[Domain] | None, topics: list[str] | None
+    ) -> None:
+        """Payload update on every chunk of the document, no re-embedding (D48)."""
+        labels = {"domains": domains, "topics": topics}
+        payload = {key: value for key, value in labels.items() if value is not None}
+        if payload:
+            self.client.set_payload(self.alias, payload, _of(doc_id), wait=True)
+
     def delete(self, doc_id: UUID) -> None:
-        match = models.FieldCondition(key="doc_id", match=models.MatchValue(value=str(doc_id)))
-        self.client.delete(
-            self.alias, models.FilterSelector(filter=models.Filter(must=[match])), wait=True
-        )
+        self.client.delete(self.alias, _of(doc_id), wait=True)
+
+
+def _of(doc_id: UUID) -> models.FilterSelector:
+    match = models.FieldCondition(key="doc_id", match=models.MatchValue(value=str(doc_id)))
+    return models.FilterSelector(filter=models.Filter(must=[match]))

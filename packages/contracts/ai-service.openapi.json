@@ -170,6 +170,58 @@
         ]
       }
     },
+    "/v1/documents/{doc_id}/labels": {
+      "patch": {
+        "tags": [
+          "documents"
+        ],
+        "summary": "Update Labels",
+        "description": "Change `domains` / `topics` of all chunks of a document without re-embedding (D48).",
+        "operationId": "update_labels_v1_documents__doc_id__labels_patch",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "doc_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Doc Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Labels"
+              }
+            }
+          }
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/documents/{doc_id}": {
       "delete": {
         "tags": [
@@ -335,6 +387,68 @@
         ]
       }
     },
+    "/v1/models": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Models",
+        "description": "The model registry (D40); the API filters it by the caller's role.",
+        "operationId": "models_v1_models_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ModelInfo"
+                  },
+                  "type": "array",
+                  "title": "Response Models V1 Models Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/tools": {
+      "get": {
+        "tags": [
+          "catalog"
+        ],
+        "summary": "Tools",
+        "description": "The tool registry (D30); the API filters it by the caller's role.",
+        "operationId": "tools_v1_tools_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ToolInfo"
+                  },
+                  "type": "array",
+                  "title": "Response Tools V1 Tools Get"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/": {
       "get": {
         "tags": [
@@ -409,6 +523,17 @@
             "title": "Mode",
             "default": "agent"
           },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
           "domains": {
             "anyOf": [
               {
@@ -479,6 +604,20 @@
             },
             "type": "array",
             "title": "Domains"
+          },
+          "topics": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topics"
           },
           "title": {
             "anyOf": [
@@ -716,6 +855,96 @@
         ],
         "title": "IngestResult"
       },
+      "Labels": {
+        "properties": {
+          "domains": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string",
+                  "enum": [
+                    "db",
+                    "dev",
+                    "cloud",
+                    "devops",
+                    "mlops",
+                    "ai",
+                    "security",
+                    "architecture",
+                    "sre"
+                  ]
+                },
+                "type": "array",
+                "minItems": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Domains"
+          },
+          "topics": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Topics"
+          }
+        },
+        "type": "object",
+        "title": "Labels"
+      },
+      "ModelInfo": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "supports_tools": {
+            "type": "boolean",
+            "title": "Supports Tools"
+          },
+          "tier": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Tier"
+          },
+          "min_role": {
+            "type": "string",
+            "enum": [
+              "viewer",
+              "editor",
+              "admin"
+            ],
+            "title": "Min Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "label",
+          "supports_tools",
+          "tier",
+          "min_role"
+        ],
+        "title": "ModelInfo",
+        "description": "One `config/models.yaml` entry (D40); `id` is the model id at LLM_BASE_URL."
+      },
       "SearchRequest": {
         "properties": {
           "query": {
@@ -874,6 +1103,53 @@
           "text"
         ],
         "title": "TextPart"
+      },
+      "ToolInfo": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write"
+            ],
+            "title": "Kind"
+          },
+          "risk": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Risk"
+          },
+          "min_role": {
+            "type": "string",
+            "enum": [
+              "viewer",
+              "editor",
+              "admin"
+            ],
+            "title": "Min Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "kind",
+          "risk",
+          "min_role"
+        ],
+        "title": "ToolInfo"
       },
       "UserContext": {
         "properties": {

@@ -3,20 +3,26 @@ from contextlib import aclosing
 from typing import Annotated, Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, Field, field_validator
 
 from ai_service.agent import Agent, rag_turn
 from ai_service.api.chat import UserContext, get_pipeline
+from ai_service.catalog import ModelInfo
 from ai_service.knowledge_base import Domain
 from ai_service.rag import ChatPipeline, ChatTurn
+from ai_service.tools import permitted
 
 router = APIRouter(prefix="/v1", tags=["agent"])
 
 
 def get_agent(request: Request) -> Agent:
     return request.app.state.agent
+
+
+def get_models(request: Request) -> dict[str, ModelInfo]:
+    return request.app.state.models
 
 
 class TextPart(BaseModel):
@@ -36,6 +42,7 @@ class AgentRequest(BaseModel):
     conversation_id: UUID
     messages: list[AgentMessage] = Field(min_length=1)
     mode: Literal["agent", "rag"] = "agent"
+    model: str | None = None  # registry id (D40); None = LLM_MODEL
     domains: list[Domain] | None = None
     user: UserContext
 
@@ -49,19 +56,38 @@ class AgentRequest(BaseModel):
         return messages
 
 
+def selected_model(
+    body: AgentRequest, models: Annotated[dict[str, ModelInfo], Depends(get_models)]
+) -> str | None:
+    """A dependency, because errors raised inside the stream would follow a 200."""
+    entry = models.get(body.model) if body.model else None
+    if body.model and (
+        entry is None
+        or not permitted(entry.min_role, body.user.roles)
+        or (body.mode == "agent" and not entry.supports_tools)
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"Model {body.model} is not available"
+        )
+    return body.model
+
+
 @router.post("/agent", response_class=EventSourceResponse)
 async def agent(
     agent: Annotated[Agent, Depends(get_agent)],
     pipeline: Annotated[ChatPipeline, Depends(get_pipeline)],
     body: AgentRequest,
+    model: Annotated[str | None, Depends(selected_model)],
 ) -> AsyncGenerator[ServerSentEvent]:
     """Agent turn, SSE v2: `step`, `tool_call`, `tool_result`, `sources`, `token`…, `done`
     (plan-phase-2 §7.3). `mode=rag` runs the Phase 1 pipeline and ends with the same `done`."""
     turns = [message.turn() for message in body.messages]
     events = (
-        rag_turn(pipeline, turns, body.domains, body.user.sub)
+        rag_turn(pipeline, turns, body.domains, body.user.sub, model)
         if body.mode == "rag"
-        else agent.stream(turns, body.domains, body.user.roles, body.user.sub, body.conversation_id)
+        else agent.stream(
+            turns, body.domains, body.user.roles, body.user.sub, body.conversation_id, model
+        )
     )
     async with aclosing(events) as stream:
         async for event in stream:

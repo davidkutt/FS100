@@ -147,6 +147,7 @@ class ScriptedProvider:
         messages: list[Message],
         tools: list[ChatCompletionToolParam] | None = None,
         session_id: str | None = None,
+        model: str | None = None,
     ) -> AsyncGenerator[LlmEvent]:
         try:
             for event in self.events:

@@ -1,14 +1,23 @@
 import { DatePipe } from '@angular/common';
 import { HttpClient, httpResource } from '@angular/common/http';
-import { Component, effect, inject, signal } from '@angular/core';
+import {
+  Component,
+  computed,
+  effect,
+  type ElementRef,
+  inject,
+  signal,
+  viewChild,
+} from '@angular/core';
 import type { components } from '@fs100/contracts/api';
 import Keycloak from 'keycloak-js';
 import { firstValueFrom } from 'rxjs';
 import { APP_CONFIG } from '../../core/config';
 import { problemDetail } from '../../core/problem';
-import { type Domain, DomainPicker } from '../../shared/domain-picker';
+import { DomainPicker } from '../../shared/domain-picker';
 
 type Document = components['schemas']['Document'];
+type Taxonomy = components['schemas']['Taxonomy'];
 
 /** Upload, list and delete documents; the controls follow the roles, the API enforces them (D6). */
 @Component({
@@ -24,7 +33,16 @@ export class Documents {
 
   protected readonly canUpload = this.keycloak.hasRealmRole('editor');
   protected readonly docs = httpResource<Document[]>(() => `${this.api}/api/documents`);
-  protected readonly domains = signal<Domain[]>([]);
+  private readonly taxonomy = httpResource<Taxonomy>(() => `${this.api}/api/taxonomy`);
+  protected readonly domains = signal<string[]>([]);
+  protected readonly topics = signal<string[]>([]);
+  protected readonly topicOptions = computed(() => this.topicsOf(this.domains()));
+  /** The document in the label dialog, with its labels while they are edited. */
+  protected readonly editing = signal<Document | undefined>(undefined);
+  protected readonly editDomains = signal<string[]>([]);
+  protected readonly editTopics = signal<string[]>([]);
+  protected readonly editTopicOptions = computed(() => this.topicsOf(this.editDomains()));
+  protected readonly editError = signal('');
   protected readonly errors = signal<string[]>([]);
   protected readonly uploading = signal(false);
   protected readonly dragging = signal(false);
@@ -34,6 +52,8 @@ export class Documents {
     ready: 'text-bg-success',
     failed: 'text-bg-danger',
   };
+
+  private readonly labels = viewChild.required<ElementRef<HTMLDialogElement>>('labels');
 
   constructor() {
     // Ingestion runs in the background: poll until every row is ready or failed (plan.md §5).
@@ -57,6 +77,9 @@ export class Documents {
       const form = new FormData();
       form.append('file', file);
       for (const domain of this.domains()) form.append('domains', domain);
+      for (const topic of this.picked(this.topics(), this.topicOptions())) {
+        form.append('topics', topic);
+      }
       try {
         await firstValueFrom(this.http.post(`${this.api}/api/documents`, form));
       } catch (error) {
@@ -77,7 +100,43 @@ export class Documents {
     this.docs.reload();
   }
 
+  protected edit(doc: Document): void {
+    this.editing.set(doc);
+    this.editDomains.set(doc.domains);
+    this.editTopics.set(doc.topics);
+    this.editError.set('');
+    this.labels().nativeElement.showModal();
+  }
+
+  /** Relabels the chunks without re-ingesting (D48). */
+  protected async saveLabels(doc: Document): Promise<void> {
+    if (!this.editDomains().length) return this.editError.set('Pick at least one domain.');
+    const body = {
+      domains: this.editDomains(),
+      topics: this.picked(this.editTopics(), this.editTopicOptions()),
+    };
+    try {
+      await firstValueFrom(this.http.patch(`${this.api}/api/documents/${doc.id}`, body));
+      this.labels().nativeElement.close();
+      this.docs.reload();
+    } catch (error) {
+      this.editError.set(problemDetail(error));
+    }
+  }
+
   protected canDelete(doc: Document): boolean {
     return this.isAdmin || (this.canUpload && doc.ownerId === this.keycloak.subject);
+  }
+
+  private topicsOf(domains: string[]): string[] {
+    const all = this.taxonomy.hasValue() ? this.taxonomy.value().domains : {};
+    return Object.entries(all)
+      .filter(([domain]) => domains.includes(domain))
+      .flatMap(([domain, { topics }]) => Object.keys(topics ?? {}).map((t) => `${domain}/${t}`));
+  }
+
+  /** Topics of a domain that was deselected again stay hidden in the picker; drop them. */
+  private picked(topics: string[], options: string[]): string[] {
+    return topics.filter((topic) => options.includes(topic));
   }
 }
