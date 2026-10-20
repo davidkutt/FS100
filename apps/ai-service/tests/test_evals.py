@@ -1,8 +1,11 @@
 import math
+import re
 from pathlib import Path
+from typing import Literal
 from uuid import uuid4
 
 import pytest
+from pydantic import BaseModel
 
 from ai_service import embeddings
 from ai_service.embeddings import Embedder
@@ -23,11 +26,13 @@ from ai_service.evals.retrieval import (
     to_markdown,
 )
 from ai_service.ingest import parse
-from ai_service.knowledge_base import Hit
+from ai_service.knowledge_base import Domain, Hit
+from ai_service.rag import AnswerStatus
 from support import FakeTextEmbedding
 
 REPO = Path(__file__).parents[3]
 DATASET = REPO / "evals/datasets/retrieval_v1.jsonl"
+AGENT_TASKS = REPO / "evals/datasets/agent_v0.jsonl"
 CORPUS = REPO / "data/sample-docs"
 
 
@@ -116,3 +121,47 @@ def test_runner_reports_on_the_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
     assert report.threshold is not None
     assert {"de", "en"} == set(report.by_lang)
     assert "| **overall** |" in to_markdown(report)
+
+
+class Expect(BaseModel):
+    tools_required: list[str] = []
+    tools_forbidden: list[str] = []
+    cites_any: list[Relevant] = []
+    answer_regex: list[str] = []
+    max_steps: int
+    answer_status: AnswerStatus
+
+
+class AgentTask(BaseModel):
+    id: str
+    lang: Literal["de", "en"]
+    domains: list[Domain]
+    type: Literal["kb-lookup", "multi-hop", "cross-language", "abstain", "no-tool"]
+    prompt: str
+    expect: Expect
+    notes: str = ""
+
+
+def test_agent_task_set_is_well_formed_and_every_citation_resolves() -> None:
+    tasks = [AgentTask.model_validate_json(line) for line in AGENT_TASKS.read_text().splitlines()]
+    sections = {name: parse(name, (CORPUS / name).read_bytes()) for name in load_manifest(CORPUS)}
+
+    assert len({t.id for t in tasks}) == len(tasks) >= 20
+    assert {t.type for t in tasks} == {
+        "kb-lookup",
+        "multi-hop",
+        "cross-language",
+        "abstain",
+        "no-tool",
+    }
+    for task in tasks:
+        expect = task.expect
+        assert (expect.answer_status == "answered") == bool(expect.cites_any), task.id
+        assert (expect.answer_status == "no_kb") == (task.type == "no-tool"), task.id
+        assert {*expect.tools_required, *expect.tools_forbidden} <= {"kb.search_knowledge_base"}
+        for pattern in expect.answer_regex:
+            re.compile(pattern)
+        for label in expect.cites_any:
+            assert any(
+                label.matches(label.doc, s.page, s.heading) for s in sections.get(label.doc, [])
+            ), f"{task.id}: {label} matches no section of the corpus"

@@ -7,7 +7,8 @@ from pydantic import BaseModel
 from qdrant_client import QdrantClient
 
 from ai_service import __version__
-from ai_service.api import chat, documents, health
+from ai_service.agent import Agent
+from ai_service.api import agent, chat, documents, health
 from ai_service.core.auth import ServiceAuth
 from ai_service.core.logging import request_id, setup_logging
 from ai_service.core.settings import Settings, get_settings
@@ -16,6 +17,7 @@ from ai_service.embeddings import Embedder
 from ai_service.knowledge_base import KnowledgeBase
 from ai_service.llm import create_provider
 from ai_service.rag import ChatPipeline
+from ai_service.tools import kb_search
 
 
 class ServiceInfo(BaseModel):
@@ -32,19 +34,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # Blocks startup until the model is loaded (first run downloads it into the cache dir).
-        app.state.kb = KnowledgeBase(
+        kb = KnowledgeBase(
             QdrantClient(settings.qdrant_url, api_key=settings.qdrant_api_key),
             Embedder(settings.embedding_model, settings.embedding_cache_dir),
             settings.qdrant_alias,
             settings.chunk_size,
             settings.chunk_overlap,
         )
-        app.state.kb.ensure_collection()
-        app.state.chat = ChatPipeline(
-            app.state.kb,
-            create_provider(settings),
-            settings.retrieval_top_k,
-            settings.retrieval_score_threshold,
+        kb.ensure_collection()
+        llm = create_provider(settings)
+        top_k, threshold = settings.retrieval_top_k, settings.retrieval_score_threshold
+        app.state.kb = kb
+        app.state.chat = ChatPipeline(kb, llm, top_k, threshold)
+        app.state.agent = Agent(
+            llm, settings, lambda domains: [kb_search(kb, top_k, threshold, domains)]
         )
         yield
 
@@ -55,6 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.status_router, dependencies=service_auth)
     app.include_router(documents.router, dependencies=service_auth)
     app.include_router(chat.router, dependencies=service_auth)
+    app.include_router(agent.router, dependencies=service_auth)
 
     @app.middleware("http")
     async def propagate_request_id(  # pyright: ignore[reportUnusedFunction]

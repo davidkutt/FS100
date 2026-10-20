@@ -141,6 +141,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/agent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Agent
+         * @description Agent turn, SSE v2: `step`, `tool_call`, `tool_result`, `sources`, `token`…, `done`
+         *     (plan-phase-2 §7.3). `mode=rag` runs the Phase 1 pipeline and ends with the same `done`.
+         */
+        post: operations["agent_v1_agent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -162,6 +183,35 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AgentMessage */
+        AgentMessage: {
+            /**
+             * Role
+             * @enum {string}
+             */
+            role: "user" | "assistant";
+            /** Parts */
+            parts: components["schemas"]["TextPart"][];
+        };
+        /** AgentRequest */
+        AgentRequest: {
+            /**
+             * Conversation Id
+             * Format: uuid
+             */
+            conversation_id: string;
+            /** Messages */
+            messages: components["schemas"]["AgentMessage"][];
+            /**
+             * Mode
+             * @default agent
+             * @enum {string}
+             */
+            mode?: "agent" | "rag";
+            /** Domains */
+            domains?: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[] | null;
+            user: components["schemas"]["UserContext"];
+        };
         /** Body_ingest_v1_ingest_post */
         Body_ingest_v1_ingest_post: {
             /** File */
@@ -292,6 +342,16 @@ export interface components {
              */
             qdrant: "ok" | "down";
         };
+        /** TextPart */
+        TextPart: {
+            /**
+             * Type
+             * @constant
+             */
+            type: "text";
+            /** Text */
+            text: string;
+        };
         /** UserContext */
         UserContext: {
             /** Sub */
@@ -311,6 +371,49 @@ export interface components {
             input?: unknown;
             /** Context */
             ctx?: Record<string, never>;
+        };
+        /** AgentDoneEvent */
+        AgentDoneEvent: {
+            /**
+             * Stopreason
+             * @enum {string}
+             */
+            stopReason: "end" | "max_steps" | "budget" | "awaiting_approval" | "cancelled" | "error";
+            /**
+             * Answerstatus
+             * @enum {string}
+             */
+            answerStatus: "answered" | "abstained" | "no_kb";
+            /** Topscore */
+            topScore: number | null;
+            usage: components["schemas"]["AgentUsage"];
+            /** Model */
+            model: string | null;
+            /** Promptversion */
+            promptVersion: string;
+            /** Traceid */
+            traceId: string | null;
+            /**
+             * Protocolversion
+             * @default 2
+             * @constant
+             */
+            protocolVersion: 2;
+        };
+        /** AgentUsage */
+        AgentUsage: {
+            /** Inputtokens */
+            inputTokens: number;
+            /** Cachedtokens */
+            cachedTokens: number;
+            /** Outputtokens */
+            outputTokens: number;
+            /** Costusd */
+            costUsd: number | null;
+            /** Steps */
+            steps: number;
+            /** Toolcalls */
+            toolCalls: number;
         };
         /** DoneEvent */
         DoneEvent: {
@@ -356,10 +459,52 @@ export interface components {
             /** Sources */
             sources: components["schemas"]["Source"][];
         };
+        /** StepEvent */
+        StepEvent: {
+            /** N */
+            n: number;
+        };
         /** TokenEvent */
         TokenEvent: {
             /** Text */
             text: string;
+        };
+        /** ToolCallEvent */
+        ToolCallEvent: {
+            /** Id */
+            id: string;
+            /** Name */
+            name: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "read" | "write";
+            /**
+             * Risk
+             * @enum {string}
+             */
+            risk: "low" | "medium" | "high";
+            /** Args */
+            args: unknown;
+        };
+        /** ToolResultEvent */
+        ToolResultEvent: {
+            /** Id */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "ok" | "error" | "denied";
+            /** Summary */
+            summary: string;
+            /** Content */
+            content: string;
+            /** Truncated */
+            truncated: boolean;
+            /** Durationms */
+            durationMs: number;
         };
         /** UsageInfo */
         UsageInfo: {
@@ -544,6 +689,39 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ChatRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    agent_v1_agent_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentRequest"];
             };
         };
         responses: {

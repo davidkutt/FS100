@@ -156,6 +156,10 @@ curl -s localhost:8000/v1/search -H "Authorization: Bearer $TOKEN" -H 'content-t
 curl -N localhost:8000/v1/chat -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"messages":[{"role":"user","content":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?"}],"user":{"sub":"dev","roles":["viewer"]}}'
   # streams event: sources → token … → done; Phoenix shows chat → search → embed and the LLM span (prompt, tokens)
+curl -N localhost:8000/v1/agent -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
+  -d '{"conversation_id":"'$(uuidgen)'","messages":[{"role":"user","parts":[{"type":"text","text":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?"}]}],"user":{"sub":"dev","roles":["viewer"]}}'
+  # streams step → tool_call → tool_result → sources → step → token … → done (stopReason, answerStatus);
+  # Phoenix shows agent.run → llm / tool spans. Add "mode":"rag" for the Phase 1 pipeline with the same done event
 curl -s -o /dev/null -w '%{http_code}\n' -X DELETE localhost:8000/v1/documents/$DOC -H "Authorization: Bearer $TOKEN"  # 204
 
 # Postgres: both databases exist
@@ -298,4 +302,6 @@ retrieval, eval harness — `pnpm eval:retrieval`, see [evals/README.md](../../e
 **M1.3** (grounded chat, `POST /v1/chat` in the AI service), **M1.4** (documents, chat and search
 relays in the API, `pnpm contracts:generate`), **M1.5** (Angular UI: documents, chat, inspector) and
 **M1.6** (containers, Mode B, CI workflows, Playwright e2e) are done. The Azure readiness spike (M1.7)
-is postponed while the project runs locally; next is Phase 2.
+is postponed while the project runs locally. Phase 2 ([plan-phase-2.md](../../plan-phase-2.md)): **M2.0**
+(pins, spikes, identities) and **M2.1** (agent harness, `POST /v1/agent` in the AI service) are done; next
+is M2.2 (conversations in the API, protocol v2 in the UI).

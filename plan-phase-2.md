@@ -473,25 +473,33 @@ least privilege (scopes documented).
 
 ### M2.1 — Agent harness core (~17 h)
 
-- [ ] `LlmProvider` v2: `tools`, `tool_choice`, parallel tool calls, streamed tool-call delta assembly, usage with cached
+- [x] `LlmProvider` v2: `tools`, `tool_choice`, parallel tool calls, streamed tool-call delta assembly, usage with cached
   tokens, OpenRouter `provider.require_parameters` + `session_id` via extra body; `fake` provider scripts tool calls,
   tool errors and slow tools
-- [ ] `ToolSpec`, registry, policy check (role, kind, approval), untrusted-output wrapper, result budgets
-- [ ] Loop: steps, parallel read execution (`asyncio.TaskGroup`, per-tool timeout), errors as observations, retries for
+- [x] `ToolSpec`, registry, policy check (role, kind, approval), untrusted-output wrapper, result budgets
+- [x] Loop: steps, parallel read execution (`asyncio.TaskGroup`, per-tool timeout), errors as observations, retries for
   transient errors, limits (steps, wall clock, tokens, cost) → `stopReason`
-- [ ] Cancellation: client disconnect cancels the LLM stream and in-flight read tools; partial answer kept
-- [ ] Agentic RAG with a native KB adapter (replaced by the MCP path in M2.4); stable source numbering; citation
+- [x] Cancellation: client disconnect cancels the LLM stream and in-flight read tools; partial answer kept
+- [x] Agentic RAG with a native KB adapter (replaced by the MCP path in M2.4); stable source numbering; citation
   validator over the whole turn
-- [ ] Gap signals: `answerStatus` + `topScore` derived per turn (rule in D49)
-- [ ] Context builder: stable prefix order, history trimming by token budget
-- [ ] `POST /v1/agent` with SSE v2 and `mode=agent|rag`
-- [ ] Tracing: `agent.run`, `llm`, `tool` spans with prompt version and model
-- [ ] **Agent task set v0** (~20 KB-only tasks incl. abstain, multi-hop, cross-language) written **before** prompt tuning
-- [ ] Tests: limits, parallelism, timeouts, cancellation, policy denial, truncation, delta assembly, SSE with `fake`
+- [x] Gap signals: `answerStatus` + `topScore` derived per turn (rule in D49)
+- [x] Context builder: stable prefix order, history trimming by token budget
+- [x] `POST /v1/agent` with SSE v2 and `mode=agent|rag`
+- [x] Tracing: `agent.run`, `llm`, `tool` spans with prompt version and model
+- [x] **Agent task set v0** (~20 KB-only tasks incl. abstain, multi-hop, cross-language) written **before** prompt tuning
+- [x] Tests: limits, parallelism, timeouts, cancellation, policy denial, truncation, delta assembly, SSE with `fake`
 
 **Acceptance:** `curl -N /v1/agent` streams `step → tool_call → tool_result → sources → token… → done`; every limit yields
 the right `stopReason` (tests); the `answerStatus` rule is covered by fake-LLM tests; Phoenix shows the span tree;
 disconnect cancels within 1 s (test).
+
+**Done 2026-10-19.** Deviations: flat modules `agent.py` / `tools.py` like the Phase 1 code (not packages);
+the native KB adapter offers only `kb.search_knowledge_base` (`get_document`, `list_sources` come with the MCP
+server in M2.4); request fields are snake_case like the other AI-service bodies (`conversation_id`) and
+`parts` accept text only until M2.2 stores tool parts; no `tool_choice`, no `model` per request (registry,
+M2.2); wall clock, tokens and cost share `stopReason: budget` (span attribute `agent.limit` names it); a write
+call stops with `awaiting_approval` without the signed event (M2.3); HTML handling strips comments and
+delimiter tags only, full HTML → text comes with `web.fetch`. Task set: `evals/datasets/agent_v0.jsonl` (22).
 
 ### M2.2 — Conversations, protocol v2, UI, taxonomy (~15 h)
 

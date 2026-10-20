@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_max_output_tokens: int = 800
     llm_timeout_s: float = 60
+    agent_max_steps: int = 8
+    agent_max_parallel_tools: int = 4
+    agent_tool_timeout_s: float = 20
+    agent_run_timeout_s: float = 120
+    agent_run_input_token_budget: int = 60_000
+    agent_run_cost_cap_usd: float = 0.05
     otel_exporter_otlp_endpoint: str = ""  # empty = tracing off (tests, CI)
     otel_service_name: str = "ai-service"
 

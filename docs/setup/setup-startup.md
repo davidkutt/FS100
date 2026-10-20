@@ -75,7 +75,7 @@ Ports are fixed and identical in Mode A and Mode B (plan.md §5). Everything bin
 | Phoenix (LLM traces) | http://localhost:6006 | — |
 | Postgres | `postgresql://postgres:dev-only-change-me@localhost:5432/app` | also DB `keycloak` |
 
-**Seed users in realm `kb`** (from `infra/keycloak/realm-kb.json`, plan.md §7.7). Password = username,
+**Seed users in realm `kb`** (from `../../infra/keycloak/realm-kb.json`, plan.md §7.7). Password = username,
 dev only:
 
 | User | Password | Realm roles (effective) |
@@ -152,12 +152,12 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`fe
 | `pnpm stack:down` | Stop and remove containers; **keeps** data volumes |
 | `pnpm stack:reset` | Stop and **delete all local data** (Postgres incl. Keycloak, Qdrant, Phoenix) |
 
-`scripts/stack.mjs` forwards any extra arguments to `docker compose`, e.g.
+`../../scripts/stack.mjs` forwards any extra arguments to `docker compose`, e.g.
 `node scripts/stack.mjs restart keycloak`.
 
 ### Changing the Keycloak realm
 
-Keycloak imports `infra/keycloak/realm-kb.json` **only if the realm does not exist yet**. After editing the
+Keycloak imports `../../infra/keycloak/realm-kb.json` **only if the realm does not exist yet**. After editing the
 file, recreate the Keycloak state:
 
 ```bash
@@ -177,7 +177,7 @@ git diff infra/keycloak/realm-kb.json
 much more verbose than the hand-written file (generated ids, defaults, **hashed seed-user passwords**) —
 review the diff, keep it dev-only, and never export a realm that contains real users or secrets.
 
-### Changing `infra/postgres/init.sql`
+### Changing `../../infra/postgres/init.sql`
 
 The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm stack:up`.
 

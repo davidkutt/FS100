@@ -48,3 +48,22 @@ One JSON object per line (plan.md §7.6):
 v1 was written **before any tuning** and is frozen. Never edit items to make a run look better: fix a
 wrong label or add items only in a new version (`retrieval_v2.jsonl`), noting what changed and why, and
 re-run the baseline on it. Phase 3 adds a separate tuning subset so the test items stay unseen.
+
+## Dataset `datasets/agent_v0.jsonl`
+
+Agent task set v0 (plan-phase-2 M2.1): 22 knowledge-base-only tasks, written **before any agent prompt
+tuning** and frozen like `retrieval_v1`. The runner (`kb-eval agent`) and the tool tasks (`agent_v1.jsonl`)
+follow in M2.6; until then `tests/test_evals.py` checks that every task is well-formed and every citation
+label resolves.
+
+```json
+{"id":"a-007","lang":"en","domains":["devops","db"],"type":"multi-hop","prompt":"…",
+ "expect":{"tools_required":["kb.search_knowledge_base"],"cites_any":[{"doc":"runbook-rollback.md","heading":"Database migrations"}],
+           "answer_regex":["(?i)expand"],"max_steps":4,"answer_status":"answered"},"notes":"…"}
+```
+
+- `type`: `kb-lookup`, `multi-hop` (needs two sections or documents), `cross-language` (DE ↔ EN, answer in the
+  question's language), `abstain` (near misses; `answer_status: abstained`, no `cites_any`), `no-tool` (small
+  talk; `kb.search_knowledge_base` forbidden, `answer_status: no_kb`).
+- `cites_any` uses the same labels as the golden set; the answer must cite at least one matching source.
+- Omitted lists default to `[]`.

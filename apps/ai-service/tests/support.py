@@ -1,9 +1,11 @@
+import json
 import re
 import time
 import zlib
 from collections.abc import Iterator
 from typing import Any
 
+import httpx2
 import jwt
 import numpy as np
 from cryptography.hazmat.primitives.asymmetric import rsa
@@ -12,6 +14,8 @@ from numpy.typing import NDArray
 
 from ai_service.core.settings import Settings
 
+MARKDOWN = b"# Runbook\n\n## Rollback\nUndo the release with kubectl rollout undo.\n"
+USER = {"sub": "carol", "roles": ["viewer"]}
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 JWKS: dict[str, Any] = {
     "keys": [{**RSAAlgorithm.to_jwk(KEY.public_key(), as_dict=True), "kid": "test"}]
@@ -43,3 +47,13 @@ class FakeTextEmbedding:
             for word in re.findall(r"\w+", text.lower()):
                 vector[zlib.crc32(word.encode()) % self.embedding_size] += 1
             yield vector
+
+
+def sse(response: httpx2.Response) -> list[tuple[str, Any]]:
+    """`(event, data)` pairs of an SSE response."""
+    assert response.status_code == 200, response.text
+    assert response.headers["content-type"].startswith("text/event-stream")
+    blocks = [
+        dict(line.split(": ", 1) for line in b.splitlines()) for b in response.text.split("\n\n")
+    ]
+    return [(b["event"], json.loads(b["data"])) for b in blocks if b]
