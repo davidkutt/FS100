@@ -323,76 +323,76 @@ Hours are ideal single-person hours, ±30 %.
 
 ### M1.0 — Repo & tooling (~5 h)
 
-- [ ] GitHub repo, MIT license, README stub, `.gitignore`, `.editorconfig`, `.nvmrc` (24), `.python-version` (3.13)
-- [ ] pnpm workspace: `packageManager` pin, `onlyBuiltDependencies`, catalog for TypeScript and shared tooling
-- [ ] Scaffold `apps/web` (`ng new --package-manager pnpm`, SCSS, routing), `apps/api` (Nest CLI 12), `apps/ai-service` (`uv init`, FastAPI, ruff, pytest, pyright)
-- [ ] Root scripts: `dev`, `lint`, `test`, `build`, `stack:up`, `stack:down`, `eval:retrieval`, `contracts:generate`
-- [ ] Conventional Commits (+ optional lefthook for lint-on-commit)
-- [ ] ADR-0001 (monorepo & pnpm), ADR-0002 (AI layer in Python), ADR-0003 (embeddings in-process)
-- [ ] **Compatibility spikes (≤1 h each, outcome into the ADRs):** Zod via Nest 12 Standard Schema · Drizzle with Nest 12 ESM · `keycloak-angular` with Angular 22 · Angular default test runner
-- [ ] Resolve the open items from §4 (RAM, token cap, project name)
+- [x] GitHub repo, MIT license, README stub, `.gitignore`, `.editorconfig`, `.nvmrc` (24), `.python-version` (3.13)
+- [x] pnpm workspace: `packageManager` pin, `onlyBuiltDependencies`, catalog for TypeScript and shared tooling — *pnpm 12 calls it `allowBuilds` (ADR-0001)*
+- [x] Scaffold `apps/web` (`ng new --package-manager pnpm`, SCSS, routing), `apps/api` (Nest CLI 12), `apps/ai-service` (`uv init`, FastAPI, ruff, pytest, pyright)
+- [x] Root scripts: `dev`, `lint`, `test`, `build`, `stack:up`, `stack:down`, `eval:retrieval`, `contracts:generate`
+- [x] Conventional Commits (+ optional lefthook for lint-on-commit) — *lefthook not added*
+- [x] ADR-0001 (monorepo & pnpm), ADR-0002 (AI layer in Python), ADR-0003 (embeddings in-process)
+- [x] **Compatibility spikes (≤1 h each, outcome into the ADRs):** Zod via Nest 12 Standard Schema · Drizzle with Nest 12 ESM · `keycloak-angular` with Angular 22 · Angular default test runner
+- [x] Resolve the open items from §4 (RAM, token cap, project name)
 
 **Acceptance:** clean clone → `pnpm install && pnpm lint && pnpm test` green; each app serves a hello endpoint/page.
 
 ### M1.1 — Local infra + auth walking skeleton (~8 h)
 
-- [ ] Compose: Postgres (init → `keycloak`, `app`), Qdrant (volume), Keycloak (`--import-realm`), **Phoenix** (volume), healthchecks, fixed port map, arm64 check for every image
-- [ ] Keycloak realm per §7.7; export committed; README section "how to re-export the realm"
-- [ ] NestJS: zod config, `JwtAuthGuard` (`jose`, cached JWKS), `RolesGuard` + `@Roles()`, `GET /api/me`, health, CORS allow-list, `helmet`, `nestjs-pino`, request-id
-- [ ] AI service: JWT dependency (`aud=kb-ai`), health, JSON logging, **OTel tracer → Phoenix** (one test span visible)
-- [ ] Nest → AI service client with client-credentials token caching and request-id propagation
-- [ ] Angular: `config.json` loader, Keycloak (PKCE), interceptor, route guard, landing page `Hello {name} · {roles}`, admin status card
-- [ ] Token test matrix: no token 401 · wrong `aud` 401 · expired 401 · viewer on editor route 403
+- [x] Compose: Postgres (init → `keycloak`, `app`), Qdrant (volume), Keycloak (`--import-realm`), **Phoenix** (volume), healthchecks, fixed port map, arm64 check for every image
+- [x] Keycloak realm per §7.7; export committed; README section "how to re-export the realm" — *in `docs/setup/startup.md`*
+- [x] NestJS: zod config, `JwtAuthGuard` (`jose`, cached JWKS), `RolesGuard` + `@Roles()`, `GET /api/me`, health, CORS allow-list, `helmet`, `nestjs-pino`, request-id — *one `AuthGuard` checks tokens and `@Roles()`*
+- [x] AI service: JWT dependency (`aud=kb-ai`), health, JSON logging, **OTel tracer → Phoenix** (one test span visible)
+- [x] Nest → AI service client with client-credentials token caching and request-id propagation
+- [x] Angular: `config.json` loader, Keycloak (PKCE), interceptor, route guard, landing page `Hello {name} · {roles}`, admin status card
+- [x] Token test matrix: no token 401 · wrong `aud` 401 · expired 401 · viewer on editor route 403
 
 **Acceptance:** all seed users log in with correct roles; matrix passes; a test span appears in Phoenix; infra healthy in < 3 min from a clean clone (images cached).
 
 ### M1.2 — AI service: ingestion, retrieval, evaluation (~18 h)
 
-- [ ] Settings (`pydantic-settings`), Qdrant client factory, `/readyz` (Qdrant + model loaded)
-- [ ] `Embedder` (fastembed) with cache dir and **prefix handling + tests**
-- [ ] Parsers (PDF with page mapping, MD with heading paths, TXT) + fixtures; `Chunker` (recursive, heading-aware, configurable)
-- [ ] Collection manager: collection + alias `kb_current`, payload indexes (`doc_id`, `owner_id`, `domains`)
-- [ ] `POST /v1/ingest`, `POST /v1/search` (domain filter, threshold), `DELETE /v1/documents/{doc_id}`; spans for parse/chunk/embed/upsert/search
-- [ ] Write your **runbooks** and assemble the sample corpus with domain tags + `ATTRIBUTION.md`
-- [ ] **Golden set v1:** 40–60 items across domains, DE + EN, ≥8 unanswerable, mixed item types (§7.6) — written *before* any tuning
-- [ ] **Eval harness:** metrics (hit@k, MRR, nDCG, latency), runner, `kb-eval retrieval` CLI, JSON results, Markdown summary, per-domain/per-language breakdown
-- [ ] **Benchmark** `e5-small/base/large` + `bge-m3` and two chunk sizes → ADR-0004 (model, chunking, calibrated `score_threshold`)
-- [ ] Tests: unit (chunker, parsers, prefixes, metrics against hand-computed examples) + integration (ingest → search with in-process Qdrant `:memory:`)
+- [x] Settings (`pydantic-settings`), Qdrant client factory, `/readyz` (Qdrant + model loaded)
+- [x] `Embedder` (fastembed) with cache dir and **prefix handling + tests**
+- [x] Parsers (PDF with page mapping, MD with heading paths, TXT) + fixtures; `Chunker` (recursive, heading-aware, configurable)
+- [x] Collection manager: collection + alias `kb_current`, payload indexes (`doc_id`, `owner_id`, `domains`)
+- [x] `POST /v1/ingest`, `POST /v1/search` (domain filter, threshold), `DELETE /v1/documents/{doc_id}`; spans for parse/chunk/embed/upsert/search
+- [x] Write your **runbooks** and assemble the sample corpus with domain tags + `ATTRIBUTION.md`
+- [x] **Golden set v1:** 40–60 items across domains, DE + EN, ≥8 unanswerable, mixed item types (§7.6) — written *before* any tuning
+- [x] **Eval harness:** metrics (hit@k, MRR, nDCG, latency), runner, `kb-eval retrieval` CLI, JSON results, Markdown summary, per-domain/per-language breakdown
+- [x] **Benchmark** `e5-small/base/large` + `bge-m3` and two chunk sizes → ADR-0004 (model, chunking, calibrated `score_threshold`)
+- [x] Tests: unit (chunker, parsers, prefixes, metrics against hand-computed examples) + integration (ingest → search with in-process Qdrant `:memory:`)
 
 **Acceptance:** ingest → search round-trip with page numbers; re-ingest creates no duplicates; delete removes all points; `pnpm eval:retrieval` produces the report; ADR-0004 contains the numbers.
 
 ### M1.3 — AI service: grounded chat (~8 h)
 
-- [ ] `LlmProvider` protocol + `LlmEvent` union (`token`, `usage`, `error`; extensible for tool calls)
-- [ ] `openai_compat` provider (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_MAX_OUTPUT_TOKENS`, timeouts, retries with backoff for 429/5xx; OpenRouter attribution headers optional) + `fake` provider
-- [ ] Prompt builder: system rules (answer only from sources, say "not in the knowledge base" otherwise, reply in the user's language, cite as `[n]`), sources delimited and marked as untrusted data, history trimming with a token budget
-- [ ] Citation validator (every `[n]` exists in `sources`) — used in tests now, as an eval metric in P3
-- [ ] `POST /v1/chat` SSE pipeline; cancel the LLM stream on client disconnect; usage + cost in `done`
-- [ ] OpenInference instrumentation of the `openai` SDK; `chat` span wraps embed/search/llm
-- [ ] Tests: prompt snapshot, citation validator, SSE stream with `fake`, cancellation
-- [ ] **Manual quality pass:** 10 golden questions against the dev model; notes + model choice in ADR-0005
+- [x] `LlmProvider` protocol + `LlmEvent` union (`token`, `usage`, `error`; extensible for tool calls)
+- [x] `openai_compat` provider (`LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`, `LLM_MAX_OUTPUT_TOKENS`, timeouts, retries with backoff for 429/5xx; OpenRouter attribution headers optional) + `fake` provider
+- [x] Prompt builder: system rules (answer only from sources, say "not in the knowledge base" otherwise, reply in the user's language, cite as `[n]`), sources delimited and marked as untrusted data, history trimming with a token budget
+- [x] Citation validator (every `[n]` exists in `sources`) — used in tests now, as an eval metric in P3
+- [x] `POST /v1/chat` SSE pipeline; cancel the LLM stream on client disconnect; usage + cost in `done`
+- [x] OpenInference instrumentation of the `openai` SDK; `chat` span wraps embed/search/llm
+- [x] Tests: prompt snapshot, citation validator, SSE stream with `fake`, cancellation
+- [x] **Manual quality pass:** 10 golden questions against the dev model; notes + model choice in ADR-0005
 
 **Acceptance:** `curl -N` streams `sources → token… → done`; the Phoenix trace shows all spans with prompt and token counts; switching between OpenRouter and the HF router needs only env changes.
 
 ### M1.4 — NestJS API: documents + relays (~10 h)
 
-- [ ] Drizzle schema + migration (`documents`, §7.4)
-- [ ] `DocumentsModule`: multipart with limits, MIME allow-list + magic bytes, SHA-256 dedupe (409), `domains` validated against the taxonomy, RBAC (own vs any), background ingest, boot recovery, delete (DB + vectors)
-- [ ] `AiServiceClient` on generated types; upstream errors → problem+json
-- [ ] `ChatModule`: SSE relay with **abort propagation**, per-user throttle; `POST /api/search` relay
-- [ ] Global exception filter (RFC 9457), `GET /api/status`, OpenAPI → `packages/contracts`
-- [ ] Tests: guards, documents service (dedupe, RBAC, domains), relay (events pass through unchanged, abort reaches upstream)
+- [x] Drizzle schema + migration (`documents`, §7.4)
+- [x] `DocumentsModule`: multipart with limits, MIME allow-list + magic bytes, SHA-256 dedupe (409), `domains` validated against the taxonomy, RBAC (own vs any), background ingest, boot recovery, delete (DB + vectors)
+- [x] `AiServiceClient` on generated types; upstream errors → problem+json
+- [x] `ChatModule`: SSE relay with **abort propagation**, per-user throttle; `POST /api/search` relay
+- [x] Global exception filter (RFC 9457), `GET /api/status`, OpenAPI → `packages/contracts`
+- [x] Tests: guards, documents service (dedupe, RBAC, domains), relay (events pass through unchanged, abort reaches upstream)
 
 **Acceptance:** upload → `ready` → `/api/chat` streams end to end; viewer upload → 403; duplicate → 409; client disconnect cancels the upstream LLM call (test).
 
 ### M1.5 — Angular UI (~13 h)
 
-- [ ] App shell (navbar + responsive sidebar), SCSS tokens / Bootstrap variable overrides
-- [ ] **Documents:** drag-and-drop upload with domain multi-select, live status, delete with confirm, role-based controls (server enforces)
-- [ ] **Chat:** `fetch` + `ReadableStream` SSE parser, streaming render, stop button, `[n]` citation chips → offcanvas (chunk text, doc, page), optional domain filter, empty/loading/error states, dev-mode link to the Phoenix trace
-- [ ] **Retrieval inspector:** query + domain filter + `top_k` → ranked hits with scores, threshold line, chunk text and metadata
-- [ ] Sanitized Markdown rendering; accessibility (labels, focus, `aria-live="polite"`, keyboard-operable citations)
-- [ ] Tests: SSE parser, chat component with fake stream, auth guard
+- [x] App shell (navbar + responsive sidebar), SCSS tokens / Bootstrap variable overrides
+- [x] **Documents:** drag-and-drop upload with domain multi-select, live status, delete with confirm, role-based controls (server enforces)
+- [x] **Chat:** `fetch` + `ReadableStream` SSE parser, streaming render, stop button, `[n]` citation chips → offcanvas (chunk text, doc, page), optional domain filter, empty/loading/error states, dev-mode link to the Phoenix trace
+- [x] **Retrieval inspector:** query + domain filter + `top_k` → ranked hits with scores, threshold line, chunk text and metadata
+- [x] Sanitized Markdown rendering; accessibility (labels, focus, `aria-live="polite"`, keyboard-operable citations)
+- [x] Tests: SSE parser, chat component with fake stream, auth guard
 
 **Acceptance:** demo-script steps 2–5 and 8 work in the browser; no console errors.
 
