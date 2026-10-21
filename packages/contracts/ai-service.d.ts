@@ -273,7 +273,6 @@ export interface components {
             model?: string | null;
             /** Domains */
             domains?: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[] | null;
-            user: components["schemas"]["UserContext"];
             resume?: components["schemas"]["Resume"] | null;
         };
         /** Body_ingest_v1_ingest_post */
@@ -300,7 +299,6 @@ export interface components {
             messages: components["schemas"]["ChatTurn"][];
             /** Domains */
             domains?: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[] | null;
-            user: components["schemas"]["UserContext"];
         };
         /** ChatTurn */
         ChatTurn: {
@@ -487,13 +485,6 @@ export interface components {
              * @enum {string}
              */
             min_role: "viewer" | "editor" | "admin";
-        };
-        /** UserContext */
-        UserContext: {
-            /** Sub */
-            sub: string;
-            /** Roles */
-            roles: string[];
         };
         /** ValidationError */
         ValidationError: {

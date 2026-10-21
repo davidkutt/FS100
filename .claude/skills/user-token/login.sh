@@ -2,7 +2,7 @@
 # Prints an access token for a realm-kb seed user via Authorization Code + PKCE (kb-web).
 set -euo pipefail
 user=$1
-kc=http://localhost:8080/realms/kb/protocol/openid-connect
+kc=${KEYCLOAK_URL:-http://localhost:8080}/realms/kb/protocol/openid-connect
 redirect=http://localhost:4200/
 verifier=$(openssl rand -hex 48)
 challenge=$(printf %s "$verifier" | openssl dgst -binary -sha256 | openssl base64 | tr '+/' '-_' | tr -d '=')

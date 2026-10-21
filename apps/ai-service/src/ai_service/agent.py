@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from ai_service import approvals, rag
 from ai_service.approvals import Action, ApprovalError
+from ai_service.core.auth import Caller
 from ai_service.core.logging import request_id
 from ai_service.core.settings import Settings
 from ai_service.knowledge_base import SPAN_KIND, Domain, Hit
@@ -49,7 +50,7 @@ from ai_service.tools import (
 
 StopReason = Literal["end", "max_steps", "budget", "awaiting_approval", "cancelled", "error"]
 ToolStatus = Literal["ok", "error", "denied", "rejected"]
-Tools = Callable[[list[Domain] | None], list[ToolSpec[Any]]]
+Tools = Callable[[list[Domain] | None, Caller], list[ToolSpec[Any]]]
 PROMPT_VERSION = "agent-system@1"
 SYSTEM_PROMPT = """\
 You are FS100, an assistant for software, platform and operations engineers. You answer from a \
@@ -265,16 +266,15 @@ class Agent:
         self,
         turns: list[ChatTurn],
         domains: list[Domain] | None,
-        roles: list[str],
-        user_id: str,
+        caller: Caller,
         conversation_id: UUID,
         model_id: str | None = None,
         resume: Resumed | None = None,
     ) -> AsyncGenerator[ServerSentEvent]:
         settings = self.settings
-        tools = sorted(self.tools(domains), key=lambda tool: tool.name)
+        tools = sorted(self.tools(domains, caller), key=lambda tool: tool.name)
         by_name = {tool.wire_name: tool for tool in tools}
-        offered = [tool.definition() for tool in tools if permitted(tool.min_role, roles)]
+        offered = [tool.definition() for tool in tools if permitted(tool.min_role, caller.roles)]
         *history, question = turns
         # Stable prefix first (system, sorted tools), so providers can cache it (D41).
         messages: list[Message] = [
@@ -296,7 +296,7 @@ class Agent:
             SPAN_KIND: "AGENT",
             "gen_ai.operation.name": "invoke_agent",
             "input.value": question.content,
-            "user.id": user_id,
+            "user.id": caller.sub,
             "session.id": str(conversation_id),
             "llm.prompt_template.version": PROMPT_VERSION,
         }
@@ -310,7 +310,7 @@ class Agent:
                     messages.append(_assistant(None, [call]))
                     usage.tool_calls += 1
                     yield _call_event(call, resume.spec)
-                    outcome = await self._decided(call, resume, roles, deadline, semaphore)
+                    outcome = await self._decided(call, resume, caller.roles, deadline, semaphore)
                     if event := _observe(call, resume.spec, outcome, sources, messages):
                         yield event
                 for n in range(1, settings.agent_max_steps + 1):
@@ -376,7 +376,7 @@ class Agent:
                         tasks = [
                             group.create_task(
                                 self._execute(
-                                    call, by_name.get(call.name), roles, deadline, semaphore
+                                    call, by_name.get(call.name), caller.roles, deadline, semaphore
                                 )
                             )
                             for call in calls
@@ -389,7 +389,7 @@ class Agent:
                         if not isinstance(outcome, _Outcome):
                             if proposal is None and spec:
                                 proposal = self._propose(
-                                    call, spec, outcome, user_id, conversation_id
+                                    call, spec, outcome, caller.sub, conversation_id
                                 )
                                 continue
                             # shortcut: one write per step, queue approvals if models batch writes
@@ -444,18 +444,19 @@ class Agent:
             yield _sse("done", done)
 
     def resume(
-        self, resume: Resume, user_id: str, conversation_id: UUID, domains: list[Domain] | None
+        self, resume: Resume, caller: Caller, conversation_id: UUID, domains: list[Domain] | None
     ) -> Resumed:
         """Raises ApprovalError unless the action is signed, current and this user's, as shown."""
         action = approvals.verify(resume.signed_action, self.settings.approval_signing_key)
-        spec = next((tool for tool in self.tools(domains) if tool.name == action.tool), None)
+        tools = self.tools(domains, caller)
+        spec = next((tool for tool in tools if tool.name == action.tool), None)
         if spec is None or not spec.requires_approval:
             raise ApprovalError(f"{action.tool} is no write tool")
         try:
             args = spec.args.model_validate(resume.args)
         except ValidationError as error:
             raise ApprovalError(f"invalid arguments: {error}") from error
-        approvals.check(action, user_id, str(conversation_id), args)
+        approvals.check(action, caller.sub, str(conversation_id), args)
         return Resumed(action, spec, args, resume.decision, resume.note)
 
     def _propose(

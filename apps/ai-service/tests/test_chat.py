@@ -17,7 +17,7 @@ from ai_service.embeddings import Embedder
 from ai_service.knowledge_base import Hit, KnowledgeBase
 from ai_service.llm import LlmError, LlmEvent, Message, Token
 from ai_service.rag import ChatPipeline, ChatTurn, answer_status, build_messages, invalid_citations
-from support import USER, FakeTextEmbedding, sse
+from support import FakeTextEmbedding, sse
 
 SNAPSHOT = Path(__file__).parent / "fixtures/chat-prompt.txt"
 
@@ -84,7 +84,7 @@ def test_answer_status_counts_only_valid_citations(
 
 
 def chat(client: TestClient, question: str) -> list[tuple[str, Any]]:
-    body = {"messages": [{"role": "user", "content": question}], "user": USER}
+    body = {"messages": [{"role": "user", "content": question}]}
     return sse(client.post("/v1/chat", json=body))
 
 
@@ -130,7 +130,7 @@ def test_chat_without_matching_sources_says_so(client: TestClient) -> None:
     ids=["no messages", "last from assistant", "system role"],
 )
 def test_chat_rejects_bad_messages(client: TestClient, messages: list[dict[str, str]]) -> None:
-    response = client.post("/v1/chat", json={"messages": messages, "user": USER})
+    response = client.post("/v1/chat", json={"messages": messages})
 
     assert response.status_code == 422
 

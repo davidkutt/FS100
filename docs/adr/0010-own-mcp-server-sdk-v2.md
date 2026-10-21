@@ -1,7 +1,7 @@
 # ADR-0010: Own MCP server and MCP client on Python SDK v2
 
-- **Status:** Proposed (M2.0 spike done; accepted when M2.4 lands)
-- **Date:** 2026-10-19
+- **Status:** Accepted (M2.4)
+- **Date:** 2026-10-19 (accepted 2026-10-21)
 - **Plan reference:** D34, D35, D38, D45 ([plan-phase-2.md §3](../../plan-phase-2.md#3-decisions))
 
 ## Context
@@ -23,10 +23,25 @@ client for the GitHub MCP server.
 - **Auth:** a `TokenVerifier` on PyJWT and the existing JWKS settings checks `iss` and `aud = MCP
   resource URL` itself. `AuthSettings(issuer_url, resource_server_url, required_scopes=["kb:read"],
   validate_token_resource=False)`. Tools read claims via `get_access_token()` and check the role.
-- **Host check:** pass `TransportSecuritySettings(allowed_hosts=[…, "ai-service:*"])`. The SDK's default
-  DNS-rebinding protection only allows `localhost` hosts and would reject Mode B container traffic.
+- **Host check:** the SDK's default DNS-rebinding protection stays on (only `localhost` hosts). The agent
+  connects to `MCP_RESOURCE_URL` = `http://localhost:8000/mcp`, which is also the token audience; in Mode B
+  the container calls itself on `localhost`, so the `ai-service:*` entry the spike suggested is not needed.
 - **Errors:** raise `ToolError` for messages the model may see. Any other exception becomes a generic
-  "Error executing tool X".
+  "Error executing tool X". A missing `kb:write` or role is a `ToolError` too, not an HTTP 403: the SDK
+  checks `required_scopes` per endpoint only. Scope step-up for external clients belongs to M2.8.
+- **Tools** (`mcp_server.py`): `search_knowledge_base`, `get_document` (window + `next_offset`),
+  `list_sources` (first chunk per document + a `doc_id` facet for counts; no `status` filter, Qdrant only
+  holds ingested documents), `ingest_url`; resource `kb://documents/{doc_id}` (labels + headings).
+  `ingest_url` confirms through MRTR: a `Resolve(...)` parameter returns `Elicit(...)`, the role and scope
+  are checked in that resolver **before** asking, and a decline aborts the call.
+- **Client** (`mcp_client.py`): one SDK `Client` per tool call, pinned to protocol `2026-07-28` (no
+  discovery round trip), with the caller's hop-2 token ([ADR-0009](0009-token-exchange-internal-hops.md)).
+  Its elicitation callback accepts only for writes, which the harness runs only after the user approved
+  them (ADR-0008). The client lists the tools after each call to validate the output schema — an extra
+  round trip until the M2.5 client manager keeps clients per turn and caches lists.
+- **Harness:** the `kb.*` tool specs keep Pydantic argument models in `tools.py` (search offers only
+  `query` and `domains`; `top_k` and the threshold stay server defaults) and run through the client; tool
+  definitions from `tools/list` come with the M2.5 client manager.
 
 ## Spike results (M2.0)
 
@@ -66,6 +81,12 @@ a major release since the plan's "≥ 1.1.2"). The arm64 image runs `http --port
 - Allow-list candidates for M2.5: `actions_list`, `actions_get`, `get_job_logs`, `list_issues`,
   `issue_read`, `search_issues`, `list_pull_requests`, `pull_request_read`, `list_commits`,
   `get_commit`, `get_file_contents`.
+
+## Result (M2.4)
+
+One agent turn is one Phoenix trace: `agent.run` → `tool` → `MCP send tools/call` →
+`tools/call search_knowledge_base` → `search` → `embed` (the SDK carries `traceparent` in `_meta`).
+NestJS has no spans (D21: `x-request-id` only), so the trace starts in the AI service.
 
 ## Alternatives considered
 

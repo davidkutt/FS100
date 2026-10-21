@@ -17,8 +17,10 @@ import { AiClient, type Domain } from '../ai-client/ai-client.service.js';
 import type { AuthUser } from '../auth/auth.guard.js';
 import { TAXONOMY, type Taxonomy, unknownTopics } from '../catalog/taxonomy.js';
 import { DB, type Db } from '../db/db.module.js';
+import { CONFIG, type Config } from '../config.js';
 import { auditLog, type Document, documents } from '../db/schema.js';
 import type { LabelsBody } from './documents.controller.js';
+import { fetchDocument } from './fetch-url.js';
 
 export interface Upload {
   originalname: string;
@@ -42,6 +44,7 @@ export class DocumentsService implements OnApplicationBootstrap {
     @Inject(DB) private readonly db: Db,
     private readonly ai: AiClient,
     @Inject(TAXONOMY) private readonly taxonomy: Taxonomy,
+    @Inject(CONFIG) private readonly config: Config,
   ) {}
 
   /** Originals are not kept (D7), so an ingest cut off by a restart cannot resume. */
@@ -104,6 +107,29 @@ export class DocumentsService implements OnApplicationBootstrap {
     }
     void this.ingest(doc, file.buffer, requestId);
     return { id: doc.id };
+  }
+
+  /** `kb.ingest_url`: a service account adds a document for a user (trusted subsystem, D36). */
+  async fromUrl(
+    service: AuthUser,
+    owner: { sub: string; name: string },
+    url: string,
+    domains: Domain[],
+    requestId: string,
+  ): Promise<{ id: string; status: 'pending' }> {
+    const maxBytes = this.config.UPLOAD_MAX_MB * 1024 * 1024;
+    const file = await fetchDocument(new URL(url), this.config.INGEST_URL_ALLOWED_HOSTS, maxBytes);
+    const { id } = await this.upload({ ...owner, roles: [] }, file, domains, [], requestId);
+    await this.db.insert(auditLog).values({
+      actorId: owner.sub,
+      actorRoles: [],
+      serviceIdentity: service.name,
+      tool: 'documents.from_url',
+      kind: 'write',
+      argsRedacted: { docId: id, url, domains },
+      outcome: 'ok',
+    });
+    return { id, status: 'pending' };
   }
 
   async relabel(

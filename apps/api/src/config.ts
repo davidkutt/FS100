@@ -13,6 +13,12 @@ const schema = z.object({
   KEYCLOAK_CLIENT_ID: z.string().default('kb-api'),
   KEYCLOAK_CLIENT_SECRET: z.string().min(1),
   AI_SERVICE_URL: z.url().default('http://localhost:8000'),
+  AI_SERVICE_AUDIENCE: z.string().default('kb-ai'), // hop-1 token exchange (ADR-0009)
+  // `kb.ingest_url` fetches only from these hosts (`host[:port]`, D36).
+  INGEST_URL_ALLOWED_HOSTS: z
+    .string()
+    .default('raw.githubusercontent.com')
+    .transform((hosts) => hosts.split(',').map((host) => host.trim())),
   UPLOAD_MAX_MB: z.coerce.number().positive().default(20),
   CHAT_THROTTLE_PER_MIN: z.coerce.number().int().positive().default(20),
   // The repo's file, from src/ and dist/ alike; the image sets its own path.

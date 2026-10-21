@@ -199,7 +199,6 @@ export class ConversationsController {
       mode: body.mode,
       model: body.modelId ?? conversation.modelId,
       domains: body.domains,
-      user: { sub: req.user.sub, roles: req.user.roles },
     };
     // Stored only once the AI service accepted the turn, so a rejected one leaves no orphan.
     await this.relay(req, res, turn, () =>
@@ -249,7 +248,6 @@ export class ConversationsController {
       conversation_id: conversation.id,
       messages: history,
       model: conversation.modelId,
-      user: { sub: req.user.sub, roles: req.user.roles },
       resume: {
         signed_action: approval.signedAction,
         decision: body.decision,
@@ -275,7 +273,7 @@ export class ConversationsController {
       abort.abort();
     });
     const upstream = await this.ai
-      .agent(turn, req.id as string, abort.signal)
+      .agent(turn, req.id as string, abort.signal, req.accessToken, resumed !== undefined)
       .catch(async (error: unknown) => {
         if (resumed?.status === 'executing') {
           // An error status means the AI service refused the action before running it.

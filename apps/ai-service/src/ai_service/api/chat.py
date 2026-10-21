@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, Field, field_validator
 
+from ai_service.core.auth import Caller, get_caller
 from ai_service.knowledge_base import Domain
 from ai_service.rag import ChatPipeline, ChatTurn
 
@@ -16,15 +17,9 @@ def get_pipeline(request: Request) -> ChatPipeline:
     return request.app.state.chat
 
 
-class UserContext(BaseModel):
-    sub: str
-    roles: list[str]
-
-
 class ChatRequest(BaseModel):
     messages: list[ChatTurn] = Field(min_length=1)
     domains: list[Domain] | None = None
-    user: UserContext
 
     @field_validator("messages")
     @classmethod
@@ -36,9 +31,11 @@ class ChatRequest(BaseModel):
 
 @router.post("/chat", response_class=EventSourceResponse)
 async def chat(
-    pipeline: Annotated[ChatPipeline, Depends(get_pipeline)], body: ChatRequest
+    pipeline: Annotated[ChatPipeline, Depends(get_pipeline)],
+    caller: Annotated[Caller, Depends(get_caller)],
+    body: ChatRequest,
 ) -> AsyncGenerator[ServerSentEvent]:
     """Grounded chat: `sources`, `token`…, then `done` or `error` (plan.md §7.3)."""
-    async with aclosing(pipeline.stream(body.messages, body.domains, body.user.sub)) as events:
+    async with aclosing(pipeline.stream(body.messages, body.domains, caller.sub)) as events:
         async for event in events:
             yield event

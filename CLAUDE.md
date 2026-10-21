@@ -55,8 +55,9 @@ are done. M1.7 (Azure spike) is postponed while the project runs locally, so Pha
 **Phase 2 (agent, MCP, approvals) is in progress** — M2.0 (pins, spikes, identities, ADR-0007…0010
 drafts), M2.1 (agent harness: `agent.py`, `tools.py`, `POST /v1/agent` with SSE v2, task set
 `agent_v0`), M2.2 (conversations + event tee in NestJS, model registry, taxonomy + document topics,
-agent chat UI) and M2.3 (signed approvals `approvals.py` + resume, NestJS approval state machine,
-append-only `audit_log`, approval card and admin audit page) are done. Check the milestone in
+agent chat UI), M2.3 (signed approvals `approvals.py` + resume, NestJS approval state machine,
+append-only `audit_log`, approval card and admin audit page) and M2.4 (own MCP server `mcp_server.py` at
+`/mcp`, Keycloak token exchange on both hops, `kb.ingest_url` via `/internal/documents/from-url`) are done. Check the milestone in
 [plan.md §8](plan.md#8-milestones-and-tasks) or [plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks)
 before building something: many features are deliberately scheduled for later milestones.
 
@@ -84,9 +85,10 @@ Qdrant alias `kb_current`). Keep those names.
 | `architechture.md` | Cross-phase decisions by ID (REPO-*, DEV-* …). Filename is misspelled; keep it | — |
 | `_meta/ai-theory/` | Study notes, not product docs. Ignore unless asked | — |
 
-Request path: browser → NestJS `:3000` (JWT `aud=kb-api`) → AI service `:8000` (client-credentials JWT
-`aud=kb-ai` + `user` context). Never expose the AI service to the browser; never put AI logic in NestJS
-(ADR-0002).
+Request path: browser → NestJS `:3000` (JWT `aud=kb-api`) → AI service `:8000` (the user's token exchanged
+for `aud=kb-ai`; client credentials for system calls) → own MCP server `/mcp` (exchanged again by `kb-ai`,
+`aud=http://localhost:8000/mcp`, ADR-0009). Never expose the AI service to the browser; never put AI logic in
+NestJS (ADR-0002).
 
 ## Commands
 

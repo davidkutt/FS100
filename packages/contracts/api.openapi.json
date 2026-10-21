@@ -293,6 +293,55 @@
         ]
       }
     },
+    "/internal/documents/from-url": {
+      "post": {
+        "operationId": "InternalDocumentsController_fromUrl",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DocumentFromUrl"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "format": "uuid",
+                      "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "pending"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "status"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "InternalDocuments"
+        ]
+      }
+    },
     "/api/models": {
       "get": {
         "operationId": "CatalogController_models",
@@ -931,6 +980,55 @@
             }
           }
         }
+      },
+      "DocumentFromUrl": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string",
+            "format": "uri"
+          },
+          "domains": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "db",
+                "dev",
+                "cloud",
+                "devops",
+                "mlops",
+                "ai",
+                "security",
+                "architecture",
+                "sre"
+              ]
+            }
+          },
+          "onBehalfOf": {
+            "type": "object",
+            "properties": {
+              "sub": {
+                "type": "string",
+                "minLength": 1
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "sub",
+              "name"
+            ]
+          }
+        },
+        "required": [
+          "url",
+          "domains",
+          "onBehalfOf"
+        ]
       },
       "Taxonomy": {
         "type": "object",

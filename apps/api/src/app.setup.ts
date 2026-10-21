@@ -9,8 +9,8 @@ export function configureApp(app: INestApplication): INestApplication {
   app.useLogger(app.get(Logger));
   app.use(helmet());
   app.enableCors({ origin: app.get<Config>(CONFIG).CORS_ORIGINS });
-  // Browser-facing routes live under /api; probes stay at the root (plan.md §7.2).
-  app.setGlobalPrefix('api', { exclude: ['healthz', 'readyz'] });
+  // Browser-facing routes live under /api; probes and service routes stay at the root (plan.md §7.2).
+  app.setGlobalPrefix('api', { exclude: ['healthz', 'readyz', 'internal/documents/from-url'] });
   app.useGlobalPipes(new StandardSchemaValidationPipe());
   app.useGlobalFilters(new ProblemFilter());
   app.enableShutdownHooks();

@@ -5,6 +5,7 @@ import { CatalogModule } from '../catalog/catalog.module.js';
 import { CONFIG, type Config } from '../config.js';
 import { DocumentsController } from './documents.controller.js';
 import { DocumentsService } from './documents.service.js';
+import { InternalDocumentsController } from './internal.controller.js';
 
 @Module({
   imports: [
@@ -19,7 +20,7 @@ import { DocumentsService } from './documents.service.js';
       }),
     }),
   ],
-  controllers: [DocumentsController],
+  controllers: [DocumentsController, InternalDocumentsController],
   providers: [DocumentsService],
 })
 export class DocumentsModule {}

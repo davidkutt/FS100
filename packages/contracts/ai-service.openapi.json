@@ -559,9 +559,6 @@
             ],
             "title": "Domains"
           },
-          "user": {
-            "$ref": "#/components/schemas/UserContext"
-          },
           "resume": {
             "anyOf": [
               {
@@ -576,8 +573,7 @@
         "type": "object",
         "required": [
           "conversation_id",
-          "messages",
-          "user"
+          "messages"
         ],
         "title": "AgentRequest"
       },
@@ -684,15 +680,11 @@
               }
             ],
             "title": "Domains"
-          },
-          "user": {
-            "$ref": "#/components/schemas/UserContext"
           }
         },
         "type": "object",
         "required": [
-          "messages",
-          "user"
+          "messages"
         ],
         "title": "ChatRequest"
       },
@@ -1201,27 +1193,6 @@
           "min_role"
         ],
         "title": "ToolInfo"
-      },
-      "UserContext": {
-        "properties": {
-          "sub": {
-            "type": "string",
-            "title": "Sub"
-          },
-          "roles": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Roles"
-          }
-        },
-        "type": "object",
-        "required": [
-          "sub",
-          "roles"
-        ],
-        "title": "UserContext"
       },
       "ValidationError": {
         "properties": {

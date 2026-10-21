@@ -21,10 +21,11 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
     [
         None,
         f"Bearer {token(aud='kb-api')}",
+        f"Bearer {token(aud=Settings().mcp_resource_url, scope='kb:read')}",
         f"Bearer {token(expires_in=-60)}",
         f"Bearer {token(key=FOREIGN_KEY)}",
     ],
-    ids=["no token", "wrong audience", "expired", "foreign signature"],
+    ids=["no token", "wrong audience", "MCP token", "expired", "foreign signature"],
 )
 def test_status_rejects_invalid_tokens(client: TestClient, authorization: str | None) -> None:
     headers = {"Authorization": authorization} if authorization else {}

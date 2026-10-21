@@ -21,17 +21,21 @@ export const AuthUser = z
   .meta({ id: 'User' });
 export type AuthUser = z.infer<typeof AuthUser>;
 
-export type AuthRequest = Request & { user: AuthUser };
+/** `accessToken` is the bearer, exchanged for calls to the AI service on the user's behalf. */
+export type AuthRequest = Request & { user: AuthUser; accessToken: string };
 
 interface KeycloakClaims {
   name?: string;
   preferred_username?: string;
   realm_access?: { roles?: string[] };
+  resource_access?: Record<string, { roles?: string[] }>;
 }
 
 export const Public = () => SetMetadata('public', true);
 /** Any of the given realm roles; composites (admin ⊃ editor ⊃ viewer) are expanded by Keycloak. */
 export const Roles = (...roles: Role[]) => SetMetadata('roles', roles);
+/** A client role of the API that only service accounts hold, e.g. `ingest-on-behalf` (D36). */
+export const ServiceRole = (role: string) => SetMetadata('serviceRole', role);
 
 export const JWKS = Symbol('JWKS');
 
@@ -65,9 +69,13 @@ export class AuthGuard implements CanActivate {
     const sub = payload.sub as string;
     const roles = ROLES.filter((role) => payload.realm_access?.roles?.includes(role));
     req.user = { sub, name: payload.name ?? payload.preferred_username ?? sub, roles };
+    req.accessToken = token;
 
     const required = this.reflector.getAllAndOverride<Role[] | undefined>('roles', targets);
     if (required && !required.some((role) => roles.includes(role))) throw new ForbiddenException();
+    const service = this.reflector.getAllAndOverride<string | undefined>('serviceRole', targets);
+    const clientRoles = payload.resource_access?.[this.config.KEYCLOAK_CLIENT_ID]?.roles;
+    if (service && !clientRoles?.includes(service)) throw new ForbiddenException();
     return true;
   }
 }

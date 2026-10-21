@@ -8,9 +8,10 @@ from fastapi.sse import EventSourceResponse, ServerSentEvent
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ai_service.agent import Agent, Resume, Resumed, rag_turn
-from ai_service.api.chat import UserContext, get_pipeline
+from ai_service.api.chat import get_pipeline
 from ai_service.approvals import ApprovalError
 from ai_service.catalog import ModelInfo
+from ai_service.core.auth import Caller, get_caller
 from ai_service.knowledge_base import Domain
 from ai_service.rag import ChatPipeline, ChatTurn
 from ai_service.tools import permitted
@@ -45,7 +46,6 @@ class AgentRequest(BaseModel):
     mode: Literal["agent", "rag"] = "agent"
     model: str | None = None  # registry id (D40); None = LLM_MODEL
     domains: list[Domain] | None = None
-    user: UserContext
     resume: Resume | None = None  # continues the turn that proposed the action
 
     @model_validator(mode="after")
@@ -65,13 +65,15 @@ class AgentRequest(BaseModel):
 
 
 def selected_model(
-    body: AgentRequest, models: Annotated[dict[str, ModelInfo], Depends(get_models)]
+    body: AgentRequest,
+    models: Annotated[dict[str, ModelInfo], Depends(get_models)],
+    caller: Annotated[Caller, Depends(get_caller)],
 ) -> str | None:
     """A dependency, because errors raised inside the stream would follow a 200."""
     entry = models.get(body.model) if body.model else None
     if body.model and (
         entry is None
-        or not permitted(entry.min_role, body.user.roles)
+        or not permitted(entry.min_role, caller.roles)
         or (body.mode == "agent" and not entry.supports_tools)
     ):
         raise HTTPException(
@@ -80,12 +82,16 @@ def selected_model(
     return body.model
 
 
-def resumed(body: AgentRequest, agent: Annotated[Agent, Depends(get_agent)]) -> Resumed | None:
+def resumed(
+    body: AgentRequest,
+    agent: Annotated[Agent, Depends(get_agent)],
+    caller: Annotated[Caller, Depends(get_caller)],
+) -> Resumed | None:
     """Verified before the stream starts, like `selected_model`."""
     if body.resume is None:
         return None
     try:
-        return agent.resume(body.resume, body.user.sub, body.conversation_id, body.domains)
+        return agent.resume(body.resume, caller, body.conversation_id, body.domains)
     except ApprovalError as error:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, f"Invalid approval: {error}"
@@ -96,6 +102,7 @@ def resumed(body: AgentRequest, agent: Annotated[Agent, Depends(get_agent)]) -> 
 async def agent(
     agent: Annotated[Agent, Depends(get_agent)],
     pipeline: Annotated[ChatPipeline, Depends(get_pipeline)],
+    caller: Annotated[Caller, Depends(get_caller)],
     body: AgentRequest,
     model: Annotated[str | None, Depends(selected_model)],
     resume: Annotated[Resumed | None, Depends(resumed)],
@@ -105,11 +112,9 @@ async def agent(
     it. `mode=rag` runs the Phase 1 pipeline and ends with the same `done`."""
     turns = [message.turn() for message in body.messages]
     events = (
-        rag_turn(pipeline, turns, body.domains, body.user.sub, model)
+        rag_turn(pipeline, turns, body.domains, caller.sub, model)
         if body.mode == "rag"
-        else agent.stream(
-            turns, body.domains, body.user.roles, body.user.sub, body.conversation_id, model, resume
-        )
+        else agent.stream(turns, body.domains, caller, body.conversation_id, model, resume)
     )
     async with aclosing(events) as stream:
         async for event in stream:

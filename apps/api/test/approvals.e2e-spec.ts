@@ -179,8 +179,8 @@ describe('Approvals and audit (e2e)', () => {
       conversation_id: id,
       messages: [{ role: 'user', parts: [{ type: 'text', text: 'Open an issue' }] }],
       resume: { signed_action: 'signed.action.secret', decision: 'approve', args: ARGS },
-      user: { sub: 'approver' },
     });
+    expect(agentCalls().at(-1)!.headers.authorization).toBe('Bearer user-token:approver');
     expect(replay.status).toBe(409);
     expect(await replay.json()).toMatchObject({ type: 'approval_state_conflict' });
     const conversation = await detail(id, 'approver');
