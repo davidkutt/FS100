@@ -2,12 +2,14 @@
 cancellation."""
 
 import asyncio
+import json
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any, Literal, cast
 from uuid import UUID, uuid4
 
+import httpx2
 import pytest
 from fastapi import FastAPI
 from fastapi.sse import ServerSentEvent
@@ -19,12 +21,15 @@ from ai_service import agent as agent_module
 from ai_service import approvals
 from ai_service.agent import Agent, ApprovalRequiredEvent, Resume, Resumed
 from ai_service.approvals import ApprovalError
+from ai_service.core.auth import Caller
 from ai_service.core.settings import Settings
 from ai_service.knowledge_base import Hit
 from ai_service.llm import LlmError, LlmEvent, Message, Token, ToolCall, Usage
+from ai_service.mcp_client import McpClient
 from ai_service.rag import ChatTurn
-from ai_service.tools import ToolOutput, ToolSpec, TransientToolError
-from support import SIGNING_KEY, USER, sse
+from ai_service.tokens import Tokens
+from ai_service.tools import ToolOutput, ToolSpec, TransientToolError, kb_tools
+from support import SIGNING_KEY, sse, token
 
 CONVERSATION = uuid4()
 
@@ -77,14 +82,14 @@ def call(name: str, id: str = "c1", arguments: str = '{"q": "x"}') -> ToolCall:
 
 def agent(llm: ScriptedLlm, tools: list[ToolSpec[Args]], **settings: Any) -> Agent:
     settings.setdefault("approval_signing_key", SIGNING_KEY)
-    return Agent(llm, Settings(**settings), lambda _: list(tools))
+    return Agent(llm, Settings(**settings), lambda _domains, _caller: list(tools))
 
 
 def stream(
     agent: Agent, roles: tuple[str, ...] = ("editor",), resume: Resumed | None = None
 ) -> AsyncGenerator[ServerSentEvent]:
     turns = [ChatTurn(role="user", content="Q")]
-    return agent.stream(turns, None, list(roles), "bob", CONVERSATION, resume=resume)
+    return agent.stream(turns, None, Caller("bob", list(roles), ""), CONVERSATION, resume=resume)
 
 
 def run(
@@ -102,7 +107,7 @@ def of(events: list[ServerSentEvent], name: str) -> list[Any]:
 
 def body(text: str, **fields: Any) -> dict[str, Any]:
     message = {"role": "user", "parts": [{"type": "text", "text": text}]}
-    return {"conversation_id": str(uuid4()), "messages": [message], "user": USER, **fields}
+    return {"conversation_id": str(uuid4()), "messages": [message], **fields}
 
 
 def test_agent_streams_v2_events_with_the_fake_llm(client: TestClient) -> None:
@@ -178,7 +183,7 @@ def test_the_selected_model_is_used_for_every_step() -> None:
     async def collect() -> None:
         turns = [ChatTurn(role="user", content="Q")]
         async for _ in agent(llm, [tool("t.echo")]).stream(
-            turns, None, ["viewer"], "bob", uuid4(), "vendor/model"
+            turns, None, Caller("bob", ["viewer"], ""), uuid4(), "vendor/model"
         ):
             pass
 
@@ -347,7 +352,7 @@ def decide(
         note=note,
         args=proposal.args if args is None else args,
     )
-    return harness.resume(resume, sub, conversation, None)
+    return harness.resume(resume, Caller(sub, ["editor"], ""), conversation, None)
 
 
 def test_write_calls_propose_a_signed_action_and_end_the_turn() -> None:
@@ -477,7 +482,8 @@ def test_resume_over_http_is_verified_before_the_stream(client: TestClient) -> N
     cast(FastAPI, client.app).state.agent = agent(
         ScriptedLlm([call("t.write", "w")]), [write_tool(ran)]
     )
-    fields = {"conversation_id": str(uuid4()), "user": {"sub": "carol", "roles": ["editor"]}}
+    client.headers["Authorization"] = f"Bearer {token(roles=('editor',))}"
+    fields = {"conversation_id": str(uuid4())}
     proposal = dict(sse(client.post("/v1/agent", json=body("Q", **fields))))["approval_required"]
     resume = {
         "signed_action": proposal["signedAction"],
@@ -494,6 +500,36 @@ def test_resume_over_http_is_verified_before_the_stream(client: TestClient) -> N
     assert "Invalid approval: the arguments differ" in tampered.json()["detail"]
     assert [name for name, _ in events[:2]] == ["tool_call", "tool_result"]
     assert ran == ["x"]
+
+
+def test_an_approved_ingest_runs_once_through_the_mcp_server(
+    client: TestClient, api: list[httpx2.Request]
+) -> None:
+    app = cast(FastAPI, client.app)
+    settings = Settings(approval_signing_key=SIGNING_KEY)
+    mcp = McpClient(settings.mcp_resource_url, Tokens(settings))
+    url = "https://raw.githubusercontent.com/davidkutt/FS100/main/README.md"
+    ingest = call("kb.ingest_url", "w", json.dumps({"url": url, "domains": ["dev"]}))
+    app.state.agent = Agent(
+        ScriptedLlm([ingest]), settings, lambda domains, caller: kb_tools(mcp, caller, domains)
+    )
+    client.headers["Authorization"] = f"Bearer {token(roles=('editor', 'viewer'))}"
+    fields = {"conversation_id": str(uuid4())}
+
+    proposal = dict(sse(client.post("/v1/agent", json=body("Add it", **fields))))
+    resume = {
+        "signed_action": proposal["approval_required"]["signedAction"],
+        "decision": "approve",
+        "args": proposal["approval_required"]["args"],
+    }
+    asked_before = len(api)
+    events = dict(sse(client.post("/v1/agent", json=body("Add it", **fields, resume=resume))))
+
+    assert proposal["done"]["stopReason"] == "awaiting_approval"
+    assert asked_before == 0
+    assert events["tool_result"]["status"] == "ok", events["tool_result"]
+    assert len(api) == 1
+    assert json.loads(api[0].content)["onBehalfOf"]["sub"] == "carol"
 
 
 def test_unknown_tools_are_an_observation_only() -> None:

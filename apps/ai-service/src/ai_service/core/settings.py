@@ -18,7 +18,13 @@ class Settings(BaseSettings):
     ai_port: int = 8000
     ai_keycloak_issuer: str = "http://localhost:8080/realms/kb"
     ai_keycloak_audience: str = "kb-ai"
-    ai_keycloak_realm_url: str = ""  # JWKS base URL; empty = the issuer (differs in Compose)
+    ai_keycloak_realm_url: str = ""  # JWKS and token base URL; empty = the issuer (Compose differs)
+    # Confidential client kb-ai: hop-2 token exchange and the internal ingest (ADR-0009).
+    ai_keycloak_client_id: str = "kb-ai"
+    ai_keycloak_client_secret: str = ""
+    # The MCP server's resource URL = the audience of hop-2 tokens; the agent connects to it.
+    mcp_resource_url: str = "http://localhost:8000/mcp"
+    ai_api_url: str = "http://localhost:3000"  # NestJS, for `ingest_url`
     qdrant_url: str = "http://localhost:6333"  # ":memory:" = in-process Qdrant (tests, evals)
     qdrant_api_key: str | None = None
     qdrant_alias: str = "kb_current"

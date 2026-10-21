@@ -1,12 +1,13 @@
 import { HttpException } from '@nestjs/common';
 import type { Config } from '../config.js';
-import { AiClient } from './ai-client.service.js';
+import { type AgentRequest, AiClient } from './ai-client.service.js';
 
 const config = {
   KEYCLOAK_ISSUER: 'http://kc/realms/kb',
   KEYCLOAK_CLIENT_ID: 'kb-api',
   KEYCLOAK_CLIENT_SECRET: 'secret',
   AI_SERVICE_URL: 'http://ai',
+  AI_SERVICE_AUDIENCE: 'kb-ai',
 } as Config;
 
 describe('AiClient', () => {
@@ -30,6 +31,41 @@ describe('AiClient', () => {
       new URL('http://ai/v1/status'),
       expect.objectContaining({
         headers: { authorization: 'Bearer svc-token', 'x-request-id': 'req-2' },
+      }),
+    );
+  });
+
+  it('exchanges a user token once until it nears expiry, and afresh for a resume', async () => {
+    const forms: URLSearchParams[] = [];
+    const fetchMock = vi.fn(async (url: string | URL, init?: RequestInit) => {
+      if (!String(url).endsWith('/token')) return new Response('event: done\ndata: {}\n\n');
+      forms.push(init!.body as URLSearchParams);
+      return Response.json({ access_token: `exchanged-${forms.length}`, expires_in: 300 });
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new AiClient(config);
+    const { signal } = new AbortController();
+    const body = { conversation_id: 'c', messages: [] } as unknown as AgentRequest;
+
+    await client.agent(body, 'req-1', signal, 'user-a');
+    await client.agent(body, 'req-2', signal, 'user-a');
+    await client.agent(body, 'req-3', signal, 'user-a', true);
+
+    expect(forms.map((form) => Object.fromEntries(form))).toEqual([
+      {
+        grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+        subject_token: 'user-a',
+        subject_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+        audience: 'kb-ai',
+        client_id: 'kb-api',
+        client_secret: 'secret',
+      },
+      expect.objectContaining({ subject_token: 'user-a' }),
+    ]);
+    expect(fetchMock).toHaveBeenLastCalledWith(
+      new URL('http://ai/v1/agent'),
+      expect.objectContaining({
+        headers: expect.objectContaining({ authorization: 'Bearer exchanged-2' }),
       }),
     );
   });

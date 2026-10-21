@@ -1,6 +1,6 @@
 import hashlib
 import re
-from typing import Literal
+from typing import Any, Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from opentelemetry import trace
@@ -25,6 +25,22 @@ class Hit(BaseModel):
     domains: list[Domain]
     score: float
     text: str
+
+
+class Chunk(BaseModel):
+    chunk_index: int
+    page: int | None
+    heading: str | None
+    text: str
+
+
+class DocumentInfo(BaseModel):
+    doc_id: UUID
+    title: str
+    filename: str
+    domains: list[Domain]
+    topics: list[str]
+    chunk_count: int
 
 
 class IngestResult(BaseModel):
@@ -66,6 +82,9 @@ class KnowledgeBase:
             self.client.create_payload_index(
                 self.collection, field, models.PayloadSchemaType.KEYWORD
             )
+        self.client.create_payload_index(
+            self.collection, "chunk_index", models.PayloadSchemaType.INTEGER
+        )
         # Prefix matching: `devops/` selects a whole domain (D48).
         topics = models.KeywordIndexParams(type=models.KeywordIndexType.KEYWORD, prefix=True)
         self.client.create_payload_index(self.collection, "topics", topics)
@@ -163,6 +182,45 @@ class KnowledgeBase:
             for p in response.points
         ]
 
+    def documents(self, domains: list[Domain] | None = None) -> list[DocumentInfo]:
+        """Every ingested document by title; its first chunk carries the labels."""
+        # shortcut: one page of 10 000 documents; page with `next_page_offset` beyond that
+        labels = _domains(domains)
+        facet = self.client.facet(
+            self.alias, "doc_id", facet_filter=models.Filter(must=labels), limit=10_000, exact=True
+        )
+        counts = {str(hit.value): hit.count for hit in facet.hits}
+        first, _ = self.client.scroll(
+            self.alias, models.Filter(must=[*labels, _equals("chunk_index", 0)]), limit=10_000
+        )
+        documents = [_info(p.payload or {}, counts) for p in first]
+        return sorted(documents, key=lambda doc: doc.title.lower())
+
+    def document(self, doc_id: UUID) -> DocumentInfo | None:
+        first, _ = self.client.scroll(
+            self.alias,
+            models.Filter(must=[_equals("doc_id", str(doc_id)), _equals("chunk_index", 0)]),
+            limit=1,
+        )
+        if not first:
+            return None
+        count = self.client.count(self.alias, _of(doc_id).filter, exact=True).count
+        return _info(first[0].payload or {}, {str(doc_id): count})
+
+    def chunks(self, doc_id: UUID, offset: int, limit: int) -> list[Chunk]:
+        """Chunks `offset` … `offset + limit - 1` of a document, in reading order."""
+        window = models.FieldCondition(
+            key="chunk_index", range=models.Range(gte=offset, lt=offset + limit)
+        )
+        points, _ = self.client.scroll(
+            self.alias,
+            models.Filter(must=[_equals("doc_id", str(doc_id)), window]),
+            limit=limit,
+            with_payload=True,
+        )
+        chunks = [Chunk.model_validate(p.payload) for p in points]
+        return sorted(chunks, key=lambda c: c.chunk_index)
+
     def update_labels(
         self, doc_id: UUID, domains: list[Domain] | None, topics: list[str] | None
     ) -> None:
@@ -176,6 +234,23 @@ class KnowledgeBase:
         self.client.delete(self.alias, _of(doc_id), wait=True)
 
 
+def _info(payload: dict[str, Any], chunk_counts: dict[str, int]) -> DocumentInfo:
+    return DocumentInfo.model_validate(
+        {**payload, "chunk_count": chunk_counts.get(payload["doc_id"], 0)}
+    )
+
+
+def _equals(key: str, value: str | int) -> models.FieldCondition:
+    return models.FieldCondition(key=key, match=models.MatchValue(value=value))
+
+
+def _domains(domains: list[Domain] | None) -> list[models.Condition]:
+    return (
+        [models.FieldCondition(key="domains", match=models.MatchAny(any=[str(d) for d in domains]))]
+        if domains
+        else []
+    )
+
+
 def _of(doc_id: UUID) -> models.FilterSelector:
-    match = models.FieldCondition(key="doc_id", match=models.MatchValue(value=str(doc_id)))
-    return models.FilterSelector(filter=models.Filter(must=[match]))
+    return models.FilterSelector(filter=models.Filter(must=[_equals("doc_id", str(doc_id))]))

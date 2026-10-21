@@ -35,9 +35,13 @@ Endpoints (plan.md §7.2; OpenAPI in `packages/contracts/api.openapi.json`):
 | `POST /api/chat` | viewer | SSE relay of `/v1/chat`, events unchanged; `CHAT_THROTTLE_PER_MIN` per user, shared with conversation messages |
 | `POST /api/search` | viewer | relay of `/v1/search` |
 | `GET /api/status` | admin | `api`, `db`, `aiService`, `qdrant` |
+| `POST /internal/documents/from-url` | service account with the `kb-api` client role `ingest-on-behalf` (= `kb-ai`) | `{url, domains, onBehalfOf:{sub, name}}` for `kb.ingest_url`: fetches the URL (hosts in `INGEST_URL_ALLOWED_HOSTS`, no IP literals or private addresses, ≤ 3 redirects on the list, ≤ `UPLOAD_MAX_MB`), then stores it as the user's upload → 202 `{id, status}`; audited as `documents.from_url` with the service identity (trusted subsystem, D36) |
 
 Every route needs a Keycloak access token with `aud=kb-api` unless marked `@Public()`; restrict with
-`@Roles(...)` (`src/auth/auth.guard.ts`). Errors are `application/problem+json` (`src/common/problem.filter.ts`).
+`@Roles(...)` (realm roles) or `@ServiceRole(...)` (client roles of `kb-api`, `src/auth/auth.guard.ts`). Calls to
+the AI service carry the user's token exchanged for `aud=kb-ai` (`chat`, `search`, agent turns; cached until 150 s
+before expiry, a resume exchanges afresh) or the API's service token (ingest, labels, delete, catalog, status),
+see `src/ai-client/ai-client.service.ts` and ADR-0009. Errors are `application/problem+json` (`src/common/problem.filter.ts`).
 Request bodies are validated with Zod via `@Body({ schema })`; relayed bodies are validated by the AI service,
 whose types come from `@fs100/contracts/ai-service`. Config is validated with Zod in `src/config.ts`.
 

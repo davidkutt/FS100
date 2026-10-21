@@ -13,9 +13,9 @@ from jwt.algorithms import RSAAlgorithm
 from numpy.typing import NDArray
 
 from ai_service.core.settings import Settings
+from ai_service.tokens import Tokens
 
 MARKDOWN = b"# Runbook\n\n## Rollback\nUndo the release with kubectl rollout undo.\n"
-USER = {"sub": "carol", "roles": ["viewer"]}
 SIGNING_KEY = "test-only-approval-signing-key-0123456789"
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 JWKS: dict[str, Any] = {
@@ -27,10 +27,35 @@ def fetch_jwks(_self: jwt.PyJWKClient) -> dict[str, Any]:
     return JWKS
 
 
-def token(aud: str = "kb-ai", expires_in: int = 300, key: rsa.RSAPrivateKey = KEY) -> str:
+def token(
+    aud: str = "kb-ai",
+    expires_in: int = 300,
+    key: rsa.RSAPrivateKey = KEY,
+    sub: str = "carol",
+    roles: tuple[str, ...] = ("viewer",),
+    scope: str = "",
+) -> str:
     now = int(time.time())
-    claims = {"iss": Settings().ai_keycloak_issuer, "aud": aud, "iat": now, "exp": now + expires_in}
+    claims = {
+        "iss": Settings().ai_keycloak_issuer,
+        "aud": aud,
+        "sub": sub,
+        "realm_access": {"roles": list(roles)},
+        "scope": scope,
+        "iat": now,
+        "exp": now + expires_in,
+    }
     return jwt.encode(claims, key, algorithm="RS256", headers={"kid": "test"})
+
+
+async def exchange(_self: Tokens, form: dict[str, str]) -> tuple[str, int]:
+    """Keycloak's token endpoint as the realm answers kb-ai (ADR-0009): same user, MCP audience."""
+    if form["grant_type"] == "client_credentials":
+        return token(aud="kb-api", sub="service-account-kb-ai", roles=()), 300
+    subject = jwt.decode(form["subject_token"], options={"verify_signature": False})
+    roles = tuple(subject["realm_access"]["roles"])
+    mcp = Settings().mcp_resource_url
+    return token(aud=mcp, sub=subject["sub"], roles=roles, scope=form["scope"]), 300
 
 
 class FakeTextEmbedding:

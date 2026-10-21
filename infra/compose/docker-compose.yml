@@ -117,6 +117,9 @@ services:
     environment:
       - AI_KEYCLOAK_ISSUER
       - AI_KEYCLOAK_AUDIENCE
+      - AI_KEYCLOAK_CLIENT_ID
+      - AI_KEYCLOAK_CLIENT_SECRET=${AI_KEYCLOAK_CLIENT_SECRET:-dev-only-change-me}
+      - MCP_RESOURCE_URL
       - QDRANT_ALIAS
       - EMBEDDING_MODEL
       - CHUNK_SIZE
@@ -141,6 +144,7 @@ services:
       - AI_KEYCLOAK_REALM_URL=http://keycloak:8080/realms/kb
       - QDRANT_URL=http://qdrant:6333
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://phoenix:4317
+      - AI_API_URL=http://api:3000
     ports:
       - '127.0.0.1:8000:8000'
     volumes:
@@ -165,6 +169,8 @@ services:
       - KEYCLOAK_AUDIENCE
       - KEYCLOAK_CLIENT_ID
       - KEYCLOAK_CLIENT_SECRET=${KEYCLOAK_CLIENT_SECRET:-dev-only-change-me}
+      - AI_SERVICE_AUDIENCE
+      - INGEST_URL_ALLOWED_HOSTS
       - CORS_ORIGINS
       - UPLOAD_MAX_MB
       - CHAT_THROTTLE_PER_MIN

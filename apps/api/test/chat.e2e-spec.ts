@@ -60,12 +60,14 @@ describe('Chat and search relay (e2e)', () => {
     expect(await res.text()).toBe(EVENTS.join(''));
     expect(upstream.received.at(-1)).toMatchObject({
       url: '/v1/chat',
-      headers: { authorization: 'Bearer svc-token', 'x-request-id': 'req-chat' },
-      body: {
-        messages: [{ role: 'user', content: 'Hallo?' }],
-        domains: ['devops'],
-        user: { sub: 'chat-user', roles: ['viewer'] },
-      },
+      headers: { authorization: 'Bearer user-token:chat-user', 'x-request-id': 'req-chat' },
+      body: { messages: [{ role: 'user', content: 'Hallo?' }], domains: ['devops'] },
+    });
+    expect(upstream.received.at(-1)!.body).not.toHaveProperty('user');
+    expect(Object.fromEntries(upstream.tokenRequests.at(-1)!)).toMatchObject({
+      grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+      audience: 'kb-ai',
+      client_id: 'kb-api',
     });
   });
 

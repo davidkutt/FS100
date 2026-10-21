@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from ai_service.agent import Agent
 from ai_service.api.agent import get_agent, get_models
 from ai_service.catalog import ModelInfo
+from ai_service.core.auth import Caller, get_caller
 from ai_service.tools import Risk, Role, ToolKind
 
 router = APIRouter(prefix="/v1", tags=["catalog"])
@@ -26,9 +27,11 @@ def models(models: Annotated[dict[str, ModelInfo], Depends(get_models)]) -> list
 
 
 @router.get("/tools")
-def tools(agent: Annotated[Agent, Depends(get_agent)]) -> list[ToolInfo]:
+def tools(
+    agent: Annotated[Agent, Depends(get_agent)], caller: Annotated[Caller, Depends(get_caller)]
+) -> list[ToolInfo]:
     """The tool registry (D30); the API filters it by the caller's role."""
     return [
         ToolInfo.model_validate(tool, from_attributes=True)
-        for tool in sorted(agent.tools(None), key=lambda tool: tool.name)
+        for tool in sorted(agent.tools(None, caller), key=lambda tool: tool.name)
     ]

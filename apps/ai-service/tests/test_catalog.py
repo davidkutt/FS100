@@ -10,7 +10,6 @@ from pydantic import ValidationError
 from ai_service.catalog import load_models, load_taxonomy
 from ai_service.core.settings import Settings
 from ai_service.knowledge_base import Domain
-from support import USER
 
 
 def test_committed_config_files_are_valid() -> None:
@@ -39,15 +38,13 @@ def test_models_and_tools_are_listed(client: TestClient) -> None:
 
     assert [m["id"] for m in models] == list(load_models(Settings().models_config))
     assert set(models[0]) == {"id", "label", "supports_tools", "tier", "min_role"}
-    assert tools == [
-        {
-            "name": "kb.search_knowledge_base",
-            "description": tools[0]["description"],
-            "kind": "read",
-            "risk": "low",
-            "min_role": "viewer",
-        }
+    assert [(t["name"], t["kind"], t["risk"], t["min_role"]) for t in tools] == [
+        ("kb.get_document", "read", "low", "viewer"),
+        ("kb.ingest_url", "write", "medium", "editor"),
+        ("kb.list_sources", "read", "low", "viewer"),
+        ("kb.search_knowledge_base", "read", "low", "viewer"),
     ]
+    assert set(tools[0]) == {"name", "description", "kind", "risk", "min_role"}
 
 
 def agent_body(**fields: Any) -> dict[str, Any]:
@@ -55,7 +52,6 @@ def agent_body(**fields: Any) -> dict[str, Any]:
     return {
         "conversation_id": "00000000-0000-0000-0000-000000000001",
         "messages": [message],
-        "user": USER,
         **fields,
     }
 
@@ -64,7 +60,7 @@ def agent_body(**fields: Any) -> dict[str, Any]:
     ("model", "status"),
     [
         ("openai/gpt-6-luna", 200),
-        ("anthropic/claude-haiku-5.5", 422),  # editor+, USER is a viewer
+        ("anthropic/claude-haiku-5.5", 422),  # editor+, the token is a viewer's
         ("someone/expensive-model", 422),
     ],
     ids=["viewer model", "above the role", "not in the registry"],

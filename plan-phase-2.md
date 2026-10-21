@@ -573,21 +573,40 @@ follows with M2.5.
 
 ### M2.4 — Own MCP server + token exchange (~13 h)
 
-- [ ] Realm per §7.7; export committed
-- [ ] NestJS hop 1: exchange per user request (cached); background ingest keeps client credentials
-- [ ] AI service: validate user tokens (`aud=kb-ai`), roles from claims; `user` body object removed (contract change)
-- [ ] MCP server (SDK v2) at `/mcp`: stateless Streamable HTTP, RFC 9728 metadata, `401` challenge, JWT
+- [x] Realm per §7.7; export committed
+- [x] NestJS hop 1: exchange per user request (cached); background ingest keeps client credentials
+- [x] AI service: validate user tokens (`aud=kb-ai`), roles from claims; `user` body object removed (contract change)
+- [x] MCP server (SDK v2) at `/mcp`: stateless Streamable HTTP, RFC 9728 metadata, `401` challenge, JWT
   `aud` / scope / role checks, tools §7.5, `kb://documents/{id}`, `traceparent` from `_meta`
-- [ ] `ingest_url`: host allow-list, size/type limits, SSRF guard (no private IPs, no off-list redirects), MRTR
+- [x] `ingest_url`: host allow-list, size/type limits, SSRF guard (no private IPs, no off-list redirects), MRTR
   confirmation, NestJS `/internal/documents/from-url` with `onBehalfOf`
-- [ ] Harness: KB tools now via the MCP client with the hop-2 token (native adapter removed)
-- [ ] Token matrix extended: wrong audience on each hop → 401; missing `kb:write` → 403; viewer `ingest_url` → 403;
+- [x] Harness: KB tools now via the MCP client with the hop-2 token (native adapter removed)
+- [x] Token matrix extended: wrong audience on each hop → 401; missing `kb:write` → 403; viewer `ingest_url` → 403;
   expired exchanged token → re-exchanged
-- [ ] *(spike, ≤ 1 h)* Keycloak 26.8 token exchange delegation (`act` claim) → keep or drop in ADR-0009
-- [ ] Manual check with MCP Inspector; ADR-0009, ADR-0010
+- [x] *(spike, ≤ 1 h)* Keycloak 26.8 token exchange delegation (`act` claim) → keep or drop in ADR-0009
+- [ ] Manual check with MCP Inspector (open; steps in `docs/setup/startup.md` §4 — the SDK client and curl checks
+  passed) · [x] ADR-0009, ADR-0010
 
 **Acceptance:** one agent turn yields one trace spanning NestJS → AI service → `/mcp`; the MCP server rejects tokens for
 any other audience; `ingest_url` never ingests without confirmation.
+
+**Done 2026-10-21.** Deviations: no `kb-mcp` client yet (only the M2.8 resource-indicator path needs it); the realm
+export also lists Keycloak's built-in OIDC scopes (`basic`, `roles`, `profile`, `email`, `web-origins`, `acr`), because
+an import with `clientScopes` drops them, and `kb-ai` names its default scopes; `ingest-on-behalf` is a client role of
+`kb-api`, so `kb-ai`'s service tokens get `aud=kb-api` without an audience mapper that would leak into hop-2 tokens.
+Hop 1 runs for `chat`, `search` and agent turns and is cached until `exp − 150 s`, not 30 s, because the AI
+service exchanges that token again during a run (a resume exchanges afresh); labels, delete, catalog and status keep the
+service token, and NestJS still cuts `/v1/tools` and `/v1/models` to the role. A missing `kb:write` or role at `/mcp`
+is a tool error (`isError`), not an HTTP 403 — the SDK checks scopes per endpoint; only a token without `kb:read` gets
+403. `list_sources` has no `status` filter (Qdrant only holds ingested documents); `search_knowledge_base` applies the
+score threshold, and the harness offers it with `query` and `domains` only. The URL fetch for `ingest_url` and its
+guards (`INGEST_URL_ALLOWED_HOSTS`, default `raw.githubusercontent.com` since HTML is not parsed yet; no IP literals;
+public addresses only, checked on every connect; ≤ 3 redirects on the list; `UPLOAD_MAX_MB`; type as for uploads) live
+in the API, which stores the file as the user's upload and audits `documents.from_url` with the service identity. The
+MCP client opens one connection per call, which also lists the tools (output-schema check), and the `kb.*` definitions
+stay Pydantic models in `tools.py` until the M2.5 client manager. NestJS has no spans (D21), so the trace starts at
+`agent.run` and includes the `/mcp` spans. Delegation (`act`) is dropped for P2: two preview features and a `may_act`
+claim in the subject token (ADR-0009).
 
 ### M2.5 — External MCP servers, GitHub write, routing (~12 h)
 
@@ -770,6 +789,7 @@ TAXONOMY_CONFIG=../../config/taxonomy.yaml  # read by NestJS and the AI service 
 AI_KEYCLOAK_CLIENT_ID=kb-ai
 AI_KEYCLOAK_CLIENT_SECRET=dev-only-change-me
 MCP_RESOURCE_URL=http://localhost:8000/mcp
+AI_API_URL=http://localhost:3000             # the API, for kb.ingest_url
 MCP_SERVERS_CONFIG=../../config/mcp_servers.yaml
 MODELS_CONFIG=../../config/models.yaml
 AGENT_MAX_STEPS=8
@@ -782,7 +802,7 @@ APPROVAL_SIGNING_KEY=dev-only-change-me-approval-signing-key  # HMAC key (≥ 32
 APPROVAL_TTL_MIN=15                         # the AI service signs the expiry
 ROUTER=embedding                            # embedding | llm
 ROUTER_MODEL=                               # cheap model id when ROUTER=llm
-INGEST_URL_ALLOWED_HOSTS=kubernetes.io,www.keycloak.org,qdrant.tech,docs.github.com
+INGEST_URL_ALLOWED_HOSTS=raw.githubusercontent.com  # read by the API; HTML pages need HTML → text first
 
 # --- external tool identities (dev only; real values live in .env.local, never committed) ---
 GITHUB_PAT_READ=                            # fine-grained, read-only, this repo only

@@ -30,20 +30,17 @@ export class ChatController {
   async chat(
     @Req() req: AuthRequest,
     @Res() res: Response,
-    @Body() body: Partial<Omit<ChatRequest, 'user'>> | undefined,
+    @Body() body: Partial<ChatRequest> | undefined,
   ): Promise<void> {
     this.throttle.check(req.user.sub);
     const abort = new AbortController();
     res.on('close', () => abort.abort());
     const upstream = await this.ai
       .chat(
-        {
-          messages: body?.messages ?? [],
-          domains: body?.domains,
-          user: { sub: req.user.sub, roles: req.user.roles },
-        },
+        { messages: body?.messages ?? [], domains: body?.domains },
         req.id as string,
         abort.signal,
+        req.accessToken,
       )
       .catch((error: unknown) => {
         if (abort.signal.aborted) return undefined; // the client left before the first event
@@ -62,6 +59,6 @@ export class ChatController {
   @Post('search')
   @HttpCode(200)
   search(@Req() req: AuthRequest, @Body() body: SearchRequest): Promise<SearchResponse> {
-    return this.ai.search(body, req.id as string);
+    return this.ai.search(body, req.id as string, req.accessToken);
   }
 }

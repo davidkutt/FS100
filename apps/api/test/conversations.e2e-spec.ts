@@ -103,13 +103,12 @@ describe('Conversations (e2e)', () => {
     expect(await res.text()).toBe(EVENTS.join(''));
     expect(upstream.received.at(-1)).toMatchObject({
       url: '/v1/agent',
-      headers: { authorization: 'Bearer svc-token' },
+      headers: { authorization: 'Bearer user-token:turn' },
       body: {
         conversation_id: id,
         messages: [{ role: 'user', parts: [{ type: 'text', text: 'How do I roll back?' }] }],
         model: 'openai/gpt-6-luna',
         domains: ['devops'],
-        user: { sub: 'turn', roles: ['viewer'] },
       },
     });
     const conversation = await detail(id, 'turn');

@@ -100,6 +100,22 @@ export interface paths {
         patch: operations["DocumentsController_relabel"];
         trace?: never;
     };
+    "/internal/documents/from-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["InternalDocumentsController_fromUrl"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/models": {
         parameters: {
             query?: never;
@@ -352,6 +368,15 @@ export interface components {
         DocumentLabels: {
             domains?: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[];
             topics?: string[];
+        };
+        DocumentFromUrl: {
+            /** Format: uri */
+            url: string;
+            domains: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[];
+            onBehalfOf: {
+                sub: string;
+                name: string;
+            };
         };
         Taxonomy: {
             version: number;
@@ -661,6 +686,34 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Document"];
+                };
+            };
+        };
+    };
+    InternalDocumentsController_fromUrl: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DocumentFromUrl"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** Format: uuid */
+                        id: string;
+                        /** @enum {string} */
+                        status: "pending";
+                    };
                 };
             };
         };

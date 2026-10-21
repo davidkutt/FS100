@@ -94,7 +94,7 @@ Ports are fixed and identical in Mode A and Mode B (plan.md §5). Everything bin
 |---|---|---|
 | Web (Angular) | http://localhost:4200 | seed users below (Keycloak login, PKCE) |
 | API (NestJS) | http://localhost:3000/healthz · `/readyz` · `/api/*` needs a user token (`/api/me`, `/api/documents`, `/api/conversations`, `/api/approvals`, `/api/models`, `/api/taxonomy`, `/api/chat`, `/api/search`, admin: `/api/status`, `/api/admin/audit`) | — |
-| AI service (FastAPI) | http://localhost:8000 · `/healthz`, `/readyz` · Swagger UI: http://localhost:8000/docs · `/v1/*` needs the API's service token | — |
+| AI service (FastAPI) | http://localhost:8000 · `/healthz`, `/readyz` · Swagger UI: http://localhost:8000/docs · `/v1/*` needs a token with `aud=kb-ai` (a user's, exchanged by the API, or the API's service token) · MCP server: http://localhost:8000/mcp (token with `aud=http://localhost:8000/mcp`, scope `kb:read`), metadata at `/.well-known/oauth-protected-resource/mcp` | — |
 | Keycloak admin console | http://localhost:8080/admin/ | `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD` from the first start (default `admin` / `dev-only-change-me`) |
 | Keycloak account console (realm `kb`) | http://localhost:8080/realms/kb/account | seed users below |
 | Qdrant dashboard | http://localhost:6333/dashboard | — |
@@ -114,15 +114,19 @@ dev only:
 | `bob` | `bob` | editor → viewer |
 | `carol` | `carol` | viewer |
 
-**New users.** Click **Register** on the app's login page: the account gets the role `viewer`. To create
-users or change roles as the Keycloak admin: http://localhost:8080/admin/ → realm selector **kb** →
+**New users.** Self-registration is off (D44: tools spend tokens). To allow it for a demo: admin console →
+realm **kb** → **Realm settings** → **Login** → *User registration* on; new accounts get the role `viewer`. To
+create users or change roles as the Keycloak admin: http://localhost:8080/admin/ → realm selector **kb** →
 **Users** → *Create new user* (then the **Credentials** tab → *Set password*, *Temporary* off) or open a user
 → **Role mapping** → *Assign role* → filter *Realm roles* → `editor` / `admin`. Role changes apply at the
 next token refresh (≤ 5 min) or after logging out and in.
 
-**Clients:** `kb-web` (public, PKCE S256, redirect `http://localhost:4200/*`, access tokens carry
-`aud=kb-api`), `kb-api` (confidential, secret `dev-only-change-me`, service account with `aud=kb-ai`),
-`kb-ai` (audience only, no flows).
+**Clients** (token flow: ADR-0009): `kb-web` (public, PKCE S256, redirect `http://localhost:4200/*`, access
+tokens carry `aud=kb-api`), `kb-api` (confidential, secret `dev-only-change-me`; exchanges user tokens for
+`aud=kb-ai` and has a service account with `aud=kb-ai` for system calls), `kb-ai` (confidential, secret
+`dev-only-change-me`; exchanges those tokens for the MCP server via the optional client scopes `kb:read` /
+`kb:write`, whose audience mapper adds `http://localhost:8000/mcp`; its service account holds the `kb-api` client
+role `ingest-on-behalf` for `/internal/documents/from-url`).
 
 ## 4. Check that everything works
 
@@ -142,10 +146,17 @@ curl -s localhost:6333/readyz                   # all shards are ready
 curl -s -d grant_type=client_credentials -d client_id=kb-api -d client_secret=dev-only-change-me \
   http://localhost:8080/realms/kb/protocol/openid-connect/token
 
-# AI service: /v1/* accepts only that service token (a user token for kb-api gets 401).
+# AI service: /v1/* accepts only tokens for aud=kb-ai (a user token for kb-api gets 401).
 TOKEN=$(curl -s -d grant_type=client_credentials -d client_id=kb-api -d client_secret=dev-only-change-me \
   http://localhost:8080/realms/kb/protocol/openid-connect/token | sed -E 's/.*"access_token":"([^"]+)".*/\1/')
 curl -s localhost:8000/v1/status -H "Authorization: Bearer $TOKEN"   # {"status":"ok"} + a "status" span in Phoenix
+
+# Chat and agent turns act as a user: log in as bob (scripted PKCE login), exchange like the API does (hop 1).
+BOB=$(.claude/skills/user-token/login.sh bob)
+X=urn:ietf:params:oauth:grant-type:token-exchange; AT=urn:ietf:params:oauth:token-type:access_token
+USER_TOKEN=$(curl -s -d grant_type=$X -d client_id=kb-api -d client_secret=dev-only-change-me \
+  -d subject_token=$BOB -d subject_token_type=$AT -d audience=kb-ai \
+  http://localhost:8080/realms/kb/protocol/openid-connect/token | sed -E 's/.*"access_token":"([^"]+)".*/\1/')
 
 # AI service: ingest a document, search it, delete it (spans ingest/parse/chunk/embed/upsert/search in Phoenix)
 DOC=$(uuidgen | tr A-Z a-z)
@@ -153,13 +164,25 @@ curl -s localhost:8000/v1/ingest -H "Authorization: Bearer $TOKEN" -F file=@data
   -F doc_id=$DOC -F owner_id=dev -F domains=sre        # {"doc_id":…,"chunk_count":3,"page_count":3,…}
 curl -s localhost:8000/v1/search -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"query":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?","top_k":3}'   # hits with page numbers
-curl -N localhost:8000/v1/chat -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-  -d '{"messages":[{"role":"user","content":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?"}],"user":{"sub":"dev","roles":["viewer"]}}'
+curl -N localhost:8000/v1/chat -H "Authorization: Bearer $USER_TOKEN" -H 'content-type: application/json' \
+  -d '{"messages":[{"role":"user","content":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?"}]}'
   # streams event: sources → token … → done; Phoenix shows chat → search → embed and the LLM span (prompt, tokens)
-curl -N localhost:8000/v1/agent -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-  -d '{"conversation_id":"'$(uuidgen)'","messages":[{"role":"user","parts":[{"type":"text","text":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?"}]}],"user":{"sub":"dev","roles":["viewer"]}}'
+curl -N localhost:8000/v1/agent -H "Authorization: Bearer $USER_TOKEN" -H 'content-type: application/json' \
+  -d '{"conversation_id":"'$(uuidgen)'","messages":[{"role":"user","parts":[{"type":"text","text":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?"}]}]}'
   # streams step → tool_call → tool_result → sources → step → token … → done (stopReason, answerStatus);
-  # Phoenix shows agent.run → llm / tool spans. Add "mode":"rag" for the Phase 1 pipeline with the same done event
+  # Phoenix shows one trace: agent.run → llm / tool → MCP send tools/call → tools/call → search → embed.
+  # Add "mode":"rag" for the Phase 1 pipeline with the same done event
+
+# Own MCP server: 401 with a challenge without a token; the agent's hop-2 token (as kb-ai) lists the tools.
+curl -si -X POST localhost:8000/mcp | grep -i www-authenticate   # … resource_metadata="…/.well-known/oauth-protected-resource/mcp"
+curl -s localhost:8000/.well-known/oauth-protected-resource/mcp  # resource, authorization_servers, scopes_supported
+MCP_TOKEN=$(curl -s -d grant_type=$X -d client_id=kb-ai -d client_secret=dev-only-change-me \
+  -d subject_token=$USER_TOKEN -d subject_token_type=$AT -d scope=kb:read \
+  http://localhost:8080/realms/kb/protocol/openid-connect/token | sed -E 's/.*"access_token":"([^"]+)".*/\1/')
+curl -s localhost:8000/mcp -H "Authorization: Bearer $MCP_TOKEN" -H 'content-type: application/json' \
+  -H 'accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+  # search_knowledge_base, get_document, list_sources, ingest_url. MCP Inspector (npx @modelcontextprotocol/inspector):
+  # transport Streamable HTTP, URL http://localhost:8000/mcp, Authentication → Bearer token = $MCP_TOKEN (5 min)
 curl -s -o /dev/null -w '%{http_code}\n' -X DELETE localhost:8000/v1/documents/$DOC -H "Authorization: Bearer $TOKEN"  # 204
 
 # Postgres: both databases exist
@@ -247,7 +270,8 @@ before the next `pnpm stack:up` (otherwise Keycloak can no longer connect to Pos
 ### Changing the Keycloak realm
 
 Keycloak imports `infra/keycloak/realm-kb.json` **only if the realm does not exist yet**. After editing the
-file, recreate the Keycloak state:
+file — or pulling a change to it, e.g. M2.4 (client `kb-ai` with secret and token exchange, scopes `kb:read` /
+`kb:write`, role `ingest-on-behalf`, self-registration off) — recreate the Keycloak state:
 
 ```bash
 pnpm stack:reset && pnpm stack:up     # wipes ALL local data (also Qdrant and Phoenix)
@@ -287,6 +311,9 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | `POST /api/documents` → 409 for a file that failed | Dedupe is by content (SHA-256), failed rows included: delete the failed document, then upload again |
 | `pnpm dev`: `[ai]` exits on startup with a Qdrant connection error | The AI service needs Qdrant at startup: `pnpm stack:up` first |
 | `[ai]` exits: `LLM_PROVIDER=openai_compat needs LLM_API_KEY and LLM_MODEL` | Set both in `.env` (OpenRouter key with a credit limit, model from [ADR-0005](../adr/0005-llm-access-and-model.md)), or `LLM_PROVIDER=fake` |
+| Chat and agent turns fail with 502 `Keycloak token endpoint: HTTP 400` | The realm predates M2.4 (no token exchange on `kb-api`): `pnpm stack:reset && pnpm stack:up` (wipes all local data), see §7 |
+| Agent `tool_result` errors `Keycloak token endpoint: HTTP 401` | `AI_KEYCLOAK_CLIENT_SECRET` is missing in `.env` or differs from the realm's `kb-ai` secret (`.env.example`) |
+| `kb.ingest_url` fails with `Host … is not allowed` | Only hosts in `INGEST_URL_ALLOWED_HOSTS` are fetched, and only PDF, Markdown or text files (HTML pages get 415) |
 | Chat ends with `event: error`, `LLM request failed` | `detail` carries the provider's answer: 401 wrong key, 402 credits used up, 429 rate limit after retries — see `data/sample-docs/runbook-llm-provider-outage.md` |
 | `[ai]` takes minutes to start, `/readyz` returns 503 | First start downloads the embedding model; watch the `[ai]` progress output. Changing `EMBEDDING_MODEL` downloads another one and starts with an empty collection (re-ingest) |
 | `pnpm stack:up:full`: `port is already allocated` on 3000/4200/8000 | `pnpm dev` (or one native app) still runs — stop it; both modes use the same ports |
@@ -306,4 +333,6 @@ is postponed while the project runs locally. Phase 2 ([plan-phase-2.md](../../pl
 (pins, spikes, identities), **M2.1** (agent harness, `POST /v1/agent` in the AI service), **M2.2**
 (stored conversations, the agent chat UI with tool timeline and model picker, `config/taxonomy.yaml` with
 document sub-topics) and **M2.3** (approvals for write tools, audit log, admin audit page at
-http://localhost:4200/admin/audit) are done; next is M2.4 (own MCP server, token exchange).
+http://localhost:4200/admin/audit) and **M2.4** (own MCP server at http://localhost:8000/mcp, Keycloak token
+exchange on both internal hops, `kb.ingest_url`) are done; next is M2.5 (GitHub MCP server, sandbox write,
+routing).

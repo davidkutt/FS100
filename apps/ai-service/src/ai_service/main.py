@@ -17,8 +17,11 @@ from ai_service.core.tracing import setup_tracing
 from ai_service.embeddings import Embedder
 from ai_service.knowledge_base import KnowledgeBase
 from ai_service.llm import create_provider
+from ai_service.mcp_client import McpClient
+from ai_service.mcp_server import create_mcp
 from ai_service.rag import ChatPipeline
-from ai_service.tools import kb_search
+from ai_service.tokens import Tokens
+from ai_service.tools import kb_tools
 
 
 class ServiceInfo(BaseModel):
@@ -31,6 +34,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     setup_logging()
     setup_tracing(settings)
+    tokens = Tokens(settings)
+    mcp = create_mcp(settings, lambda: app.state.kb, tokens)
+    mcp_app = mcp.streamable_http_app(stateless_http=True, json_response=True)
+    kb_client = McpClient(settings.mcp_resource_url, tokens)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
@@ -44,15 +51,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         kb.ensure_collection()
         llm = create_provider(settings)
-        top_k, threshold = settings.retrieval_top_k, settings.retrieval_score_threshold
         app.state.kb = kb
         app.state.models = load_models(settings.models_config)
         app.state.taxonomy = load_taxonomy(settings.taxonomy_config)
-        app.state.chat = ChatPipeline(kb, llm, top_k, threshold)
-        app.state.agent = Agent(
-            llm, settings, lambda domains: [kb_search(kb, top_k, threshold, domains)]
+        app.state.chat = ChatPipeline(
+            kb, llm, settings.retrieval_top_k, settings.retrieval_score_threshold
         )
-        yield
+        app.state.agent = Agent(
+            llm, settings, lambda domains, caller: kb_tools(kb_client, caller, domains)
+        )
+        # Starlette does not run a mounted app's lifespan.
+        async with mcp.session_manager.run():
+            yield
 
     app = FastAPI(title="FS100 AI service", version=__version__, lifespan=lifespan)
     app.include_router(health.router)
@@ -79,6 +89,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def info() -> ServiceInfo:  # pyright: ignore[reportUnusedFunction]
         return ServiceInfo(service=settings.otel_service_name, version=__version__, docs="/docs")
 
+    # Last, so `/mcp` and its RFC 9728 metadata sit at the root behind every FastAPI route.
+    app.mount("/", mcp_app)
     return app
 
 

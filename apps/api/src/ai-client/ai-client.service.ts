@@ -18,10 +18,14 @@ export type IngestResult = Schemas['IngestResult'];
 export type ServiceStatus = Schemas['ServiceStatus'];
 export type Domain = NonNullable<SearchRequest['domains']>[number];
 
-/** Calls the internal AI service with the API's client-credentials token (`aud=kb-ai`, D5). */
+/**
+ * Calls the internal AI service (`aud=kb-ai`): as the user through standard token exchange (hop 1,
+ * ADR-0009), or as the API's service account (client credentials) for system calls.
+ */
 @Injectable()
 export class AiClient {
-  private token?: { value: string; expiresAt: number };
+  // By subject token; '' is the service account.
+  private readonly tokens = new Map<string, { value: string; expiresAt: number }>();
 
   constructor(@Inject(CONFIG) private readonly config: Config) {}
 
@@ -30,13 +34,18 @@ export class AiClient {
     return (await res.json()) as T;
   }
 
-  async search(body: SearchRequest, requestId: string): Promise<SearchResponse> {
-    const res = await this.request('/v1/search', requestId, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: AbortSignal.timeout(30_000),
-    });
+  async search(body: SearchRequest, requestId: string, userToken: string): Promise<SearchResponse> {
+    const res = await this.request(
+      '/v1/search',
+      requestId,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30_000),
+      },
+      userToken,
+    );
     return (await res.json()) as SearchResponse;
   }
 
@@ -67,23 +76,48 @@ export class AiClient {
   }
 
   /** Opens the SSE stream; aborting `signal` closes the connection, which cancels the LLM call. */
-  chat(body: ChatRequest, requestId: string, signal: AbortSignal): Promise<Response> {
-    return this.request('/v1/chat', requestId, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      signal,
-    });
+  chat(
+    body: ChatRequest,
+    requestId: string,
+    signal: AbortSignal,
+    userToken: string,
+  ): Promise<Response> {
+    return this.request(
+      '/v1/chat',
+      requestId,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+      },
+      userToken,
+    );
   }
 
-  /** SSE v2 (plan-phase-2 §7.3); aborting `signal` cancels the run like `chat`. */
-  agent(body: AgentRequest, requestId: string, signal: AbortSignal): Promise<Response> {
-    return this.request('/v1/agent', requestId, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(body),
-      signal,
-    });
+  /**
+   * SSE v2 (plan-phase-2 §7.3); aborting `signal` cancels the run like `chat`. A resume exchanges
+   * afresh, so the AI service sees the user's roles as they are now (D28).
+   */
+  agent(
+    body: AgentRequest,
+    requestId: string,
+    signal: AbortSignal,
+    userToken: string,
+    fresh = false,
+  ): Promise<Response> {
+    return this.request(
+      '/v1/agent',
+      requestId,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+      },
+      userToken,
+      fresh,
+    );
   }
 
   /** Non-2xx: client errors keep their status and detail, everything else becomes a 502/504. */
@@ -91,12 +125,14 @@ export class AiClient {
     path: string,
     requestId: string,
     init: Omit<RequestInit, 'headers'> & { headers?: Record<string, string> },
+    userToken?: string,
+    fresh = false,
   ): Promise<Response> {
     const res = await fetch(new URL(path, this.config.AI_SERVICE_URL), {
       ...init,
       headers: {
         ...init.headers,
-        authorization: `Bearer ${await this.serviceToken()}`,
+        authorization: `Bearer ${await this.token(userToken, fresh)}`,
         'x-request-id': requestId,
       },
     }).catch((error: unknown) => {
@@ -112,26 +148,40 @@ export class AiClient {
     throw new BadGatewayException(`AI service ${path}: HTTP ${res.status}`);
   }
 
-  private async serviceToken(): Promise<string> {
-    // Renew 30 s early so a token never expires in flight.
-    if (this.token && this.token.expiresAt - 30_000 > Date.now()) return this.token.value;
+  /** The user's token exchanged for `aud=kb-ai`, or the service account's; both cached. */
+  private async token(subject = '', fresh = false): Promise<string> {
+    // Renew 150 s early: the AI service exchanges the token again during a run (≤ 120 s, ADR-0007).
+    const valid = (token?: { expiresAt: number }) =>
+      !!token && token.expiresAt - 150_000 > Date.now();
+    const cached = this.tokens.get(subject);
+    if (!fresh && valid(cached)) return cached!.value;
 
+    const grant: Record<string, string> = subject
+      ? {
+          grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+          subject_token: subject,
+          subject_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+          audience: this.config.AI_SERVICE_AUDIENCE,
+        }
+      : { grant_type: 'client_credentials' };
     const realm = this.config.KEYCLOAK_REALM_URL ?? this.config.KEYCLOAK_ISSUER;
     const res = await fetch(`${realm}/protocol/openid-connect/token`, {
       method: 'POST',
       body: new URLSearchParams({
-        grant_type: 'client_credentials',
+        ...grant,
         client_id: this.config.KEYCLOAK_CLIENT_ID,
         client_secret: this.config.KEYCLOAK_CLIENT_SECRET,
       }),
       signal: AbortSignal.timeout(5_000),
     });
-    if (!res.ok) throw new Error(`Keycloak token endpoint: HTTP ${res.status}`);
+    if (!res.ok) throw new BadGatewayException(`Keycloak token endpoint: HTTP ${res.status}`);
     const { access_token, expires_in } = (await res.json()) as {
       access_token: string;
       expires_in: number;
     };
-    this.token = { value: access_token, expiresAt: Date.now() + expires_in * 1000 };
+    // Expired entries go on every fetch, so the map holds about one entry per active user.
+    for (const [key, token] of this.tokens) if (!valid(token)) this.tokens.delete(key);
+    this.tokens.set(subject, { value: access_token, expiresAt: Date.now() + expires_in * 1000 });
     return access_token;
   }
 }
