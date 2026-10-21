@@ -22,12 +22,14 @@ export class ProblemFilter implements ExceptionFilter {
     if (res.headersSent) return void res.end();
 
     const body = known ? exception.getResponse() : undefined;
-    const message = typeof body === 'object' ? (body as { message?: unknown }).message : body;
+    // `new ConflictException({ type, message })` names a problem type (plan-phase-2 §7.2).
+    const { message, type } =
+      typeof body === 'object' ? (body as { message?: unknown; type?: string }) : { message: body };
     res
       .status(status)
       .type('application/problem+json')
       .json({
-        type: 'about:blank',
+        type: type ?? 'about:blank',
         title: STATUS_CODES[status],
         status,
         // Unknown errors may carry internals; their details stay in the log.

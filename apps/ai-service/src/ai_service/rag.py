@@ -163,7 +163,11 @@ class ChatPipeline:
         self.score_threshold = score_threshold
 
     async def stream(
-        self, turns: list[ChatTurn], domains: list[Domain] | None, user_id: str
+        self,
+        turns: list[ChatTurn],
+        domains: list[Domain] | None,
+        user_id: str,
+        model_id: str | None = None,
     ) -> AsyncGenerator[ServerSentEvent]:
         question = turns[-1].content
         attributes = {SPAN_KIND: "CHAIN", "input.value": question, "user.id": user_id}
@@ -179,7 +183,8 @@ class ChatPipeline:
                 ]
                 yield ServerSentEvent(event="sources", data=SourcesEvent(sources=sources))
                 # aclosing: a client disconnect closes the provider stream, cancelling the LLM call.
-                async with aclosing(self.llm.stream_chat(build_messages(turns, hits))) as events:
+                messages = build_messages(turns, hits)
+                async with aclosing(self.llm.stream_chat(messages, model=model_id)) as events:
                     async for event in events:
                         match event:
                             case Token(text=text):

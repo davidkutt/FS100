@@ -15,5 +15,6 @@ export class App {
     { path: '/chat', label: 'Chat' },
     { path: '/documents', label: 'Documents' },
     { path: '/inspector', label: 'Inspector' },
+    ...(this.keycloak.hasRealmRole('admin') ? [{ path: '/admin/audit', label: 'Audit log' }] : []),
   ];
 }

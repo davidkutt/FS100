@@ -15,9 +15,10 @@ COPY apps/api apps/api
 RUN pnpm --filter @fs100/api build && pnpm --filter @fs100/api deploy --prod /out
 
 FROM node:24.22.0-trixie-slim
-ENV NODE_ENV=production
+ENV NODE_ENV=production TAXONOMY_CONFIG=/app/config/taxonomy.yaml
 WORKDIR /app
 COPY --from=build /out .
+COPY config/taxonomy.yaml config/
 USER node
 EXPOSE 3000
 HEALTHCHECK --interval=10s --timeout=3s --start-period=20s --retries=3 \

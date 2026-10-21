@@ -15,8 +15,10 @@ import {
 import { desc, eq, inArray } from 'drizzle-orm';
 import { AiClient, type Domain } from '../ai-client/ai-client.service.js';
 import type { AuthUser } from '../auth/auth.guard.js';
+import { TAXONOMY, type Taxonomy, unknownTopics } from '../catalog/taxonomy.js';
 import { DB, type Db } from '../db/db.module.js';
-import { type Document, documents } from '../db/schema.js';
+import { auditLog, type Document, documents } from '../db/schema.js';
+import type { LabelsBody } from './documents.controller.js';
 
 export interface Upload {
   originalname: string;
@@ -39,6 +41,7 @@ export class DocumentsService implements OnApplicationBootstrap {
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly ai: AiClient,
+    @Inject(TAXONOMY) private readonly taxonomy: Taxonomy,
   ) {}
 
   /** Originals are not kept (D7), so an ingest cut off by a restart cannot resume. */
@@ -60,9 +63,11 @@ export class DocumentsService implements OnApplicationBootstrap {
     user: AuthUser,
     file: Upload | undefined,
     domains: Domain[],
+    topics: string[],
     requestId: string,
   ): Promise<{ id: string }> {
     if (!file?.size) throw new BadRequestException('A non-empty `file` is required');
+    this.checkTopics(topics);
     const mime = MIME_BY_EXTENSION[extname(file.originalname).toLowerCase()];
     if (!mime || !hasExpectedContent(mime, file.buffer)) {
       throw new UnsupportedMediaTypeException(
@@ -81,6 +86,7 @@ export class DocumentsService implements OnApplicationBootstrap {
         sizeBytes: file.size,
         sha256,
         domains,
+        topics,
         status: 'pending',
       })
       .onConflictDoNothing({ target: documents.sha256 })
@@ -100,21 +106,55 @@ export class DocumentsService implements OnApplicationBootstrap {
     return { id: doc.id };
   }
 
+  async relabel(
+    user: AuthUser,
+    id: string,
+    labels: LabelsBody,
+    requestId: string,
+  ): Promise<Document> {
+    this.checkTopics(labels.topics ?? []);
+    await this.settled(user, id, 'change');
+    // Vectors first, like delete: if that fails, the row keeps the labels Qdrant still has.
+    await this.ai.updateLabels(id, labels, requestId);
+    return this.db.transaction(async (tx) => {
+      const [doc] = await tx.update(documents).set(labels).where(eq(documents.id, id)).returning();
+      await tx.insert(auditLog).values({
+        actorId: user.sub,
+        actorRoles: user.roles,
+        tool: 'documents.relabel',
+        kind: 'write',
+        argsRedacted: { docId: id, ...labels },
+        outcome: 'ok',
+      });
+      return doc;
+    });
+  }
+
   async remove(user: AuthUser, id: string, requestId: string): Promise<void> {
+    await this.settled(user, id, 'delete');
+    // Vectors first: if that fails, the row stays and the delete can be retried.
+    await this.ai.deleteDocument(id, requestId);
+    await this.db.delete(documents).where(eq(documents.id, id));
+  }
+
+  /** The caller's own (or, for admins, any) document whose ingest has finished. */
+  private async settled(user: AuthUser, id: string, action: string): Promise<void> {
     const [doc] = await this.db.select().from(documents).where(eq(documents.id, id));
     if (!doc) throw new NotFoundException(`Document ${id} not found`);
     if (doc.ownerId !== user.sub && !user.roles.includes('admin')) {
-      throw new ForbiddenException('Editors can only delete their own documents');
+      throw new ForbiddenException(`Editors can only ${action} their own documents`);
     }
-    // A running ingest would upsert its vectors after the delete.
+    // A running ingest would upsert its vectors (and old labels) afterwards.
     if (doc.status === 'pending' || doc.status === 'processing') {
       throw new ConflictException(
         'The document is still being ingested; try again when it is done',
       );
     }
-    // Vectors first: if that fails, the row stays and the delete can be retried.
-    await this.ai.deleteDocument(id, requestId);
-    await this.db.delete(documents).where(eq(documents.id, id));
+  }
+
+  private checkTopics(topics: string[]): void {
+    const unknown = unknownTopics(this.taxonomy, topics);
+    if (unknown.length) throw new BadRequestException(`Unknown topics: ${unknown.join(', ')}`);
   }
 
   private async ingest(doc: Document, data: Buffer, requestId: string): Promise<void> {
@@ -125,6 +165,7 @@ export class DocumentsService implements OnApplicationBootstrap {
       form.set('doc_id', doc.id);
       form.set('owner_id', doc.ownerId);
       for (const domain of doc.domains) form.append('domains', domain);
+      for (const topic of doc.topics) form.append('topics', topic);
       const result = await this.ai.ingest(form, requestId);
       await this.db
         .update(documents)

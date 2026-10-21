@@ -2,15 +2,17 @@
 
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import jwt
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from ai_service import embeddings
 from ai_service.core.settings import Settings
+from ai_service.knowledge_base import KnowledgeBase
 from ai_service.main import create_app
 from support import FakeTextEmbedding, fetch_jwks, token
 
@@ -28,13 +30,33 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
 
 
 def ingest(
-    client: TestClient, filename: str, data: bytes, domains: list[str], doc_id: str | None = None
+    client: TestClient,
+    filename: str,
+    data: bytes,
+    domains: list[str],
+    doc_id: str | None = None,
+    topics: list[str] | None = None,
 ) -> Any:
     return client.post(
         "/v1/ingest",
         files={"file": (filename, data)},
-        data={"doc_id": doc_id or str(uuid4()), "owner_id": "bob", "domains": domains},
+        data={
+            "doc_id": doc_id or str(uuid4()),
+            "owner_id": "bob",
+            "domains": domains,
+            "topics": topics or [],
+        },
     )
+
+
+def kb_of(client: TestClient) -> KnowledgeBase:
+    return cast(FastAPI, client.app).state.kb
+
+
+def payloads(client: TestClient, doc_id: str) -> list[dict[str, Any]]:
+    kb = kb_of(client)
+    points, _ = kb.client.scroll(kb.alias, with_payload=True)
+    return [p.payload or {} for p in points if (p.payload or {})["doc_id"] == doc_id]
 
 
 def search(client: TestClient, query: str, **options: Any) -> list[dict[str, Any]]:
@@ -100,6 +122,34 @@ def test_ingest_rejects_bad_documents(
     client: TestClient, filename: str, data: bytes, domains: list[str], status: int
 ) -> None:
     assert ingest(client, filename, data, domains).status_code == status
+
+
+def test_labels_change_without_re_embedding(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    doc_id = str(uuid4())
+    ingest(client, "two-pages.pdf", PDF, ["sre"], doc_id, ["cloud/cost"])
+    monkeypatch.setattr(kb_of(client).embedder, "embed_passages", pytest.fail)
+
+    labels = {"domains": ["devops"], "topics": ["devops/deployment", "devops/ci-cd"]}
+    response = client.patch(f"/v1/documents/{doc_id}/labels", json=labels)
+
+    assert response.status_code == 204
+    assert [(p["domains"], p["topics"]) for p in payloads(client, doc_id)] == [
+        (labels["domains"], labels["topics"])
+    ] * 2
+    assert search(client, "page", domains=["sre"]) == []
+    assert len(search(client, "page", domains=["devops"])) == 2
+
+
+def test_only_taxonomy_topics_are_accepted(client: TestClient) -> None:
+    doc_id = str(uuid4())
+
+    ingested = ingest(client, "runbook.md", MARKDOWN, ["devops"], doc_id, ["devops/nope"])
+    patched = client.patch(f"/v1/documents/{doc_id}/labels", json={"topics": ["sre/oncall"]})
+
+    assert (ingested.status_code, patched.status_code) == (422, 422)
+    assert "devops/nope" in ingested.json()["detail"]
 
 
 def test_v1_routes_need_the_service_token(client: TestClient) -> None:

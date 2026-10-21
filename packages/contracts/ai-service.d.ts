@@ -104,6 +104,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/documents/{doc_id}/labels": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update Labels
+         * @description Change `domains` / `topics` of all chunks of a document without re-embedding (D48).
+         */
+        patch: operations["update_labels_v1_documents__doc_id__labels_patch"];
+        trace?: never;
+    };
     "/v1/documents/{doc_id}": {
         parameters: {
             query?: never;
@@ -153,9 +173,50 @@ export interface paths {
         /**
          * Agent
          * @description Agent turn, SSE v2: `step`, `tool_call`, `tool_result`, `sources`, `token`…, `done`
-         *     (plan-phase-2 §7.3). `mode=rag` runs the Phase 1 pipeline and ends with the same `done`.
+         *     (plan-phase-2 §7.3); a write call ends it with `approval_required`, and `resume` continues
+         *     it. `mode=rag` runs the Phase 1 pipeline and ends with the same `done`.
          */
         post: operations["agent_v1_agent_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Models
+         * @description The model registry (D40); the API filters it by the caller's role.
+         */
+        get: operations["models_v1_models_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Tools
+         * @description The tool registry (D30); the API filters it by the caller's role.
+         */
+        get: operations["tools_v1_tools_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -208,9 +269,12 @@ export interface components {
              * @enum {string}
              */
             mode?: "agent" | "rag";
+            /** Model */
+            model?: string | null;
             /** Domains */
             domains?: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[] | null;
             user: components["schemas"]["UserContext"];
+            resume?: components["schemas"]["Resume"] | null;
         };
         /** Body_ingest_v1_ingest_post */
         Body_ingest_v1_ingest_post: {
@@ -225,6 +289,8 @@ export interface components {
             owner_id: string;
             /** Domains */
             domains: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[];
+            /** Topics */
+            topics?: string[] | null;
             /** Title */
             title?: string | null;
         };
@@ -297,6 +363,54 @@ export interface components {
             /** Embedding Model */
             embedding_model: string;
         };
+        /** Labels */
+        Labels: {
+            /** Domains */
+            domains?: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[] | null;
+            /** Topics */
+            topics?: string[] | null;
+        };
+        /**
+         * ModelInfo
+         * @description One `config/models.yaml` entry (D40); `id` is the model id at LLM_BASE_URL.
+         */
+        ModelInfo: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /** Supports Tools */
+            supports_tools: boolean;
+            /**
+             * Tier
+             * @enum {string}
+             */
+            tier: "low" | "medium" | "high";
+            /**
+             * Min Role
+             * @enum {string}
+             */
+            min_role: "viewer" | "editor" | "admin";
+        };
+        /**
+         * Resume
+         * @description The user's decision on an `approval_required` action (D28).
+         */
+        Resume: {
+            /** Signed Action */
+            signed_action: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+            /** Note */
+            note?: string | null;
+            /** Args */
+            args: {
+                [key: string]: unknown;
+            };
+        };
         /** SearchRequest */
         SearchRequest: {
             /** Query */
@@ -351,6 +465,28 @@ export interface components {
             type: "text";
             /** Text */
             text: string;
+        };
+        /** ToolInfo */
+        ToolInfo: {
+            /** Name */
+            name: string;
+            /** Description */
+            description: string;
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "read" | "write";
+            /**
+             * Risk
+             * @enum {string}
+             */
+            risk: "low" | "medium" | "high";
+            /**
+             * Min Role
+             * @enum {string}
+             */
+            min_role: "viewer" | "editor" | "admin";
         };
         /** UserContext */
         UserContext: {
@@ -414,6 +550,34 @@ export interface components {
             steps: number;
             /** Toolcalls */
             toolCalls: number;
+        };
+        /** ApprovalRequiredEvent */
+        ApprovalRequiredEvent: {
+            /**
+             * Approvalid
+             * Format: uuid
+             */
+            approvalId: string;
+            /** Callid */
+            callId: string;
+            /** Tool */
+            tool: string;
+            /** Args */
+            args: {
+                [key: string]: unknown;
+            };
+            /**
+             * Risk
+             * @enum {string}
+             */
+            risk: "low" | "medium" | "high";
+            /**
+             * Expiresat
+             * Format: date-time
+             */
+            expiresAt: string;
+            /** Signedaction */
+            signedAction: string;
         };
         /** DoneEvent */
         DoneEvent: {
@@ -496,7 +660,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "ok" | "error" | "denied";
+            status: "ok" | "error" | "denied" | "rejected";
             /** Summary */
             summary: string;
             /** Content */
@@ -650,6 +814,39 @@ export interface operations {
             };
         };
     };
+    update_labels_v1_documents__doc_id__labels_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                doc_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Labels"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     delete_document_v1_documents__doc_id__delete: {
         parameters: {
             query?: never;
@@ -741,6 +938,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    models_v1_models_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModelInfo"][];
+                };
+            };
+        };
+    };
+    tools_v1_tools_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolInfo"][];
                 };
             };
         };

@@ -162,7 +162,7 @@ Numbering continues from `plan.md`. Status: **N** = new in Phase 2 · **C** = ch
 - ~~From Phase 1~~: RAM 16 GB · token cap 20 USD/month (OpenRouter key limit) · project name FS100 for now.
 - ~~Sandbox repo name~~: `davidkutt/fs-100-sandbox` (private). GitHub allow-list: candidates from the pinned `tools/list` in ADR-0010, final in M2.5.
 - Dev model for agent mode → `gpt-6-luna` (ADR-0007, proposed; re-checked by the agent eval).
-- Sub-topic list v1 for devops, cloud, security, architecture (M2.2).
+- ~~Sub-topic list v1 for devops, cloud, security, architecture~~: `config/taxonomy.yaml` v1 (M2.2), 5–6 per domain.
 
 ---
 
@@ -503,40 +503,73 @@ delimiter tags only, full HTML → text comes with `web.fetch`. Task set: `evals
 
 ### M2.2 — Conversations, protocol v2, UI, taxonomy (~15 h)
 
-- [ ] Drizzle: `conversations`, `messages` (incl. `answer_status`, `top_score`), `usage`, `feedback`, `documents.topics`
+- [x] Drizzle: `conversations`, `messages` (incl. `answer_status`, `top_score`), `usage`, `feedback`, `documents.topics`
   + migrations
-- [ ] NestJS `ConversationsModule`: CRUD, transcript assembly (last N messages), SSE relay with event tee into the DB,
+- [x] NestJS `ConversationsModule`: CRUD, transcript assembly (last N messages), SSE relay with event tee into the DB,
   abort propagation kept; `/api/tools` and `/api/models` relays
-- [ ] Contracts: SSE v2 JSON Schemas + generated types; drift check covers them
-- [ ] Model registry (`models.yaml`), per-conversation selection, role filter; *(optional)* `local` Ollama entry
-- [ ] `config/taxonomy.yaml` v1 (nine domains with descriptions; sub-topics for devops, cloud, security, architecture),
+- [x] Contracts: SSE v2 JSON Schemas + generated types; drift check covers them
+- [x] Model registry (`models.yaml`), per-conversation selection, role filter; *(optional)* `local` Ollama entry
+- [x] `config/taxonomy.yaml` v1 (nine domains with descriptions; sub-topics for devops, cloud, security, architecture),
   loaded and validated by NestJS and the AI service; `GET /api/taxonomy`
-- [ ] Document labels: optional `topics[]` on upload and via `PATCH /api/documents/:id` → AI service payload update (no
+- [x] Document labels: optional `topics[]` on upload and via `PATCH /api/documents/:id` → AI service payload update (no
   re-embedding); Qdrant `topics` keyword index with prefix matching; sub-topic pick-list in the documents UI
-- [ ] Angular: conversation sidebar; chat with tool-activity timeline (collapsible args/results, durations); route chip;
+- [x] Angular: conversation sidebar; chat with tool-activity timeline (collapsible args/results, durations); route chip;
   model picker; stop button; thumbs up/down with comment; usage widget
-- [ ] Tests: transcript assembly, event tee, SSE parser v2, timeline component, feedback API, taxonomy validation, label
+- [x] Tests: transcript assembly, event tee, SSE parser v2, timeline component, feedback API, taxonomy validation, label
   update without re-embedding
 
 **Acceptance:** conversations survive reloads and restarts; tool activity is visible live; switching the model per
 conversation needs no code change; a document's topics change without re-embedding; every assistant message stores
 `answerStatus`; *(optional)* the same question answered by the local model.
 
+**Done 2026-10-20.** Deviations: `messages.role` is `user`/`assistant` only — tool calls, results, sources and errors
+are `parts` of the assistant message (SSE payloads under their event name, tokens merged into `text`); the transcript
+sent to the model is the last 20 messages as **text only** (tool parts stay in the database, the AI service still
+accepts text parts); the user message is stored only once the AI service accepted the turn, the answer before the
+stream ends; a stopped run has no `done`, so it is stored with `stopReason: cancelled`, no `answerStatus` and no usage
+row. Models: `id` is the model id at `LLM_BASE_URL`, `min_role` instead of a role list, no per-entry base URL (comes
+with the optional `local` entry, not built), `LLM_MODEL` stays the default; a model the role does not reach → 422.
+`/v1/models` and `/v1/tools` list everything with `min_role` and NestJS cuts the lists to the caller's role (a GET
+carries no `user` object before M2.4); tools have no `server` / `domains` / `available` until M2.5. The route chip
+waits for the `route` event (M2.5). The usage widget shows today (UTC) via `GET /api/me/usage`; 30 days, caps and the
+admin page stay in M2.7. Relabelling is not audited yet (`audit_log`, M2.3); no retention job yet. The Phase 1 chat
+page is replaced by the conversation page (`/chat`, `/chat/:id`); `/api/chat` stays for P3. Also restored the eval
+snapshots `data/sample-docs/setup-*.md`, which M2.1 had moved to `docs/setup/` by accident.
+
 ### M2.3 — Approvals, permissions, audit (~11 h)
 
-- [ ] Tables `approvals`, `audit_log` (app DB role without UPDATE/DELETE on `audit_log`)
-- [ ] AI service: write call → `approval_required` with HMAC-signed action (key from env, rotatable); resume verifies
+- [x] Tables `approvals`, `audit_log` (app DB role without UPDATE/DELETE on `audit_log`)
+- [x] AI service: write call → `approval_required` with HMAC-signed action (key from env, rotatable); resume verifies
   signature, `sub`, expiry and args hash; rejection becomes an observation
-- [ ] NestJS: state machine, `POST /api/approvals/:id`, role re-check at approval time, expiry job, `unknown` handling,
+- [x] NestJS: state machine, `POST /api/approvals/:id`, role re-check at approval time, expiry job, `unknown` handling,
   `signedAction` stripped before relay
-- [ ] Audit row for every tool call (read and write) from `tool_result` events: actor, service identity, tool, redacted
+- [x] Audit row for every tool call (read and write) from `tool_result` events: actor, service identity, tool, redacted
   args, outcome, trace id
-- [ ] Angular: approval card (exact args, risk, expiry countdown, approve/reject + note), pending list; admin audit page
-- [ ] Tests: tampered args, replay of an executed action, expired action, approval by another user, role downgrade
+- [x] Angular: approval card (exact args, risk, expiry countdown, approve/reject + note), pending list; admin audit page
+- [x] Tests: tampered args, replay of an executed action, expired action, approval by another user, role downgrade
   between proposal and approval, double click
 
 **Acceptance:** no write tool executes without an `approved` row; every tool call has exactly one audit row; all negative
 tests pass.
+
+**Done 2026-10-20.** Deviations: `audit_log` is append-only through a trigger (UPDATE, DELETE, TRUNCATE raise) instead
+of a separate DB role — the API connects as the database owner, which privileges would not bind; a retention job needs
+its own path (none yet). No timer job: pending approvals past `expires_at` become `expired` whenever approvals are read
+or decided. `approvals` has no `args_sha256` (the AI service owns the hash and checks it) and no `result` (the write's
+`tool_result` is a part of the continuation; `error` holds failures), but `call_id`, `note` and `created_at`; it is
+deleted with its conversation, the audit is not. The signed action is an HS256 JWT over approval id, `sub`,
+conversation, tool, call id, args hash and `exp`; `APPROVAL_SIGNING_KEY` is comma-separated (first signs, all verify),
+unset = write calls fail closed; `APPROVAL_TTL_MIN` lives in the AI service, which signs the expiry. `resume` is
+`{signed_action, decision, note?, args}` (args as shown to the user, snake_case like the other bodies) and is verified
+before the stream (else 422 → approval `failed`); `approval_required` carries `callId`; `tool_result.status` gains
+`rejected`. The resumed turn replays the `tool_call`, re-checks the role, and is stored as a new assistant message; the
+transcript ends at the question (the paused answer is dropped). One write per step (others get an error observation).
+Role re-check uses `min_role` from `/v1/tools`; admins see all approvals but get 404 when deciding others'.
+Audit: one row per `tool_result` plus one for a write settled without a result (`unknown`, or `failed` when refused);
+args redacted by key name and cut to 200 chars; `service_identity` stays null until a tool has one (M2.5); document
+relabelling is audited as `documents.relabel`. No write tool is registered yet (`kb.ingest_url` M2.4,
+`github_sandbox.create_issue` M2.5), so the flow is proven with test tools and a fake AI service; the live demo
+follows with M2.5.
 
 ### M2.4 — Own MCP server + token exchange (~13 h)
 
@@ -729,7 +762,6 @@ contract check, cost caps, gap signals (D49), README.
 DAILY_COST_CAP_USD_VIEWER=0.20
 DAILY_COST_CAP_USD_EDITOR=1.00
 DAILY_COST_CAP_USD_ADMIN=5.00
-APPROVAL_TTL_MIN=15
 CONVERSATION_RETENTION_DAYS=90
 AUDIT_RETENTION_DAYS=365
 TAXONOMY_CONFIG=../../config/taxonomy.yaml  # read by NestJS and the AI service (D48)
@@ -746,7 +778,8 @@ AGENT_TOOL_TIMEOUT_S=20
 AGENT_RUN_TIMEOUT_S=120
 AGENT_RUN_INPUT_TOKEN_BUDGET=60000
 AGENT_RUN_COST_CAP_USD=0.05
-APPROVAL_SIGNING_KEY=dev-only-change-me     # HMAC key for signed actions; rotate by config
+APPROVAL_SIGNING_KEY=dev-only-change-me-approval-signing-key  # HMAC key (≥ 32 chars); rotate: new,old
+APPROVAL_TTL_MIN=15                         # the AI service signs the expiry
 ROUTER=embedding                            # embedding | llm
 ROUTER_MODEL=                               # cheap model id when ROUTER=llm
 INGEST_URL_ALLOWED_HOSTS=kubernetes.io,www.keycloak.org,qdrant.tech,docs.github.com

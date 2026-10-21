@@ -6,6 +6,7 @@ import {
   HttpCode,
   Param,
   ParseUUIDPipe,
+  Patch,
   Post,
   Req,
   UploadedFile,
@@ -14,23 +15,10 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiAcceptedResponse, ApiConsumes, ApiOkResponse } from '@nestjs/swagger';
 import { z } from 'zod';
-import type { Domain } from '../ai-client/ai-client.service.js';
 import { type AuthRequest, Roles } from '../auth/auth.guard.js';
+import { DomainSchema } from '../catalog/taxonomy.js';
 import { DOCUMENT_STATUSES, type Document } from '../db/schema.js';
 import { DocumentsService, type Upload } from './documents.service.js';
-
-const DOMAINS = [
-  'db',
-  'dev',
-  'cloud',
-  'devops',
-  'mlops',
-  'ai',
-  'security',
-  'architecture',
-  'sre',
-] as const satisfies readonly Domain[];
-const DomainSchema = z.enum(DOMAINS);
 
 const UploadBody = z
   .object({
@@ -41,8 +29,22 @@ const UploadBody = z
       .array(DomainSchema)
       .min(1)
       .or(DomainSchema.transform((domain) => [domain])),
+    // `domain/topic` ids from the taxonomy (D48), checked by the service.
+    topics: z
+      .array(z.string())
+      .or(z.string().transform((topic) => [topic]))
+      .default([]),
   })
   .meta({ required: ['file', 'domains'] });
+
+const LabelsBody = z
+  .object({
+    domains: z.array(DomainSchema).min(1).optional(),
+    topics: z.array(z.string()).optional(),
+  })
+  .refine((labels) => labels.domains || labels.topics, 'Give `domains`, `topics` or both')
+  .meta({ id: 'DocumentLabels' });
+export type LabelsBody = z.infer<typeof LabelsBody>;
 
 /** Response contract for the OpenAPI document; `test/documents.e2e-spec.ts` checks rows against it. */
 export const DocumentDto = z
@@ -55,6 +57,7 @@ export const DocumentDto = z
     sizeBytes: z.int(),
     sha256: z.string(),
     domains: z.array(DomainSchema),
+    topics: z.array(z.string()),
     status: z.enum(DOCUMENT_STATUSES),
     error: z.string().nullable(),
     chunkCount: z.int().nullable(),
@@ -88,7 +91,19 @@ export class DocumentsController {
     @UploadedFile() file: Upload | undefined,
     @Body({ schema: UploadBody }) body: z.infer<typeof UploadBody>,
   ): Promise<{ id: string }> {
-    return this.documents.upload(req.user, file, body.domains, req.id as string);
+    return this.documents.upload(req.user, file, body.domains, body.topics, req.id as string);
+  }
+
+  /** Relabels the chunks in Qdrant without re-embedding (D48). */
+  @Patch(':id')
+  @Roles('editor')
+  @ApiOkResponse({ standardSchema: DocumentDto })
+  relabel(
+    @Req() req: AuthRequest,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body({ schema: LabelsBody }) body: LabelsBody,
+  ): Promise<Document> {
+    return this.documents.relabel(req.user, id, body, req.id as string);
   }
 
   @Delete(':id')

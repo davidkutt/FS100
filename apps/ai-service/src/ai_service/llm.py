@@ -47,6 +47,7 @@ class LlmProvider(Protocol):
         messages: list[Message],
         tools: list[ChatCompletionToolParam] | None = None,
         session_id: str | None = None,
+        model: str | None = None,  # None = LLM_MODEL
     ) -> AsyncGenerator[LlmEvent]: ...
 
 
@@ -63,6 +64,7 @@ class OpenAICompatProvider:
         messages: list[Message],
         tools: list[ChatCompletionToolParam] | None = None,
         session_id: str | None = None,
+        model: str | None = None,  # None = LLM_MODEL
     ) -> AsyncGenerator[LlmEvent]:
         extra: dict[str, object] = {}
         if tools:
@@ -73,7 +75,7 @@ class OpenAICompatProvider:
         calls: dict[int, dict[str, str]] = {}
         try:
             stream = await self._client.chat.completions.create(
-                model=self._model,
+                model=model or self._model,
                 messages=messages,
                 max_tokens=self._max_output_tokens,
                 stream=True,
@@ -119,6 +121,7 @@ class FakeProvider:
         messages: list[Message],
         tools: list[ChatCompletionToolParam] | None = None,
         session_id: str | None = None,
+        model: str | None = None,  # None = LLM_MODEL
     ) -> AsyncGenerator[LlmEvent]:
         search = next(
             (

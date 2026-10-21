@@ -1,0 +1,248 @@
+<div class="row g-4">
+  <nav class="col-lg-3" aria-label="Conversations">
+    <a class="btn btn-outline-primary btn-sm w-100 mb-2" routerLink="/chat">New conversation</a>
+    @if (list.hasValue()) {
+      <ul class="list-group list-group-flush small">
+        @for (conversation of list.value(); track conversation.id) {
+          <li class="list-group-item p-0">
+            <a
+              class="d-block px-2 py-1 text-truncate"
+              [class.active-conversation]="conversation.id === id()"
+              [attr.aria-current]="conversation.id === id() ? 'page' : null"
+              [routerLink]="['/chat', conversation.id]"
+              >{{ conversation.title ?? 'Untitled' }}</a
+            >
+          </li>
+        } @empty {
+          <li class="list-group-item px-2 text-body-secondary">No conversations yet.</li>
+        }
+      </ul>
+    }
+    @if (waiting().length) {
+      <h2 class="h6 mt-3">Waiting for your approval</h2>
+      <ul class="list-unstyled small">
+        @for (approval of waiting(); track approval.id) {
+          <li>
+            <a [routerLink]="['/chat', approval.conversationId]"
+              ><code>{{ approval.tool }}</code></a
+            >
+          </li>
+        }
+      </ul>
+    }
+    @if (usage.hasValue()) {
+      <p class="small text-body-secondary mt-3 mb-0">
+        Today: {{ usage.value().costUsd | currency: 'USD' : 'symbol' : '1.2-4' }} ·
+        {{ usage.value().inputTokens + usage.value().outputTokens | number }} tokens ·
+        {{ usage.value().turns }} {{ usage.value().turns === 1 ? 'turn' : 'turns' }}
+      </p>
+    }
+  </nav>
+
+  <section class="col-lg-9" aria-labelledby="chat-heading">
+    <div class="d-flex flex-wrap align-items-center gap-2 mb-3">
+      <h1 id="chat-heading" class="h3 mb-0 me-auto">Chat</h1>
+      <label class="visually-hidden" for="model">Model</label>
+      <select
+        id="model"
+        name="model"
+        class="form-select form-select-sm w-auto"
+        [disabled]="busy()"
+        [(ngModel)]="modelId"
+      >
+        @for (model of toolModels(); track model.id) {
+          <option [value]="model.id">{{ model.label }} · {{ model.tier }}</option>
+        }
+      </select>
+      @if (id()) {
+        <button
+          type="button"
+          class="btn btn-sm btn-outline-danger"
+          [disabled]="busy()"
+          (click)="remove()"
+        >
+          Delete conversation
+        </button>
+      }
+    </div>
+
+    <app-domain-picker
+      class="d-block mb-3"
+      label="Limit to domains (optional)"
+      [(value)]="domains"
+    />
+
+    @if (loadError()) {
+      <div class="alert alert-danger" role="alert">{{ loadError() }}</div>
+    }
+
+    <div class="vstack gap-3 mb-3" aria-live="polite">
+      @for (turn of turns(); track $index) {
+        @if (turn.role === 'user') {
+          <p class="user-turn align-self-end bg-primary-subtle rounded-3 px-3 py-2 mb-0">
+            {{ answerOf(turn.parts) }}
+          </p>
+        } @else {
+          @let streaming = busy() && $last;
+          @let answer = answerOf(turn.parts);
+          @let sources = sourcesOf(turn.parts);
+          <article class="card shadow-sm" [attr.aria-busy]="streaming">
+            <div class="card-body">
+              <app-timeline [parts]="turn.parts" [live]="streaming" />
+              @for (proposal of proposalsOf(turn.parts); track proposal.approvalId) {
+                @let approval = approvals().get(proposal.approvalId);
+                <app-approval
+                  [proposal]="proposal"
+                  [approval]="approval"
+                  [disabled]="busy() || !approval"
+                  (decided)="decide(proposal.approvalId, $event)"
+                />
+              }
+              @if (answer) {
+                <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -- citations are links, Enter fires click -->
+                <div
+                  class="answer"
+                  [innerHTML]="answer | markdown"
+                  (click)="cite($event, turn)"
+                ></div>
+              } @else if (streaming) {
+                <p class="text-body-secondary mb-0">
+                  <span class="spinner-border spinner-border-sm me-2" aria-hidden="true"></span>
+                  Working…
+                </p>
+              }
+              @if (turn.error ?? errorOf(turn.parts); as error) {
+                <div class="alert alert-danger mt-2 mb-0" role="alert">{{ error }}</div>
+              }
+              @if (turn.stopReason === 'cancelled') {
+                <p class="small text-body-secondary mt-2 mb-0">Stopped.</p>
+              } @else if (
+                turn.stopReason && !['end', 'error', 'awaiting_approval'].includes(turn.stopReason)
+              ) {
+                <p class="small text-body-secondary mt-2 mb-0">
+                  Stopped early: {{ turn.stopReason }}.
+                </p>
+              }
+              @if (sources.length) {
+                <div class="d-flex flex-wrap align-items-center gap-1 mt-3">
+                  <span class="small text-body-secondary me-1">Sources</span>
+                  @for (source of sources; track source.n) {
+                    <button
+                      type="button"
+                      class="btn btn-sm btn-outline-secondary"
+                      (click)="show(source)"
+                    >
+                      [{{ source.n }}] {{ source.title }}
+                      @if (source.page) {
+                        · p. {{ source.page }}
+                      }
+                    </button>
+                  }
+                </div>
+              }
+              <div class="d-flex flex-wrap align-items-center gap-2 mt-2">
+                @if (turn.id) {
+                  <div class="btn-group btn-group-sm" role="group" aria-label="Rate this answer">
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary"
+                      aria-label="Helpful"
+                      [attr.aria-pressed]="turn.feedback?.rating === 'up'"
+                      [class.active]="turn.feedback?.rating === 'up'"
+                      (click)="rate(turn, 'up')"
+                    >
+                      👍
+                    </button>
+                    <button
+                      type="button"
+                      class="btn btn-outline-secondary"
+                      aria-label="Not helpful"
+                      [attr.aria-pressed]="turn.feedback?.rating === 'down'"
+                      [class.active]="turn.feedback?.rating === 'down'"
+                      (click)="commenting.set(turn.id)"
+                    >
+                      👎
+                    </button>
+                  </div>
+                }
+                @if (phoenixUrl && turn.traceId) {
+                  <a
+                    class="small"
+                    [href]="phoenixUrl + '/redirects/traces/' + turn.traceId"
+                    target="_blank"
+                    rel="noopener"
+                    >Trace in Phoenix</a
+                  >
+                }
+              </div>
+              @if (commenting() === turn.id) {
+                <form class="d-flex gap-2 mt-2" (ngSubmit)="rate(turn, 'down', comment.value)">
+                  <label class="visually-hidden" [for]="'comment-' + turn.id"
+                    >What was wrong? (optional)</label
+                  >
+                  <input
+                    #comment
+                    class="form-control form-control-sm"
+                    placeholder="What was wrong? (optional)"
+                    maxlength="2000"
+                    [id]="'comment-' + turn.id"
+                  />
+                  <button type="submit" class="btn btn-sm btn-outline-secondary">Submit</button>
+                </form>
+              }
+            </div>
+          </article>
+        }
+      } @empty {
+        <p class="text-body-secondary">
+          Ask a question. The agent searches the knowledge base, shows each tool call, asks before
+          any write, and cites its sources as [1], [2] … — select a citation to read the passage.
+        </p>
+      }
+    </div>
+
+    <form class="d-flex gap-2" (ngSubmit)="send()">
+      <label class="visually-hidden" for="question">Question</label>
+      <input
+        #input
+        id="question"
+        name="question"
+        class="form-control"
+        placeholder="Ask a question…"
+        autocomplete="off"
+        [(ngModel)]="question"
+      />
+      @if (busy()) {
+        <button type="button" class="btn btn-outline-danger" (click)="stop()">Stop</button>
+      } @else {
+        <button type="submit" class="btn btn-primary" [disabled]="!question().trim()">Send</button>
+      }
+    </form>
+  </section>
+</div>
+
+<dialog #panel class="source-panel" aria-labelledby="source-title" closedby="any">
+  @if (source(); as source) {
+    <div class="offcanvas-header border-bottom">
+      <h2 id="source-title" class="offcanvas-title h5">[{{ source.n }}] {{ source.title }}</h2>
+      <button type="button" class="btn-close" aria-label="Close" (click)="panel.close()"></button>
+    </div>
+    <div class="offcanvas-body">
+      <dl class="small mb-3">
+        @if (source.page) {
+          <dt>Page</dt>
+          <dd>{{ source.page }}</dd>
+        }
+        @if (source.heading) {
+          <dt>Section</dt>
+          <dd>{{ source.heading }}</dd>
+        }
+        <dt>Domains</dt>
+        <dd>{{ source.domains.join(', ') }}</dd>
+        <dt>Score</dt>
+        <dd>{{ source.score.toFixed(3) }}</dd>
+      </dl>
+      <p class="source-text">{{ source.text }}</p>
+    </div>
+  }
+</dialog>

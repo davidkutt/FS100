@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { MulterModule } from '@nestjs/platform-express';
 import { AiClientModule } from '../ai-client/ai-client.module.js';
+import { CatalogModule } from '../catalog/catalog.module.js';
 import { CONFIG, type Config } from '../config.js';
 import { DocumentsController } from './documents.controller.js';
 import { DocumentsService } from './documents.service.js';
@@ -8,6 +9,7 @@ import { DocumentsService } from './documents.service.js';
 @Module({
   imports: [
     AiClientModule,
+    CatalogModule,
     MulterModule.registerAsync({
       inject: [CONFIG],
       useFactory: (config: Config) => ({

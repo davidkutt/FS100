@@ -7,7 +7,10 @@ describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       imports: [App],
-      providers: [provideRouter([]), { provide: Keycloak, useValue: {} }],
+      providers: [
+        provideRouter([]),
+        { provide: Keycloak, useValue: { hasRealmRole: () => false } },
+      ],
     }).compileComponents();
   });
 

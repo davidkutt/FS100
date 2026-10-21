@@ -1,0 +1,19 @@
+# Model registry (D40), read by the AI service (MODELS_CONFIG). `id` is the model id at LLM_BASE_URL.
+# Per conversation, users pick from the entries their role reaches (`min_role`); agent mode lists only
+# `supports_tools` models. A request without a model uses LLM_MODEL. Costs and checks: ADR-0005, ADR-0007.
+models:
+  - id: openai/gpt-6-luna
+    label: GPT-6 Luna
+    supports_tools: true
+    tier: low
+    min_role: viewer
+  - id: deepseek/deepseek-v4.1-flash
+    label: DeepSeek V4.1 Flash
+    supports_tools: true
+    tier: low
+    min_role: viewer
+  - id: anthropic/claude-haiku-5.5
+    label: Claude Haiku 5.5
+    supports_tools: true
+    tier: medium
+    min_role: editor

@@ -10,6 +10,8 @@ import { CONFIG, type Config } from '../config.js';
 
 type Schemas = components['schemas'];
 export type ChatRequest = Schemas['ChatRequest'];
+export type AgentRequest = Schemas['AgentRequest'];
+export type Labels = Schemas['Labels'];
 export type SearchRequest = Schemas['SearchRequest'];
 export type SearchResponse = Schemas['SearchResponse'];
 export type IngestResult = Schemas['IngestResult'];
@@ -48,6 +50,15 @@ export class AiClient {
     return (await res.json()) as IngestResult;
   }
 
+  async updateLabels(docId: string, labels: Labels, requestId: string): Promise<void> {
+    await this.request(`/v1/documents/${docId}/labels`, requestId, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(labels),
+      signal: AbortSignal.timeout(30_000),
+    });
+  }
+
   async deleteDocument(docId: string, requestId: string): Promise<void> {
     await this.request(`/v1/documents/${docId}`, requestId, {
       method: 'DELETE',
@@ -58,6 +69,16 @@ export class AiClient {
   /** Opens the SSE stream; aborting `signal` closes the connection, which cancels the LLM call. */
   chat(body: ChatRequest, requestId: string, signal: AbortSignal): Promise<Response> {
     return this.request('/v1/chat', requestId, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    });
+  }
+
+  /** SSE v2 (plan-phase-2 §7.3); aborting `signal` cancels the run like `chat`. */
+  agent(body: AgentRequest, requestId: string, signal: AbortSignal): Promise<Response> {
+    return this.request('/v1/agent', requestId, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),

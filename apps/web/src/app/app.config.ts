@@ -1,6 +1,6 @@
 import { provideHttpClient, withInterceptors, type HttpRequest } from '@angular/common/http';
 import { ApplicationConfig, provideBrowserGlobalErrorListeners } from '@angular/core';
-import { provideRouter } from '@angular/router';
+import { provideRouter, withComponentInputBinding } from '@angular/router';
 import {
   CUSTOM_BEARER_TOKEN_INTERCEPTOR_CONFIG,
   customBearerTokenInterceptor,
@@ -13,7 +13,7 @@ export function appConfig(config: AppConfig): ApplicationConfig {
   return {
     providers: [
       provideBrowserGlobalErrorListeners(),
-      provideRouter(routes),
+      provideRouter(routes, withComponentInputBinding()),
       { provide: APP_CONFIG, useValue: config },
       provideKeycloak({
         config: {

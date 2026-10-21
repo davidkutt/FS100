@@ -8,7 +8,8 @@ from qdrant_client import QdrantClient
 
 from ai_service import __version__
 from ai_service.agent import Agent
-from ai_service.api import agent, chat, documents, health
+from ai_service.api import agent, catalog, chat, documents, health
+from ai_service.catalog import load_models, load_taxonomy
 from ai_service.core.auth import ServiceAuth
 from ai_service.core.logging import request_id, setup_logging
 from ai_service.core.settings import Settings, get_settings
@@ -45,6 +46,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         llm = create_provider(settings)
         top_k, threshold = settings.retrieval_top_k, settings.retrieval_score_threshold
         app.state.kb = kb
+        app.state.models = load_models(settings.models_config)
+        app.state.taxonomy = load_taxonomy(settings.taxonomy_config)
         app.state.chat = ChatPipeline(kb, llm, top_k, threshold)
         app.state.agent = Agent(
             llm, settings, lambda domains: [kb_search(kb, top_k, threshold, domains)]
@@ -59,6 +62,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(documents.router, dependencies=service_auth)
     app.include_router(chat.router, dependencies=service_auth)
     app.include_router(agent.router, dependencies=service_auth)
+    app.include_router(catalog.router, dependencies=service_auth)
 
     @app.middleware("http")
     async def propagate_request_id(  # pyright: ignore[reportUnusedFunction]

@@ -2,7 +2,7 @@ import asyncio
 import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Literal
 
 import openai
 from openai.types.chat import ChatCompletionToolParam
@@ -57,8 +57,8 @@ class ToolSpec[A: BaseModel]:
         )
 
 
-def permitted(spec: ToolSpec[Any], roles: list[str]) -> bool:
-    return max((_RANK.get(role, -1) for role in roles), default=-1) >= _RANK[spec.min_role]
+def permitted(min_role: Role, roles: list[str]) -> bool:
+    return max((_RANK.get(role, -1) for role in roles), default=-1) >= _RANK[min_role]
 
 
 def untrusted(text: str) -> str:

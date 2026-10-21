@@ -135,6 +135,8 @@ services:
       - AGENT_RUN_TIMEOUT_S
       - AGENT_RUN_INPUT_TOKEN_BUDGET
       - AGENT_RUN_COST_CAP_USD
+      - APPROVAL_SIGNING_KEY
+      - APPROVAL_TTL_MIN
       - OTEL_SERVICE_NAME
       - AI_KEYCLOAK_REALM_URL=http://keycloak:8080/realms/kb
       - QDRANT_URL=http://qdrant:6333

@@ -19,9 +19,20 @@ Endpoints (plan.md §7.2; OpenAPI in `packages/contracts/api.openapi.json`):
 | `GET /healthz` · `GET /readyz` | public | readiness = Postgres reachable |
 | `GET /api/me` | any | |
 | `GET /api/documents` | viewer | all documents with status and domains |
-| `POST /api/documents` | editor | multipart `file` + `domains`; 202, ingested in the background; 409 duplicate, 413 > `UPLOAD_MAX_MB`, 415 not PDF/MD/TXT |
+| `POST /api/documents` | editor | multipart `file` + `domains` + optional `topics` (`domain/topic` from `config/taxonomy.yaml`); 202, ingested in the background; 409 duplicate, 413 > `UPLOAD_MAX_MB`, 415 not PDF/MD/TXT |
+| `PATCH /api/documents/:id` | editor (own) / admin | `{domains?, topics?}` → Qdrant payload update, no re-embedding; 409 while ingesting |
 | `DELETE /api/documents/:id` | editor (own) / admin | vectors first, then the row; 409 while ingesting |
-| `POST /api/chat` | viewer | SSE relay of `/v1/chat`, events unchanged; `CHAT_THROTTLE_PER_MIN` per user |
+| `GET · POST /api/conversations` | viewer | own conversations, newest first · `{title?, modelId?}` |
+| `GET · DELETE /api/conversations/:id` | owner (delete: also admin) | messages with `parts` (SSE v2 payloads by event name), gap signals and the caller's rating; others get 404 |
+| `POST /api/conversations/:id/messages` | owner | `{text, modelId?, mode?, domains?}` → SSE v2 relay of `/v1/agent` with the last 20 messages as text; events are stored as the assistant message (a stop → `stopReason: cancelled`); `approval_required` is stored as a pending approval and relayed without `signedAction` |
+| `GET /api/approvals?status=` | viewer | own approvals (admin: all), never with the signed action |
+| `POST /api/approvals/:id` | requester | `{decision: approve\|reject, note?}` → SSE v2 continuation of the turn; role re-checked against `/v1/tools` (403 `tool_not_permitted`), 409 `approval_state_conflict` unless `pending`, 410 `approval_expired`; a stream that ends without the write's result → `unknown`, never retried (ADR-0008) |
+| `GET /api/admin/audit` | admin | `?user&tool&outcome&from&to` (UTC days); newest 200 rows of the append-only `audit_log`: one per tool result, redacted args |
+| `POST /api/messages/:id/feedback` | owner | `{rating: up\|down, comment?}`; a second rating replaces the first |
+| `GET /api/me/usage` | any | today's (UTC) tokens, cost and turns from the `usage` rows |
+| `GET /api/models` · `GET /api/tools` | viewer | relays of `/v1/models`, `/v1/tools`, cut to the caller's role |
+| `GET /api/taxonomy` | viewer | `config/taxonomy.yaml` (`TAXONOMY_CONFIG`), validated at boot |
+| `POST /api/chat` | viewer | SSE relay of `/v1/chat`, events unchanged; `CHAT_THROTTLE_PER_MIN` per user, shared with conversation messages |
 | `POST /api/search` | viewer | relay of `/v1/search` |
 | `GET /api/status` | admin | `api`, `db`, `aiService`, `qdrant` |
 

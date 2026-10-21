@@ -34,12 +34,18 @@ class Settings(BaseSettings):
     llm_model: str = ""
     llm_max_output_tokens: int = 800
     llm_timeout_s: float = 60
+    # Relative to the app directory (`pnpm dev`, tests); the image sets absolute paths.
+    models_config: str = "../../config/models.yaml"
+    taxonomy_config: str = "../../config/taxonomy.yaml"
     agent_max_steps: int = 8
     agent_max_parallel_tools: int = 4
     agent_tool_timeout_s: float = 20
     agent_run_timeout_s: float = 120
     agent_run_input_token_budget: int = 60_000
     agent_run_cost_cap_usd: float = 0.05
+    # Comma-separated: the first signs, all verify (rotation). Empty = write tools fail closed.
+    approval_signing_key: str = ""
+    approval_ttl_min: float = 15
     otel_exporter_otlp_endpoint: str = ""  # empty = tracing off (tests, CI)
     otel_service_name: str = "ai-service"
 

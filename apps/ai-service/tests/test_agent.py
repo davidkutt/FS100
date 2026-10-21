@@ -1,25 +1,32 @@
-"""Agent harness: SSE v2 with the fake LLM, limits, parallel tools, policy, cancellation."""
+"""Agent harness: SSE v2 with the fake LLM, limits, parallel tools, policy, approvals,
+cancellation."""
 
 import asyncio
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import Any, Literal
-from uuid import uuid4
+from datetime import UTC, datetime, timedelta
+from typing import Any, Literal, cast
+from uuid import UUID, uuid4
 
 import pytest
+from fastapi import FastAPI
 from fastapi.sse import ServerSentEvent
 from fastapi.testclient import TestClient
 from openai.types.chat import ChatCompletionToolParam
 from pydantic import BaseModel
 
 from ai_service import agent as agent_module
-from ai_service.agent import Agent
+from ai_service import approvals
+from ai_service.agent import Agent, ApprovalRequiredEvent, Resume, Resumed
+from ai_service.approvals import ApprovalError
 from ai_service.core.settings import Settings
 from ai_service.knowledge_base import Hit
 from ai_service.llm import LlmError, LlmEvent, Message, Token, ToolCall, Usage
 from ai_service.rag import ChatTurn
 from ai_service.tools import ToolOutput, ToolSpec, TransientToolError
-from support import USER, sse
+from support import SIGNING_KEY, USER, sse
+
+CONVERSATION = uuid4()
 
 
 class ScriptedLlm:
@@ -28,6 +35,7 @@ class ScriptedLlm:
     def __init__(self, *steps: list[LlmEvent | Literal["hang"]]) -> None:
         self.steps = list(steps)
         self.requests: list[tuple[list[Message], list[ChatCompletionToolParam] | None]] = []
+        self.models: list[str | None] = []
         self.closed = 0
 
     async def stream_chat(
@@ -35,8 +43,10 @@ class ScriptedLlm:
         messages: list[Message],
         tools: list[ChatCompletionToolParam] | None = None,
         session_id: str | None = None,
+        model: str | None = None,
     ) -> AsyncGenerator[LlmEvent]:
         self.requests.append((list(messages), tools))
+        self.models.append(model)
         try:
             for event in self.steps.pop(0) if self.steps else [Token("Done.")]:
                 if isinstance(event, str):
@@ -66,17 +76,22 @@ def call(name: str, id: str = "c1", arguments: str = '{"q": "x"}') -> ToolCall:
 
 
 def agent(llm: ScriptedLlm, tools: list[ToolSpec[Args]], **settings: Any) -> Agent:
+    settings.setdefault("approval_signing_key", SIGNING_KEY)
     return Agent(llm, Settings(**settings), lambda _: list(tools))
 
 
-def stream(agent: Agent, roles: tuple[str, ...] = ("editor",)) -> AsyncGenerator[ServerSentEvent]:
+def stream(
+    agent: Agent, roles: tuple[str, ...] = ("editor",), resume: Resumed | None = None
+) -> AsyncGenerator[ServerSentEvent]:
     turns = [ChatTurn(role="user", content="Q")]
-    return agent.stream(turns, None, list(roles), "bob", uuid4())
+    return agent.stream(turns, None, list(roles), "bob", CONVERSATION, resume=resume)
 
 
-def run(agent: Agent, roles: tuple[str, ...] = ("editor",)) -> list[ServerSentEvent]:
+def run(
+    agent: Agent, roles: tuple[str, ...] = ("editor",), resume: Resumed | None = None
+) -> list[ServerSentEvent]:
     async def collect() -> list[ServerSentEvent]:
-        return [event async for event in stream(agent, roles)]
+        return [event async for event in stream(agent, roles, resume)]
 
     return asyncio.run(collect())
 
@@ -144,14 +159,32 @@ BAD_REQUESTS: list[dict[str, Any]] = [
     {"messages": [{"role": "user", "parts": []}]},
     {"messages": [{"role": "user", "parts": [{"type": "text", "text": "a" * 5000}] * 2}]},
     {"conversation_id": "not-a-uuid"},
+    {"mode": "rag", "resume": {"signed_action": "a.b.c", "decision": "approve", "args": {}}},
 ]
 
 
 @pytest.mark.parametrize(
-    "fields", BAD_REQUESTS, ids=["last from assistant", "no parts", "too long", "bad id"]
+    "fields",
+    BAD_REQUESTS,
+    ids=["last from assistant", "no parts", "too long", "bad id", "resume in rag mode"],
 )
 def test_agent_rejects_bad_requests(client: TestClient, fields: dict[str, Any]) -> None:
     assert client.post("/v1/agent", json=body("Q") | fields).status_code == 422
+
+
+def test_the_selected_model_is_used_for_every_step() -> None:
+    llm = ScriptedLlm([call("t.echo")])
+
+    async def collect() -> None:
+        turns = [ChatTurn(role="user", content="Q")]
+        async for _ in agent(llm, [tool("t.echo")]).stream(
+            turns, None, ["viewer"], "bob", uuid4(), "vendor/model"
+        ):
+            pass
+
+    asyncio.run(collect())
+
+    assert llm.models == ["vendor/model", "vendor/model"]
 
 
 def test_max_steps_stops_before_running_more_tools() -> None:
@@ -284,22 +317,183 @@ def test_policy_hides_and_denies_tools_above_the_role() -> None:
     assert ran == []
 
 
-def test_write_tools_wait_for_approval() -> None:
-    ran: list[str] = []
-
+def write_tool(ran: list[str]) -> ToolSpec[Args]:
     async def record(args: Args) -> ToolOutput:
         ran.append(args.q)
-        return ToolOutput("", "")
+        return ToolOutput(f"created {args.q}", "created")
 
+    return tool("t.write", record, kind="write", risk="medium", min_role="editor")
+
+
+def propose(ran: list[str], **settings: Any) -> tuple[ScriptedLlm, Agent, ApprovalRequiredEvent]:
+    """A turn that ends with a proposal; the same harness resumes it."""
+    llm = ScriptedLlm([call("t.write", "w")])
+    harness = agent(llm, [write_tool(ran)], **settings)
+    return llm, harness, of(run(harness), "approval_required")[0]
+
+
+def decide(
+    harness: Agent,
+    proposal: ApprovalRequiredEvent,
+    decision: Literal["approve", "reject"] = "approve",
+    note: str | None = None,
+    args: dict[str, Any] | None = None,
+    sub: str = "bob",
+    conversation: UUID = CONVERSATION,
+) -> Resumed:
+    resume = Resume(
+        signed_action=proposal.signed_action,
+        decision=decision,
+        note=note,
+        args=proposal.args if args is None else args,
+    )
+    return harness.resume(resume, sub, conversation, None)
+
+
+def test_write_calls_propose_a_signed_action_and_end_the_turn() -> None:
+    ran: list[str] = []
     llm = ScriptedLlm([call("t.write", "w"), call("t.echo", "r")])
-    tools = [tool("t.echo"), tool("t.write", record, kind="write", risk="medium")]
 
-    events = run(agent(llm, tools))
+    events = run(agent(llm, [tool("t.echo"), write_tool(ran)]))
 
     assert [(c.id, c.kind) for c in of(events, "tool_call")] == [("w", "write"), ("r", "read")]
     assert [r.id for r in of(events, "tool_result")] == ["r"]
+    assert [event.event for event in events[-2:]] == ["approval_required", "done"]
+    [proposal] = of(events, "approval_required")
+    assert (proposal.call_id, proposal.tool, proposal.risk) == ("w", "t.write", "medium")
+    assert proposal.args == {"q": "x"}
+    assert proposal.expires_at - datetime.now(UTC) > timedelta(minutes=14)
+    action = approvals.verify(proposal.signed_action, SIGNING_KEY)
+    assert action.approval_id == str(proposal.approval_id)
+    assert (action.sub, action.conversation_id, action.call_id) == ("bob", str(CONVERSATION), "w")
     assert of(events, "done")[0].stop_reason == "awaiting_approval"
     assert ran == []
+
+
+def test_only_one_valid_write_per_step_is_proposed() -> None:
+    llm = ScriptedLlm(
+        [call("t.write", "bad", '{"q": 1}'), call("t.write", "w1"), call("t.write", "w2")]
+    )
+
+    events = run(agent(llm, [write_tool([])]))
+
+    assert [(r.id, r.status) for r in of(events, "tool_result")] == [
+        ("bad", "error"),
+        ("w2", "error"),
+    ]
+    assert [p.call_id for p in of(events, "approval_required")] == ["w1"]
+
+
+def test_an_approved_action_runs_once_and_the_turn_continues() -> None:
+    ran: list[str] = []
+    llm, harness, proposal = propose(ran)
+
+    events = run(harness, resume=decide(harness, proposal))
+
+    assert [event.event for event in events[:3]] == ["tool_call", "tool_result", "step"]
+    assert (of(events, "tool_call")[0].id, of(events, "tool_result")[0].status) == ("w", "ok")
+    assert ran == ["x"]
+    *_, proposed, observed = llm.requests[-1][0]
+    assert "'id': 'w'" in str(proposed.get("tool_calls"))
+    assert "created x" in str(observed.get("content"))
+    assert of(events, "done")[0].stop_reason == "end"
+
+
+def test_a_rejected_action_is_an_observation_for_the_model() -> None:
+    ran: list[str] = []
+    llm, harness, proposal = propose(ran)
+
+    events = run(harness, resume=decide(harness, proposal, "reject", note="Wrong repo"))
+
+    assert of(events, "tool_result")[0].status == "rejected"
+    observed = str(llm.requests[-1][0][-1].get("content"))
+    assert "The user rejected this action. Their note: Wrong repo" in observed
+    assert ran == []
+
+
+def test_resume_rechecks_the_role() -> None:
+    ran: list[str] = []
+    _, harness, proposal = propose(ran)
+
+    events = run(harness, roles=("viewer",), resume=decide(harness, proposal))
+
+    assert of(events, "tool_result")[0].status == "denied"
+    assert ran == []
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"args": {"q": "y"}}, "the arguments differ"),
+        ({"sub": "mallory"}, "another user"),
+        ({"conversation": uuid4()}, "another conversation"),
+    ],
+    ids=["tampered args", "other user", "other conversation"],
+)
+def test_actions_are_bound_to_user_conversation_and_args(
+    changes: dict[str, Any], message: str
+) -> None:
+    _, harness, proposal = propose([])
+
+    with pytest.raises(ApprovalError, match=message):
+        decide(harness, proposal, **changes)
+
+
+def test_forged_and_expired_actions_are_refused() -> None:
+    _, harness, proposal = propose([])
+    _, _, expired = propose([], approval_ttl_min=-1)
+    forger = agent(ScriptedLlm(), [write_tool([])], approval_signing_key="x" * 32)
+    garbage = proposal.model_copy(update={"signed_action": "a.b.c"})
+
+    for attempt, message in [
+        (lambda: decide(forger, proposal), "invalid signature"),
+        (lambda: decide(harness, expired), "expired"),
+        (lambda: decide(harness, garbage), "malformed"),
+    ]:
+        with pytest.raises(ApprovalError, match=message):
+            attempt()
+
+
+def test_actions_signed_with_the_previous_key_still_verify() -> None:
+    _, _, proposal = propose([])
+    rotated = agent(
+        ScriptedLlm(), [write_tool([])], approval_signing_key=f"{'n' * 32},{SIGNING_KEY}"
+    )
+
+    assert decide(rotated, proposal).action.call_id == "w"
+
+
+def test_write_calls_fail_closed_without_a_signing_key() -> None:
+    events = run(
+        agent(ScriptedLlm([call("t.write", "w")]), [write_tool([])], approval_signing_key="")
+    )
+
+    assert of(events, "approval_required") == []
+    assert of(events, "done")[0].stop_reason == "error"
+
+
+def test_resume_over_http_is_verified_before_the_stream(client: TestClient) -> None:
+    ran: list[str] = []
+    cast(FastAPI, client.app).state.agent = agent(
+        ScriptedLlm([call("t.write", "w")]), [write_tool(ran)]
+    )
+    fields = {"conversation_id": str(uuid4()), "user": {"sub": "carol", "roles": ["editor"]}}
+    proposal = dict(sse(client.post("/v1/agent", json=body("Q", **fields))))["approval_required"]
+    resume = {
+        "signed_action": proposal["signedAction"],
+        "decision": "approve",
+        "args": proposal["args"],
+    }
+
+    tampered = client.post(
+        "/v1/agent", json=body("Q", **fields, resume={**resume, "args": {"q": "y"}})
+    )
+    events = sse(client.post("/v1/agent", json=body("Q", **fields, resume=resume)))
+
+    assert tampered.status_code == 422
+    assert "Invalid approval: the arguments differ" in tampered.json()["detail"]
+    assert [name for name, _ in events[:2]] == ["tool_call", "tool_result"]
+    assert ran == ["x"]
 
 
 def test_unknown_tools_are_an_observation_only() -> None:

@@ -18,12 +18,13 @@ export const DOMAINS = [
 
 let nextId = 0;
 
+/** Toggle buttons for taxonomy labels: the domains, or with `options` the `domain/topic` ids. */
 @Component({
   selector: 'app-domain-picker',
   template: `
     <fieldset>
       <legend class="form-label fs-6 mb-1">{{ label() }}</legend>
-      @for (domain of domains; track domain) {
+      @for (domain of options(); track domain) {
         <input
           type="checkbox"
           class="btn-check"
@@ -40,12 +41,12 @@ let nextId = 0;
 })
 export class DomainPicker {
   readonly label = input.required<string>();
-  readonly value = model<Domain[]>([]);
+  readonly options = input<readonly string[]>(DOMAINS);
+  readonly value = model<string[]>([]);
 
-  protected readonly domains = DOMAINS;
   protected readonly id = `domain-${nextId++}-`;
 
-  protected toggle(domain: Domain): void {
+  protected toggle(domain: string): void {
     this.value.update((v) => (v.includes(domain) ? v.filter((d) => d !== domain) : [...v, domain]));
   }
 }

@@ -23,6 +23,12 @@ Seed users log in with username = password (dev only).
    curl -sN localhost:3000/api/chat -H "authorization: Bearer $BOB" -H 'content-type: application/json' \
      -d '{"messages":[{"role":"user","content":"How do I roll back a deployment?"}],"domains":["devops"]}'
    curl -s -X DELETE localhost:3000/api/documents/<id> -H "authorization: Bearer $BOB"   # 204, clean up
+   curl -s -X PATCH localhost:3000/api/documents/<id> -H "authorization: Bearer $BOB" -H 'content-type: application/json' \
+     -d '{"domains":["devops"],"topics":["devops/deployment"]}'          # relabel, no re-embedding
+   C=$(curl -s -X POST localhost:3000/api/conversations -H "authorization: Bearer $BOB" -H 'content-type: application/json' -d '{}' | jq -r .id)
+   curl -sN localhost:3000/api/conversations/$C/messages -H "authorization: Bearer $BOB" -H 'content-type: application/json' \
+     -d '{"text":"How do I roll back a deployment?"}'                  # SSE v2; then GET /api/conversations/$C
+   curl -s localhost:3000/api/models -H "authorization: Bearer $BOB"     # also /api/tools, /api/taxonomy, /api/me/usage
    ```
 
 ## Pitfalls

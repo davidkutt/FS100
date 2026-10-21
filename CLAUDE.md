@@ -53,10 +53,12 @@ M1.2 (ingest/search/delete in the AI service, golden set, `pnpm eval:retrieval`)
 documents, chat, inspector) and M1.6 (Dockerfiles, Compose `--profile full`, CI workflows, Playwright e2e)
 are done. M1.7 (Azure spike) is postponed while the project runs locally, so Phase 2 has no Azure parts.
 **Phase 2 (agent, MCP, approvals) is in progress** — M2.0 (pins, spikes, identities, ADR-0007…0010
-drafts) and M2.1 (agent harness: `agent.py`, `tools.py`, `POST /v1/agent` with SSE v2, task set
-`agent_v0`) are done. Check the milestone in [plan.md §8](plan.md#8-milestones-and-tasks) or
-[plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks) before building something: many features
-are deliberately scheduled for later milestones.
+drafts), M2.1 (agent harness: `agent.py`, `tools.py`, `POST /v1/agent` with SSE v2, task set
+`agent_v0`), M2.2 (conversations + event tee in NestJS, model registry, taxonomy + document topics,
+agent chat UI) and M2.3 (signed approvals `approvals.py` + resume, NestJS approval state machine,
+append-only `audit_log`, approval card and admin audit page) are done. Check the milestone in
+[plan.md §8](plan.md#8-milestones-and-tasks) or [plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks)
+before building something: many features are deliberately scheduled for later milestones.
 
 The plan's working title `kb-agent` lives on in identifiers (realm `kb`, clients `kb-web`/`kb-api`/`kb-ai`,
 Qdrant alias `kb_current`). Keep those names.
@@ -69,6 +71,7 @@ Qdrant alias `kb_current`). Keep those names.
 | `apps/api` | Product API / BFF: auth, RBAC, document metadata, SSE relay. Browser-facing | NestJS 12 (ESM), Vitest + supertest, oxlint |
 | `apps/ai-service` | **All AI code**: parse, chunk, embed, retrieve, prompt, LLM, evals, tracing. Internal only | FastAPI, Python 3.13 (uv), pydantic-settings, ruff, pyright strict, pytest |
 | `packages/contracts` | **Generated**, committed: OpenAPI of both services (+ SSE event schemas) and TS types | openapi-typescript |
+| `config/` | `models.yaml` (model registry, AI service), `taxonomy.yaml` (domains + sub-topics, API and AI service); copied into the images | YAML |
 | `infra/` | Compose (Postgres 17, Qdrant 1.19, Keycloak 26.8, Phoenix; `--profile full` adds the apps), realm export, DB init | Docker Compose |
 | `e2e/` | Playwright smoke (login → upload → ask → citation), runs against :4200 | Playwright |
 | `data/sample-docs/` | Demo + eval corpus; `domains.json` = file → domain tags; repo docs are frozen snapshots | — |
@@ -125,7 +128,8 @@ Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
   prefix via `app.setup.ts`; probes (`/healthz`) are excluded. Use `configureApp()` in e2e tests.
 - **Angular:** new-style file names without suffixes (`home.ts`, `home.html`, not `home.component.ts`);
   selector prefix `app-`; features under `src/app/features/<name>/`; lazy routes via `loadComponent`;
-  template a11y rules are lint errors.
+  template a11y rules are lint errors. In specs, flush every `httpResource` request (also reloads after a
+  run) — an open one makes `fixture.whenStable()` time out without a message.
 - **Python:** pyright runs in **strict** mode — fully type everything. App factory `create_app(settings)` in
   `main.py`; tests build their own app with `TestClient(create_app(Settings()))`. Config only through
   `core/settings.py` (`Settings` fields map to env vars case-insensitively).
@@ -148,7 +152,8 @@ Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
   (in-process PGlite) and need no Docker; `test/support.ts` builds the app with test JWT keys.
 - **Contracts:** Nest's OpenAPI comes from Zod schemas (`@Body({ schema })`, `@ApiOkResponse({ standardSchema })`;
   `.meta({ id })` names a component). Relayed bodies (`/api/chat`, `/api/search`) are validated only by the AI
-  service; their types live in `@fs100/contracts/ai-service`.
+  service; their types live in `@fs100/contracts/ai-service`. `contracts:generate` boots the API from the repo
+  root with logging off, so a cwd-relative file path in API config makes it exit 1 without a message.
 - **AI service tests** never download models or need Docker: they fake fastembed (`tests/support.py`) and
   use `QDRANT_URL=:memory:`. The golden set's labels are checked against `data/sample-docs/` by
   `tests/test_evals.py`; `evals/datasets/retrieval_v1.jsonl` is frozen — changes go into a new version.
