@@ -16,6 +16,7 @@ from ai_service.core.settings import Settings
 
 MARKDOWN = b"# Runbook\n\n## Rollback\nUndo the release with kubectl rollout undo.\n"
 USER = {"sub": "carol", "roles": ["viewer"]}
+SIGNING_KEY = "test-only-approval-signing-key-0123456789"
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 JWKS: dict[str, Any] = {
     "keys": [{**RSAAlgorithm.to_jwk(KEY.public_key(), as_dict=True), "kid": "test"}]

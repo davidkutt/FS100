@@ -5,10 +5,11 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.sse import EventSourceResponse, ServerSentEvent
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
-from ai_service.agent import Agent, rag_turn
+from ai_service.agent import Agent, Resume, Resumed, rag_turn
 from ai_service.api.chat import UserContext, get_pipeline
+from ai_service.approvals import ApprovalError
 from ai_service.catalog import ModelInfo
 from ai_service.knowledge_base import Domain
 from ai_service.rag import ChatPipeline, ChatTurn
@@ -45,6 +46,13 @@ class AgentRequest(BaseModel):
     model: str | None = None  # registry id (D40); None = LLM_MODEL
     domains: list[Domain] | None = None
     user: UserContext
+    resume: Resume | None = None  # continues the turn that proposed the action
+
+    @model_validator(mode="after")
+    def resume_needs_agent(self) -> "AgentRequest":
+        if self.resume and self.mode != "agent":
+            raise ValueError("resume needs mode=agent")
+        return self
 
     @field_validator("messages")
     @classmethod
@@ -72,21 +80,35 @@ def selected_model(
     return body.model
 
 
+def resumed(body: AgentRequest, agent: Annotated[Agent, Depends(get_agent)]) -> Resumed | None:
+    """Verified before the stream starts, like `selected_model`."""
+    if body.resume is None:
+        return None
+    try:
+        return agent.resume(body.resume, body.user.sub, body.conversation_id, body.domains)
+    except ApprovalError as error:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"Invalid approval: {error}"
+        ) from error
+
+
 @router.post("/agent", response_class=EventSourceResponse)
 async def agent(
     agent: Annotated[Agent, Depends(get_agent)],
     pipeline: Annotated[ChatPipeline, Depends(get_pipeline)],
     body: AgentRequest,
     model: Annotated[str | None, Depends(selected_model)],
+    resume: Annotated[Resumed | None, Depends(resumed)],
 ) -> AsyncGenerator[ServerSentEvent]:
     """Agent turn, SSE v2: `step`, `tool_call`, `tool_result`, `sources`, `token`…, `done`
-    (plan-phase-2 §7.3). `mode=rag` runs the Phase 1 pipeline and ends with the same `done`."""
+    (plan-phase-2 §7.3); a write call ends it with `approval_required`, and `resume` continues
+    it. `mode=rag` runs the Phase 1 pipeline and ends with the same `done`."""
     turns = [message.turn() for message in body.messages]
     events = (
         rag_turn(pipeline, turns, body.domains, body.user.sub, model)
         if body.mode == "rag"
         else agent.stream(
-            turns, body.domains, body.user.roles, body.user.sub, body.conversation_id, model
+            turns, body.domains, body.user.roles, body.user.sub, body.conversation_id, model, resume
         )
     )
     async with aclosing(events) as stream:

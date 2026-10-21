@@ -331,7 +331,7 @@
           "agent"
         ],
         "summary": "Agent",
-        "description": "Agent turn, SSE v2: `step`, `tool_call`, `tool_result`, `sources`, `token`…, `done`\n(plan-phase-2 §7.3). `mode=rag` runs the Phase 1 pipeline and ends with the same `done`.",
+        "description": "Agent turn, SSE v2: `step`, `tool_call`, `tool_result`, `sources`, `token`…, `done`\n(plan-phase-2 §7.3); a write call ends it with `approval_required`, and `resume` continues\nit. `mode=rag` runs the Phase 1 pipeline and ends with the same `done`.",
         "operationId": "agent_v1_agent_post",
         "requestBody": {
           "content": {
@@ -561,6 +561,16 @@
           },
           "user": {
             "$ref": "#/components/schemas/UserContext"
+          },
+          "resume": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Resume"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -944,6 +954,47 @@
         ],
         "title": "ModelInfo",
         "description": "One `config/models.yaml` entry (D40); `id` is the model id at LLM_BASE_URL."
+      },
+      "Resume": {
+        "properties": {
+          "signed_action": {
+            "type": "string",
+            "title": "Signed Action"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "approve",
+              "reject"
+            ],
+            "title": "Decision"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "args": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Args"
+          }
+        },
+        "type": "object",
+        "required": [
+          "signed_action",
+          "decision",
+          "args"
+        ],
+        "title": "Resume",
+        "description": "The user's decision on an `approval_required` action (D28)."
       },
       "SearchRequest": {
         "properties": {
@@ -1340,6 +1391,57 @@
         "title": "AgentUsage",
         "type": "object"
       },
+      "ApprovalRequiredEvent": {
+        "properties": {
+          "approvalId": {
+            "format": "uuid",
+            "title": "Approvalid",
+            "type": "string"
+          },
+          "callId": {
+            "title": "Callid",
+            "type": "string"
+          },
+          "tool": {
+            "title": "Tool",
+            "type": "string"
+          },
+          "args": {
+            "additionalProperties": true,
+            "title": "Args",
+            "type": "object"
+          },
+          "risk": {
+            "enum": [
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Risk",
+            "type": "string"
+          },
+          "expiresAt": {
+            "format": "date-time",
+            "title": "Expiresat",
+            "type": "string"
+          },
+          "signedAction": {
+            "title": "Signedaction",
+            "type": "string"
+          }
+        },
+        "required": [
+          "approvalId",
+          "callId",
+          "tool",
+          "args",
+          "risk",
+          "expiresAt",
+          "signedAction"
+        ],
+        "title": "ApprovalRequiredEvent",
+        "type": "object"
+      },
       "DoneEvent": {
         "properties": {
           "usage": {
@@ -1576,7 +1678,8 @@
             "enum": [
               "ok",
               "error",
-              "denied"
+              "denied",
+              "rejected"
             ],
             "title": "Status",
             "type": "string"

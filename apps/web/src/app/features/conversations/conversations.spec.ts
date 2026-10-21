@@ -45,13 +45,19 @@ const message = (id: string, role: string, parts: unknown[], extra = {}) => ({
   feedback: null,
   ...extra,
 });
-const detail = (id: string, messages: unknown[], modelId: string | null = null) => ({
+const detail = (
+  id: string,
+  messages: unknown[],
+  modelId: string | null = null,
+  approvals: unknown[] = [],
+) => ({
   id,
   title: 'How do I roll back?',
   modelId,
   createdAt: '2026-10-20T10:00:00Z',
   updatedAt: '2026-10-20T10:00:00Z',
   messages,
+  approvals,
 });
 const STORED = [
   message('m1', 'user', [{ type: 'text', text: 'How do I roll back?' }]),
@@ -69,7 +75,7 @@ describe('Conversations', () => {
   let http: HttpTestingController;
   const fetchMock = vi.fn<typeof fetch>();
 
-  async function render(id?: string): Promise<void> {
+  async function render(id?: string, pending: unknown[] = []): Promise<void> {
     vi.stubGlobal('fetch', fetchMock);
     vi.stubGlobal('confirm', () => true);
     HTMLDialogElement.prototype.showModal = vi.fn();
@@ -79,7 +85,10 @@ describe('Conversations', () => {
         provideHttpClientTesting(),
         provideRouter([]),
         { provide: APP_CONFIG, useValue: { apiBaseUrl: 'http://api', phoenixUrl: 'http://px' } },
-        { provide: Keycloak, useValue: { token: 'jwt', updateToken: async () => true } },
+        {
+          provide: Keycloak,
+          useValue: { token: 'jwt', subject: 'u1', updateToken: async () => true },
+        },
       ],
     });
     fixture = TestBed.createComponent(Conversations);
@@ -100,6 +109,7 @@ describe('Conversations', () => {
       costUsd: 0.0012,
       turns: 2,
     });
+    http.expectOne('http://api/api/approvals?status=pending').flush(pending);
     http.expectOne('http://api/api/models').flush(MODELS);
     await fixture.whenStable();
   }
@@ -145,6 +155,7 @@ describe('Conversations', () => {
     await vi.waitFor(() => expect(page.querySelector('button[aria-label=Helpful]')).not.toBeNull());
     http.expectOne('http://api/api/conversations').flush([detail('c1', [])]); // sidebar refresh
     http.expectOne('http://api/api/me/usage').flush({});
+    http.expectOne('http://api/api/approvals?status=pending').flush([]);
 
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('http://api/api/conversations/c1/messages');
@@ -200,6 +211,75 @@ describe('Conversations', () => {
     await vi.waitFor(() =>
       expect(page.querySelector('[role=alert]')?.textContent).toContain('Chat limit of 20'),
     );
+  });
+
+  it('shows a proposed write with args, risk and time left; approving streams the rest', async () => {
+    const expiresAt = new Date(Date.now() + 5 * 60_000).toISOString();
+    const proposal = {
+      approvalId: 'a1',
+      callId: 'w1',
+      tool: 'github_sandbox.create_issue',
+      args: { title: 'Flaky test' },
+      risk: 'medium',
+      expiresAt,
+    };
+    const approval = {
+      ...proposal,
+      id: 'a1',
+      conversationId: 'c5',
+      messageId: 'm2',
+      requesterId: 'u1',
+      status: 'pending',
+      note: null,
+      error: null,
+      createdAt: '2026-10-20T10:00:00Z',
+      decidedAt: null,
+      executedAt: null,
+    };
+    const call = {
+      type: 'tool_call',
+      id: 'w1',
+      name: proposal.tool,
+      kind: 'write',
+      risk: 'medium',
+    };
+    const stored = [
+      message('m1', 'user', [{ type: 'text', text: 'Open an issue' }]),
+      message('m2', 'assistant', [
+        { ...call, args: proposal.args },
+        { type: 'approval_required', ...proposal },
+      ]),
+    ];
+    await render('c5', [approval, { ...approval, id: 'a2', requesterId: 'someone-else' }]);
+    http.expectOne('http://api/api/conversations/c5').flush(detail('c5', stored, null, [approval]));
+    await vi.waitFor(() => expect(page.querySelector('app-approval button')).not.toBeNull());
+
+    const card = page.querySelector('app-approval')!;
+    expect(card.querySelector('pre')?.textContent).toContain('"title": "Flaky test"');
+    expect(card.textContent).toMatch(/medium risk[\s\S]*Expires in [45]:\d\d/);
+    expect(page.querySelectorAll('nav[aria-label=Conversations] code')).toHaveLength(1);
+    fetchMock.mockResolvedValue(
+      new Response(
+        sse('tool_call', { ...call, args: proposal.args }) +
+          sse('tool_result', { ...RESULT, id: 'w1', summary: 'created #7' }) +
+          sse('token', { text: 'Created #7.' }) +
+          sse('done', { stopReason: 'end' }),
+      ),
+    );
+    card.querySelector('input')!.value = 'Looks right';
+    card.querySelector<HTMLButtonElement>('button.btn-success')!.click();
+
+    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('http://api/api/approvals/a1');
+    expect(JSON.parse(init?.body as string)).toEqual({ decision: 'approve', note: 'Looks right' });
+    await vi.waitFor(() =>
+      http
+        .expectOne('http://api/api/conversations/c5')
+        .flush(detail('c5', stored, null, [{ ...approval, status: 'succeeded' }])),
+    );
+    await vi.waitFor(() => expect(card.textContent).toContain('Approved and done.'));
+    expect(card.querySelector('button')).toBeNull();
   });
 
   it('stops the stream, aborts the request and keeps the partial answer', async () => {

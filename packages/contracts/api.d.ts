@@ -228,6 +228,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ConversationsController_listApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/approvals/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ConversationsController_decide"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/messages/{id}/feedback": {
         parameters: {
             query?: never;
@@ -252,6 +284,22 @@ export interface paths {
             cookie?: never;
         };
         get: operations["ConversationsController_usage"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/audit": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["AuditController_list"];
         put?: never;
         post?: never;
         delete?: never;
@@ -341,6 +389,7 @@ export interface components {
             /** Format: date-time */
             updatedAt: string;
             messages: components["schemas"]["Message"][];
+            approvals: components["schemas"]["Approval"][];
         };
         Message: {
             /** Format: uuid */
@@ -368,6 +417,33 @@ export interface components {
             rating: "up" | "down";
             comment?: string | null;
         };
+        Approval: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            conversationId: string;
+            /** Format: uuid */
+            messageId: string;
+            requesterId: string;
+            callId: string;
+            tool: string;
+            args: {
+                [key: string]: unknown;
+            };
+            risk: string;
+            /** @enum {string} */
+            status: "pending" | "approved" | "rejected" | "expired" | "executing" | "succeeded" | "failed" | "unknown";
+            note: string | null;
+            error: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            decidedAt: string | null;
+            /** Format: date-time */
+            executedAt: string | null;
+        };
         NewMessage: {
             text: string;
             modelId?: string;
@@ -375,12 +451,34 @@ export interface components {
             mode?: "agent" | "rag";
             domains?: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[];
         };
+        Decision: {
+            /** @enum {string} */
+            decision: "approve" | "reject";
+            note?: string;
+        };
         UsageToday: {
             inputTokens: number;
             cachedTokens: number;
             outputTokens: number;
             costUsd: number;
             turns: number;
+        };
+        AuditEntry: {
+            id: number;
+            /** Format: date-time */
+            ts: string;
+            actorId: string;
+            actorRoles: string[];
+            serviceIdentity: string | null;
+            /** Format: uuid */
+            conversationId: string | null;
+            /** Format: uuid */
+            approvalId: string | null;
+            tool: string;
+            kind: string;
+            argsRedacted: unknown;
+            outcome: string;
+            traceId: string | null;
         };
     };
     responses: never;
@@ -752,7 +850,52 @@ export interface operations {
             };
         };
         responses: {
-            /** @description SSE v2: `step`, `tool_call`, `tool_result`, `sources`, `token`…, then `done` (with `error` before it on failures) */
+            /** @description SSE v2: `step`, `tool_call`, `tool_result`, `sources`, `token`…, `approval_required` (without `signedAction`), then `done` (with `error` before it on failures) */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ConversationsController_listApprovals: {
+        parameters: {
+            query?: {
+                status?: "pending" | "approved" | "rejected" | "expired" | "executing" | "succeeded" | "failed" | "unknown";
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Approval"][];
+                };
+            };
+        };
+    };
+    ConversationsController_decide: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["Decision"];
+            };
+        };
+        responses: {
+            /** @description SSE v2 continuation of the turn that proposed the action */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -799,6 +942,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UsageToday"];
+                };
+            };
+        };
+    };
+    AuditController_list: {
+        parameters: {
+            query?: {
+                user?: string;
+                tool?: string;
+                outcome?: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuditEntry"][];
                 };
             };
         };

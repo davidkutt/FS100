@@ -5,6 +5,11 @@ type Events = Ai['schemas'];
 export type ToolCall = { type: 'tool_call' } & Events['ToolCallEvent'];
 export type ToolResult = { type: 'tool_result' } & Events['ToolResultEvent'];
 export type Source = Events['Source'];
+/** The API strips `signedAction` (D29). */
+export type Proposal = { type: 'approval_required' } & Omit<
+  Events['ApprovalRequiredEvent'],
+  'signedAction'
+>;
 
 /** SSE v2 payloads under their event name, as the API stores them (`Message.parts`). */
 export type Part =
@@ -12,6 +17,7 @@ export type Part =
   | ToolCall
   | ToolResult
   | ({ type: 'sources' } & Events['SourcesEvent'])
+  | Proposal
   | { type: 'error'; title: string; detail: string };
 
 /** A stored message, or the turn still streaming (no id yet). */
@@ -47,6 +53,9 @@ export const answerOf = (parts: Part[]): string =>
 
 export const sourcesOf = (parts: Part[]): Source[] =>
   parts.flatMap((part) => (part.type === 'sources' ? part.sources : []));
+
+export const proposalsOf = (parts: Part[]): Proposal[] =>
+  parts.filter((part): part is Proposal => part.type === 'approval_required');
 
 export const errorOf = (parts: Part[]): string | undefined =>
   parts.flatMap((part) => (part.type === 'error' ? [part.detail || part.title] : [])).at(-1);

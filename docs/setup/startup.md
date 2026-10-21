@@ -93,7 +93,7 @@ Ports are fixed and identical in Mode A and Mode B (plan.md §5). Everything bin
 | Service | URL | Login (dev only) |
 |---|---|---|
 | Web (Angular) | http://localhost:4200 | seed users below (Keycloak login, PKCE) |
-| API (NestJS) | http://localhost:3000/healthz · `/readyz` · `/api/*` needs a user token (`/api/me`, `/api/documents`, `/api/conversations`, `/api/models`, `/api/taxonomy`, `/api/chat`, `/api/search`, admin: `/api/status`) | — |
+| API (NestJS) | http://localhost:3000/healthz · `/readyz` · `/api/*` needs a user token (`/api/me`, `/api/documents`, `/api/conversations`, `/api/approvals`, `/api/models`, `/api/taxonomy`, `/api/chat`, `/api/search`, admin: `/api/status`, `/api/admin/audit`) | — |
 | AI service (FastAPI) | http://localhost:8000 · `/healthz`, `/readyz` · Swagger UI: http://localhost:8000/docs · `/v1/*` needs the API's service token | — |
 | Keycloak admin console | http://localhost:8080/admin/ | `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD` from the first start (default `admin` / `dev-only-change-me`) |
 | Keycloak account console (realm `kb`) | http://localhost:8080/realms/kb/account | seed users below |
@@ -303,6 +303,7 @@ retrieval, eval harness — `pnpm eval:retrieval`, see [evals/README.md](../../e
 relays in the API, `pnpm contracts:generate`), **M1.5** (Angular UI: documents, chat, inspector) and
 **M1.6** (containers, Mode B, CI workflows, Playwright e2e) are done. The Azure readiness spike (M1.7)
 is postponed while the project runs locally. Phase 2 ([plan-phase-2.md](../../plan-phase-2.md)): **M2.0**
-(pins, spikes, identities), **M2.1** (agent harness, `POST /v1/agent` in the AI service) and **M2.2**
+(pins, spikes, identities), **M2.1** (agent harness, `POST /v1/agent` in the AI service), **M2.2**
 (stored conversations, the agent chat UI with tool timeline and model picker, `config/taxonomy.yaml` with
-document sub-topics) are done; next is M2.3 (approvals, permissions, audit).
+document sub-topics) and **M2.3** (approvals for write tools, audit log, admin audit page at
+http://localhost:4200/admin/audit) are done; next is M2.4 (own MCP server, token exchange).

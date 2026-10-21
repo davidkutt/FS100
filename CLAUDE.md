@@ -54,10 +54,11 @@ documents, chat, inspector) and M1.6 (Dockerfiles, Compose `--profile full`, CI 
 are done. M1.7 (Azure spike) is postponed while the project runs locally, so Phase 2 has no Azure parts.
 **Phase 2 (agent, MCP, approvals) is in progress** — M2.0 (pins, spikes, identities, ADR-0007…0010
 drafts), M2.1 (agent harness: `agent.py`, `tools.py`, `POST /v1/agent` with SSE v2, task set
-`agent_v0`) and M2.2 (conversations + event tee in NestJS, model registry, taxonomy + document topics,
-agent chat UI) are done. Check the milestone in [plan.md §8](plan.md#8-milestones-and-tasks) or
-[plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks) before building something: many features
-are deliberately scheduled for later milestones.
+`agent_v0`), M2.2 (conversations + event tee in NestJS, model registry, taxonomy + document topics,
+agent chat UI) and M2.3 (signed approvals `approvals.py` + resume, NestJS approval state machine,
+append-only `audit_log`, approval card and admin audit page) are done. Check the milestone in
+[plan.md §8](plan.md#8-milestones-and-tasks) or [plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks)
+before building something: many features are deliberately scheduled for later milestones.
 
 The plan's working title `kb-agent` lives on in identifiers (realm `kb`, clients `kb-web`/`kb-api`/`kb-ai`,
 Qdrant alias `kb_current`). Keep those names.
@@ -127,7 +128,8 @@ Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
   prefix via `app.setup.ts`; probes (`/healthz`) are excluded. Use `configureApp()` in e2e tests.
 - **Angular:** new-style file names without suffixes (`home.ts`, `home.html`, not `home.component.ts`);
   selector prefix `app-`; features under `src/app/features/<name>/`; lazy routes via `loadComponent`;
-  template a11y rules are lint errors.
+  template a11y rules are lint errors. In specs, flush every `httpResource` request (also reloads after a
+  run) — an open one makes `fixture.whenStable()` time out without a message.
 - **Python:** pyright runs in **strict** mode — fully type everything. App factory `create_app(settings)` in
   `main.py`; tests build their own app with `TestClient(create_app(Settings()))`. Config only through
   `core/settings.py` (`Settings` fields map to env vars case-insensitively).

@@ -6,12 +6,19 @@ from pathlib import Path
 
 from pydantic.json_schema import models_json_schema
 
-from ai_service.agent import AgentDoneEvent, StepEvent, ToolCallEvent, ToolResultEvent
+from ai_service.agent import (
+    AgentDoneEvent,
+    ApprovalRequiredEvent,
+    StepEvent,
+    ToolCallEvent,
+    ToolResultEvent,
+)
 from ai_service.main import app
 from ai_service.rag import DoneEvent, ErrorEvent, SourcesEvent, TokenEvent
 
 V1_EVENTS = (SourcesEvent, TokenEvent, DoneEvent, ErrorEvent)
-V2_EVENTS = (StepEvent, ToolCallEvent, ToolResultEvent, AgentDoneEvent)  # plan-phase-2 §7.3
+# plan-phase-2 §7.3
+V2_EVENTS = (StepEvent, ToolCallEvent, ToolResultEvent, ApprovalRequiredEvent, AgentDoneEvent)
 
 
 def main() -> None:

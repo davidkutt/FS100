@@ -7,7 +7,7 @@ run and every request **traceable** from retrieval to prompt to model.
 
 The project is built in six phases; the full plan for Phase 1 lives in **[plan.md](plan.md)**.
 
-> **Status:** Phase 2 · **M2.2 conversations & agent UI** — Phase 1 is in place: the AI service ingests
+> **Status:** Phase 2 · **M2.3 approvals & audit** — Phase 1 is in place: the AI service ingests
 > PDF/Markdown/TXT into Qdrant, searches it with domain filters (measured by a 60-question golden set,
 > `pnpm eval:retrieval`) and streams cited answers over SSE; the NestJS API handles uploads (RBAC, dedupe,
 > background ingest) and relays chat and search; the Angular UI has upload, chat with clickable citations and a
@@ -15,7 +15,9 @@ The project is built in six phases; the full plan for Phase 1 lives in **[plan.m
 > New in Phase 2: an own agent loop (`POST /v1/agent`) that searches the knowledge base as a tool, streams its
 > tool activity as SSE v2 events and stops at hard limits (steps, time, tokens, cost); stored conversations in the
 > API with a tool-activity timeline, model picker (`config/models.yaml`), feedback and today's usage in the UI;
-> sub-topics from `config/taxonomy.yaml` on documents, relabelled without re-embedding — see [roadmap](#roadmap).
+> sub-topics from `config/taxonomy.yaml` on documents, relabelled without re-embedding; write tools stop for the
+> user's approval (HMAC-signed action, at-most-once state machine) and every tool call lands in an append-only audit
+> log with an admin page — see [roadmap](#roadmap).
 
 ---
 
@@ -167,7 +169,7 @@ plan.md           Phase 1 plan (decisions, contracts, milestones)
 | Phase | Theme |
 |---|---|
 | 1 | Foundation + RAG slice + eval + tracing — *M1.0 – M1.6 done; M1.7 Azure spike postponed (local only for now)* |
-| **2** | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals — *in progress: M2.0 – M2.2 done* |
+| **2** | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals — *in progress: M2.0 – M2.3 done* |
 | 3 | Hybrid search, reranking, code-aware RAG, guardrails, routing + semantic cache, memory |
 | 4 | Kubernetes: Helm, k3d, GitOps-ready manifests |
 | 5 | Azure: Terraform, ACR, AKS / Container Apps, Key Vault, OIDC from GitHub |

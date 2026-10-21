@@ -173,7 +173,8 @@ export interface paths {
         /**
          * Agent
          * @description Agent turn, SSE v2: `step`, `tool_call`, `tool_result`, `sources`, `token`…, `done`
-         *     (plan-phase-2 §7.3). `mode=rag` runs the Phase 1 pipeline and ends with the same `done`.
+         *     (plan-phase-2 §7.3); a write call ends it with `approval_required`, and `resume` continues
+         *     it. `mode=rag` runs the Phase 1 pipeline and ends with the same `done`.
          */
         post: operations["agent_v1_agent_post"];
         delete?: never;
@@ -273,6 +274,7 @@ export interface components {
             /** Domains */
             domains?: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[] | null;
             user: components["schemas"]["UserContext"];
+            resume?: components["schemas"]["Resume"] | null;
         };
         /** Body_ingest_v1_ingest_post */
         Body_ingest_v1_ingest_post: {
@@ -389,6 +391,25 @@ export interface components {
              * @enum {string}
              */
             min_role: "viewer" | "editor" | "admin";
+        };
+        /**
+         * Resume
+         * @description The user's decision on an `approval_required` action (D28).
+         */
+        Resume: {
+            /** Signed Action */
+            signed_action: string;
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "approve" | "reject";
+            /** Note */
+            note?: string | null;
+            /** Args */
+            args: {
+                [key: string]: unknown;
+            };
         };
         /** SearchRequest */
         SearchRequest: {
@@ -530,6 +551,34 @@ export interface components {
             /** Toolcalls */
             toolCalls: number;
         };
+        /** ApprovalRequiredEvent */
+        ApprovalRequiredEvent: {
+            /**
+             * Approvalid
+             * Format: uuid
+             */
+            approvalId: string;
+            /** Callid */
+            callId: string;
+            /** Tool */
+            tool: string;
+            /** Args */
+            args: {
+                [key: string]: unknown;
+            };
+            /**
+             * Risk
+             * @enum {string}
+             */
+            risk: "low" | "medium" | "high";
+            /**
+             * Expiresat
+             * Format: date-time
+             */
+            expiresAt: string;
+            /** Signedaction */
+            signedAction: string;
+        };
         /** DoneEvent */
         DoneEvent: {
             usage: components["schemas"]["UsageInfo"] | null;
@@ -611,7 +660,7 @@ export interface components {
              * Status
              * @enum {string}
              */
-            status: "ok" | "error" | "denied";
+            status: "ok" | "error" | "denied" | "rejected";
             /** Summary */
             summary: string;
             /** Content */

@@ -33,5 +33,12 @@ export const routes: Routes = [
     data: { role: 'viewer' },
     loadComponent: () => import('./features/inspector/inspector').then((m) => m.Inspector),
   },
+  {
+    path: 'admin/audit',
+    title: 'Audit log · FS100',
+    canActivate: [roleGuard],
+    data: { role: 'admin' },
+    loadComponent: () => import('./features/admin/audit').then((m) => m.Audit),
+  },
   { path: '**', redirectTo: '' },
 ];

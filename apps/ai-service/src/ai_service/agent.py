@@ -5,15 +5,17 @@ import time
 from collections.abc import AsyncGenerator, Callable
 from contextlib import aclosing
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from fastapi.sse import ServerSentEvent
 from opentelemetry import trace
 from opentelemetry.trace import StatusCode
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, Field, ValidationError
 
-from ai_service import rag
+from ai_service import approvals, rag
+from ai_service.approvals import Action, ApprovalError
 from ai_service.core.logging import request_id
 from ai_service.core.settings import Settings
 from ai_service.knowledge_base import SPAN_KIND, Domain, Hit
@@ -46,7 +48,7 @@ from ai_service.tools import (
 )
 
 StopReason = Literal["end", "max_steps", "budget", "awaiting_approval", "cancelled", "error"]
-ToolStatus = Literal["ok", "error", "denied"]
+ToolStatus = Literal["ok", "error", "denied", "rejected"]
 Tools = Callable[[list[Domain] | None], list[ToolSpec[Any]]]
 PROMPT_VERSION = "agent-system@1"
 SYSTEM_PROMPT = """\
@@ -92,6 +94,34 @@ class ToolResultEvent(EventModel):
     duration_ms: int
 
 
+class ApprovalRequiredEvent(EventModel):
+    approval_id: UUID
+    call_id: str
+    tool: str
+    args: dict[str, Any]  # validated, exactly what runs once approved
+    risk: Risk
+    expires_at: datetime
+    signed_action: str  # NestJS stores it and strips it before the browser (D29)
+
+
+class Resume(BaseModel):
+    """The user's decision on an `approval_required` action (D28)."""
+
+    signed_action: str
+    decision: Literal["approve", "reject"]
+    note: str | None = Field(None, max_length=2000)
+    args: dict[str, Any]  # as shown to the user; must match the signed hash
+
+
+@dataclass(frozen=True)
+class Resumed:
+    action: Action
+    spec: ToolSpec[Any]
+    args: BaseModel
+    decision: Literal["approve", "reject"]
+    note: str | None
+
+
 class AgentUsage(EventModel):
     input_tokens: int
     cached_tokens: int
@@ -125,8 +155,10 @@ class _Sources:
     def __init__(self) -> None:
         self.by_chunk: dict[str, Source] = {}
         self.top_score: float | None = None
+        self.searched = False
 
     def render(self, hits: list[Hit]) -> str:
+        self.searched = True
         rendered: list[str] = []
         for hit in hits:
             self.top_score = max(hit.score, self.top_score or hit.score)
@@ -156,6 +188,61 @@ def _parsed(arguments: str) -> Any:
         return arguments
 
 
+def _assistant(text: str | None, calls: list[ToolCall]) -> Message:
+    return {
+        "role": "assistant",
+        "content": text,
+        "tool_calls": [
+            {
+                "id": call.id,
+                "type": "function",
+                "function": {"name": call.name, "arguments": call.arguments},
+            }
+            for call in calls
+        ],
+    }
+
+
+def _call_event(call: ToolCall, spec: ToolSpec[Any]) -> ServerSentEvent:
+    return _sse(
+        "tool_call",
+        ToolCallEvent(
+            id=call.id, name=spec.name, kind=spec.kind, risk=spec.risk, args=_parsed(call.arguments)
+        ),
+    )
+
+
+def _observe(
+    call: ToolCall,
+    spec: ToolSpec[Any] | None,
+    outcome: _Outcome,
+    sources: _Sources,
+    messages: list[Message],
+) -> ServerSentEvent | None:
+    """Appends the observation for the model; a `tool_result` event for registered tools."""
+    if outcome.output.hits is not None:
+        content = sources.render(outcome.output.hits)
+    else:
+        content = untrusted(outcome.output.content)
+    budget = spec.result_budget_tokens if spec else 100
+    name = spec.name if spec else "unknown"  # call.name is model-controlled
+    block, truncated = wrap(name, outcome.status, content, budget)
+    messages.append({"role": "tool", "tool_call_id": call.id, "content": block})
+    if spec is None:
+        return None
+    return _sse(
+        "tool_result",
+        ToolResultEvent(
+            id=call.id,
+            status=outcome.status,
+            summary=outcome.output.summary,
+            content=block,
+            truncated=truncated,
+            duration_ms=outcome.duration_ms,
+        ),
+    )
+
+
 async def _attempts(spec: ToolSpec[Any], args: BaseModel) -> ToolOutput:
     for attempt in range(TOOL_RETRIES):
         try:
@@ -182,6 +269,7 @@ class Agent:
         user_id: str,
         conversation_id: UUID,
         model_id: str | None = None,
+        resume: Resumed | None = None,
     ) -> AsyncGenerator[ServerSentEvent]:
         settings = self.settings
         tools = sorted(self.tools(domains), key=lambda tool: tool.name)
@@ -202,7 +290,6 @@ class Agent:
         sources = _Sources()
         answer: list[str] = []
         model: str | None = None
-        searched = False
         stop: StopReason = "end"
         limit: str | None = None
         attributes = {
@@ -215,6 +302,17 @@ class Agent:
         }
         with tracer.start_as_current_span("agent.run", attributes=attributes) as span:
             try:
+                if resume:
+                    # The approved call continues the turn that proposed it (ADR-0008).
+                    call = ToolCall(
+                        resume.action.call_id, resume.spec.wire_name, resume.args.model_dump_json()
+                    )
+                    messages.append(_assistant(None, [call]))
+                    usage.tool_calls += 1
+                    yield _call_event(call, resume.spec)
+                    outcome = await self._decided(call, resume, roles, deadline, semaphore)
+                    if event := _observe(call, resume.spec, outcome, sources, messages):
+                        yield event
                 for n in range(1, settings.agent_max_steps + 1):
                     if limit := self._exceeded(usage, deadline):
                         stop = "budget"
@@ -269,33 +367,11 @@ class Agent:
                     if n == settings.agent_max_steps:
                         stop = "max_steps"
                         break
-                    messages.append(
-                        {
-                            "role": "assistant",
-                            "content": "".join(text) or None,
-                            "tool_calls": [
-                                {
-                                    "id": call.id,
-                                    "type": "function",
-                                    "function": {"name": call.name, "arguments": call.arguments},
-                                }
-                                for call in calls
-                            ],
-                        }
-                    )
+                    messages.append(_assistant("".join(text) or None, calls))
                     for call in calls:
                         if spec := by_name.get(call.name):
                             usage.tool_calls += 1
-                            yield _sse(
-                                "tool_call",
-                                ToolCallEvent(
-                                    id=call.id,
-                                    name=spec.name,
-                                    kind=spec.kind,
-                                    risk=spec.risk,
-                                    args=_parsed(call.arguments),
-                                ),
-                            )
+                            yield _call_event(call, spec)
                     async with asyncio.TaskGroup() as group:
                         tasks = [
                             group.create_task(
@@ -306,35 +382,24 @@ class Agent:
                             for call in calls
                         ]
                     known_sources = len(sources.by_chunk)
+                    proposal: ApprovalRequiredEvent | None = None
                     for call, task in zip(calls, tasks, strict=True):
-                        outcome = task.result()
-                        if outcome is None:
-                            continue
                         spec = by_name.get(call.name)
-                        if outcome.output.hits is not None:
-                            searched = True
-                            content = sources.render(outcome.output.hits)
-                        else:
-                            content = untrusted(outcome.output.content)
-                        budget = spec.result_budget_tokens if spec else 100
-                        name = spec.name if spec else "unknown"  # call.name is model-controlled
-                        block, truncated = wrap(name, outcome.status, content, budget)
-                        messages.append({"role": "tool", "tool_call_id": call.id, "content": block})
-                        if spec:
-                            yield _sse(
-                                "tool_result",
-                                ToolResultEvent(
-                                    id=call.id,
-                                    status=outcome.status,
-                                    summary=outcome.output.summary,
-                                    content=block,
-                                    truncated=truncated,
-                                    duration_ms=outcome.duration_ms,
-                                ),
-                            )
+                        outcome = task.result()
+                        if not isinstance(outcome, _Outcome):
+                            if proposal is None and spec:
+                                proposal = self._propose(
+                                    call, spec, outcome, user_id, conversation_id
+                                )
+                                continue
+                            # shortcut: one write per step, queue approvals if models batch writes
+                            outcome = _failed("error", "One write action at a time; retry later")
+                        if event := _observe(call, spec, outcome, sources, messages):
+                            yield event
                     if len(sources.by_chunk) > known_sources:
                         yield _sse("sources", SourcesEvent(sources=[*sources.by_chunk.values()]))
-                    if any(task.result() is None for task in tasks):
+                    if proposal:
+                        yield _sse("approval_required", proposal)
                         stop = "awaiting_approval"
                         break
             except (asyncio.CancelledError, GeneratorExit):
@@ -347,7 +412,7 @@ class Agent:
                 yield _error("internal", "Agent run failed", detail)
                 stop = "error"
             reply = "".join(answer)
-            status = answer_status(reply, len(sources.by_chunk), searched)
+            status = answer_status(reply, len(sources.by_chunk), sources.searched)
             invalid = invalid_citations(reply, len(sources.by_chunk))
             span.set_attributes(
                 {
@@ -378,6 +443,69 @@ class Agent:
             )
             yield _sse("done", done)
 
+    def resume(
+        self, resume: Resume, user_id: str, conversation_id: UUID, domains: list[Domain] | None
+    ) -> Resumed:
+        """Raises ApprovalError unless the action is signed, current and this user's, as shown."""
+        action = approvals.verify(resume.signed_action, self.settings.approval_signing_key)
+        spec = next((tool for tool in self.tools(domains) if tool.name == action.tool), None)
+        if spec is None or not spec.requires_approval:
+            raise ApprovalError(f"{action.tool} is no write tool")
+        try:
+            args = spec.args.model_validate(resume.args)
+        except ValidationError as error:
+            raise ApprovalError(f"invalid arguments: {error}") from error
+        approvals.check(action, user_id, str(conversation_id), args)
+        return Resumed(action, spec, args, resume.decision, resume.note)
+
+    def _propose(
+        self,
+        call: ToolCall,
+        spec: ToolSpec[Any],
+        args: BaseModel,
+        user_id: str,
+        conversation_id: UUID,
+    ) -> ApprovalRequiredEvent:
+        approval_id = uuid4()
+        # Whole seconds: the signed `exp` has no fractions.
+        expires_at = datetime.now(UTC).replace(microsecond=0) + timedelta(
+            minutes=self.settings.approval_ttl_min
+        )
+        action = Action(
+            str(approval_id),
+            user_id,
+            str(conversation_id),
+            spec.name,
+            call.id,
+            approvals.args_hash(args),
+        )
+        return ApprovalRequiredEvent(
+            approval_id=approval_id,
+            call_id=call.id,
+            tool=spec.name,
+            args=args.model_dump(mode="json"),
+            risk=spec.risk,
+            expires_at=expires_at,
+            signed_action=approvals.sign(action, self.settings.approval_signing_key, expires_at),
+        )
+
+    async def _decided(
+        self,
+        call: ToolCall,
+        resume: Resumed,
+        roles: list[str],
+        deadline: float,
+        semaphore: asyncio.Semaphore,
+    ) -> _Outcome:
+        if resume.decision == "reject":
+            note = f" Their note: {resume.note}" if resume.note else ""
+            output = ToolOutput(f"The user rejected this action.{note}", "rejected by the user")
+            return _Outcome("rejected", output)
+        # The role may have changed since the proposal.
+        if not permitted(resume.spec.min_role, roles):
+            return _failed("denied", f"{resume.spec.name} is not permitted for your role")
+        return await self._run(call, resume.spec, resume.args, deadline, semaphore)
+
     def _exceeded(self, usage: AgentUsage, deadline: float) -> str | None:
         if time.monotonic() > deadline:
             return "wall_clock"
@@ -394,18 +522,29 @@ class Agent:
         roles: list[str],
         deadline: float,
         semaphore: asyncio.Semaphore,
-    ) -> _Outcome | None:
-        """One call → an observation for the model (errors included); None = needs approval."""
+    ) -> _Outcome | BaseModel:
+        """One call → an observation for the model (errors included), or its validated args
+        when it needs approval."""
         if spec is None:
             return _failed("error", f"Unknown tool {call.name}")
         if not permitted(spec.min_role, roles):
             return _failed("denied", f"{spec.name} is not permitted for your role")
-        if spec.requires_approval:
-            return None  # shortcut: no signed approval request yet, M2.3 adds it
         try:
             args = spec.args.model_validate_json(call.arguments or "{}")
         except ValidationError as error:
             return _failed("error", f"Invalid arguments: {error}")
+        if spec.requires_approval:
+            return args
+        return await self._run(call, spec, args, deadline, semaphore)
+
+    async def _run(
+        self,
+        call: ToolCall,
+        spec: ToolSpec[Any],
+        args: BaseModel,
+        deadline: float,
+        semaphore: asyncio.Semaphore,
+    ) -> _Outcome:
         attributes = {
             SPAN_KIND: "TOOL",
             "gen_ai.operation.name": "execute_tool",

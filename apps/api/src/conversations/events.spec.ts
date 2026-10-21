@@ -1,19 +1,33 @@
-import { applyEvent, type Part, sseParser } from './events.js';
+import { applyEvent, type Part, sseBlock, sseParser } from './events.js';
 
 describe('sseParser', () => {
   it('emits complete events only, across chunk and multi-byte boundaries', () => {
     const events: [string, string][] = [];
-    const parse = sseParser((event, data) => events.push([event, data]));
+    const parse = sseParser((event, data) => {
+      events.push([event, data]);
+    });
     const bytes = new TextEncoder().encode(
       ': ping\n\nevent: token\ndata: {"text":"Grüße"}\n\nevent: done\r\ndata: {}\r\n\r\nevent: tok',
     );
 
-    for (let i = 0; i < bytes.length; i += 5) parse(bytes.subarray(i, i + 5));
+    let forwarded = '';
+    for (let i = 0; i < bytes.length; i += 5) forwarded += parse(bytes.subarray(i, i + 5));
 
     expect(events).toEqual([
       ['token', '{"text":"Grüße"}'],
       ['done', '{}'],
     ]);
+    expect(forwarded).toBe(
+      ': ping\n\nevent: token\ndata: {"text":"Grüße"}\n\nevent: done\r\ndata: {}\n\n',
+    );
+  });
+
+  it('forwards the block onEvent returns instead of the event', () => {
+    const parse = sseParser((event) => (event === 'secret' ? sseBlock('secret', {}) : undefined));
+
+    const forwarded = parse(new TextEncoder().encode('event: secret\ndata: {"key":1}\n\n'));
+
+    expect(forwarded).toBe('event: secret\ndata: {}\n\n');
   });
 });
 

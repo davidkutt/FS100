@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm';
 import {
+  bigserial,
   char,
   check,
   index,
@@ -134,5 +135,74 @@ export const feedback = pgTable(
   ],
 );
 
+export const APPROVAL_STATUSES = [
+  'pending',
+  'approved',
+  'rejected',
+  'expired',
+  'executing',
+  'succeeded',
+  'failed',
+  'unknown',
+] as const;
+export type ApprovalStatus = (typeof APPROVAL_STATUSES)[number];
+
+/** State machine of ADR-0008; `id` is the AI service's `approvalId`, which the signed action names. */
+export const approvals = pgTable(
+  'approvals',
+  {
+    id: uuid().primaryKey(),
+    conversationId: uuid()
+      .notNull()
+      .references(() => conversations.id, { onDelete: 'cascade' }),
+    messageId: uuid()
+      .notNull()
+      .references(() => messages.id, { onDelete: 'cascade' }),
+    requesterId: text().notNull(),
+    callId: text().notNull(),
+    tool: text().notNull(),
+    args: jsonb().$type<Record<string, unknown>>().notNull(),
+    risk: text().notNull(),
+    signedAction: text().notNull(),
+    status: text({ enum: APPROVAL_STATUSES }).notNull().default('pending'),
+    note: text(),
+    error: text(),
+    createdAt: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp({ withTimezone: true }).notNull(),
+    decidedAt: timestamp({ withTimezone: true }),
+    executedAt: timestamp({ withTimezone: true }),
+  },
+  (t) => [
+    index().on(t.requesterId, t.status),
+    index().on(t.conversationId),
+    check(
+      'approvals_status_check',
+      sql`${t.status} in ('pending','approved','rejected','expired','executing','succeeded','failed','unknown')`,
+    ),
+  ],
+);
+
+/** Append-only (a trigger in the migration rejects UPDATE and DELETE); outlives conversations (D42). */
+export const auditLog = pgTable(
+  'audit_log',
+  {
+    id: bigserial({ mode: 'number' }).primaryKey(),
+    ts: timestamp({ withTimezone: true }).notNull().defaultNow(),
+    actorId: text().notNull(),
+    actorRoles: text().array().notNull(),
+    serviceIdentity: text(), // e.g. a GitHub PAT; null while the AI service acts for the user
+    conversationId: uuid(),
+    approvalId: uuid(),
+    tool: text().notNull(),
+    kind: text().notNull(),
+    argsRedacted: jsonb(),
+    outcome: text().notNull(),
+    traceId: text(),
+  },
+  (t) => [index().on(t.ts), index().on(t.actorId, t.ts)],
+);
+
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
+export type Approval = typeof approvals.$inferSelect;
+export type AuditEntry = typeof auditLog.$inferSelect;

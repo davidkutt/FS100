@@ -24,11 +24,13 @@ import { problemDetail } from '../../core/problem';
 import { parseSse } from '../../core/sse';
 import { DomainPicker } from '../../shared/domain-picker';
 import { MarkdownPipe } from '../../shared/markdown';
+import { ApprovalCard, type Decision } from './approval';
 import {
   answerOf,
   applyEvent,
   errorOf,
   type Part,
+  proposalsOf,
   type Source,
   sourcesOf,
   type Turn,
@@ -41,6 +43,7 @@ type Schemas = Api['schemas'];
 @Component({
   selector: 'app-conversations',
   imports: [
+    ApprovalCard,
     CurrencyPipe,
     DecimalPipe,
     DomainPicker,
@@ -69,6 +72,16 @@ export class Conversations {
     () => `${this.api}/api/conversations`,
   );
   protected readonly usage = httpResource<Schemas['UsageToday']>(() => `${this.api}/api/me/usage`);
+  private readonly pending = httpResource<Schemas['Approval'][]>(
+    () => `${this.api}/api/approvals?status=pending`,
+  );
+  /** Admins get everyone's; only the requester decides (plan-phase-2 §7.6). */
+  protected readonly waiting = computed(() =>
+    (this.pending.hasValue() ? this.pending.value() : []).filter(
+      (approval) => approval.requesterId === this.keycloak.subject,
+    ),
+  );
+  protected readonly approvals = signal(new Map<string, Schemas['Approval']>());
   private readonly models = httpResource<Ai['schemas']['ModelInfo'][]>(
     () => `${this.api}/api/models`,
   );
@@ -93,6 +106,7 @@ export class Conversations {
 
   protected readonly answerOf = answerOf;
   protected readonly sourcesOf = sourcesOf;
+  protected readonly proposalsOf = proposalsOf;
   protected readonly errorOf = errorOf;
 
   private readonly input = viewChild.required<ElementRef<HTMLInputElement>>('input');
@@ -109,6 +123,7 @@ export class Conversations {
         this.abort?.abort();
         this.messages.set([]);
         this.live.set([]);
+        this.approvals.set(new Map());
         this.storedModel.set(null);
         this.loadError.set('');
         if (id) void this.open(id);
@@ -119,19 +134,10 @@ export class Conversations {
   protected async send(): Promise<void> {
     const text = this.question().trim();
     if (!text || this.busy()) return;
-    // A stopped or failed turn stays visible; the next reload brings the stored copy.
-    this.messages.update((messages) => [...messages, ...this.live()]);
-    this.live.set([
-      { role: 'user', parts: [{ type: 'text', text }] },
-      { role: 'assistant', parts: [] },
-    ]);
     this.question.set('');
     this.input().nativeElement.focus();
-    this.busy.set(true);
-    const abort = (this.abort = new AbortController());
-    let id = this.id();
-    let streamed = false;
-    try {
+    await this.stream([{ role: 'user', parts: [{ type: 'text', text }] }], async () => {
+      let id = this.id();
       if (!id) {
         const created = this.http.post<Schemas['Conversation']>(
           `${this.api}/api/conversations`,
@@ -140,42 +146,25 @@ export class Conversations {
         id = this.shown = (await firstValueFrom(created)).id;
         await this.router.navigate(['/chat', id], { replaceUrl: true });
       }
-      await this.keycloak.updateToken(30);
-      const res = await fetch(`${this.api}/api/conversations/${id}/messages`, {
-        method: 'POST',
-        signal: abort.signal,
-        headers: {
-          'content-type': 'application/json',
-          authorization: `Bearer ${this.keycloak.token}`,
-        },
-        body: JSON.stringify({
-          text,
-          modelId: this.modelId() || undefined,
-          domains: this.domains().length ? this.domains() : undefined,
-        }),
-      });
-      if (!res.ok || !res.body) {
-        const problem = await res.json().catch(() => ({}));
-        throw new Error(problem.detail ?? problem.title ?? `Chat failed (${res.status})`);
-      }
-      streamed = true;
-      for await (const { event, data } of parseSse(res.body)) {
-        const payload = JSON.parse(data);
-        this.patch((turn) => ({
-          parts: applyEvent(turn.parts, event, payload),
-          ...(event === 'done' && { stopReason: payload.stopReason, traceId: payload.traceId }),
-        }));
-      }
-    } catch (error) {
-      streamed = false;
-      if (abort.signal.aborted) this.patch(() => ({ stopReason: 'cancelled' }));
-      else this.patch(() => ({ error: problemDetail(error) }));
-    } finally {
-      this.busy.set(false);
-      if (streamed && id && id === this.id()) await this.open(id);
-      this.list.reload();
-      this.usage.reload();
-    }
+      const body = {
+        text,
+        modelId: this.modelId() || undefined,
+        domains: this.domains().length ? this.domains() : undefined,
+      };
+      return { id, url: `${this.api}/api/conversations/${id}/messages`, body };
+    });
+  }
+
+  /** The decision streams the rest of the turn (ADR-0008). */
+  protected async decide(approvalId: string, { decision, note }: Decision): Promise<void> {
+    const id = this.id();
+    if (!id || this.busy()) return;
+    const body = { decision, note: note?.trim() || undefined };
+    await this.stream([], async () => ({
+      id,
+      url: `${this.api}/api/approvals/${approvalId}`,
+      body,
+    }));
   }
 
   protected stop(): void {
@@ -225,11 +214,63 @@ export class Conversations {
     this.panel().nativeElement.showModal();
   }
 
-  private async open(id: string): Promise<void> {
+  /** One run into a new live answer after `turns`; a stopped or failed one stays visible. */
+  private async stream(
+    turns: Turn[],
+    request: () => Promise<{ id: string; url: string; body: unknown }>,
+  ): Promise<void> {
+    this.messages.update((messages) => [...messages, ...this.live()]);
+    this.live.set([...turns, { role: 'assistant', parts: [] }]);
+    this.busy.set(true);
+    const abort = (this.abort = new AbortController());
+    let id: string | undefined;
+    let streamed = false;
+    try {
+      const next = await request();
+      id = next.id;
+      await this.keycloak.updateToken(30);
+      const res = await fetch(next.url, {
+        method: 'POST',
+        signal: abort.signal,
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${this.keycloak.token}`,
+        },
+        body: JSON.stringify(next.body),
+      });
+      if (!res.ok || !res.body) {
+        const problem = await res.json().catch(() => ({}));
+        throw new Error(problem.detail ?? problem.title ?? `Chat failed (${res.status})`);
+      }
+      streamed = true;
+      for await (const { event, data } of parseSse(res.body)) {
+        const payload = JSON.parse(data);
+        this.patch((turn) => ({
+          parts: applyEvent(turn.parts, event, payload),
+          ...(event === 'done' && { stopReason: payload.stopReason, traceId: payload.traceId }),
+        }));
+      }
+    } catch (error) {
+      streamed = false;
+      if (abort.signal.aborted) this.patch(() => ({ stopReason: 'cancelled' }));
+      else this.patch(() => ({ error: problemDetail(error) }));
+    } finally {
+      this.busy.set(false);
+      // A run that never streamed keeps its turns on screen; approvals refresh either way.
+      if (id && id === this.id()) await this.open(id, !streamed);
+      this.list.reload();
+      this.usage.reload();
+      this.pending.reload();
+    }
+  }
+
+  private async open(id: string, approvalsOnly = false): Promise<void> {
     try {
       const url = `${this.api}/api/conversations/${id}`;
       const detail = await firstValueFrom(this.http.get<Schemas['ConversationDetail']>(url));
       if (id !== this.id()) return; // another conversation was opened meanwhile
+      this.approvals.set(new Map(detail.approvals.map((approval) => [approval.id, approval])));
+      if (approvalsOnly) return;
       this.messages.set(detail.messages.map((m) => ({ ...m, parts: m.parts as Part[] })));
       this.live.set([]);
       this.storedModel.set(detail.modelId);

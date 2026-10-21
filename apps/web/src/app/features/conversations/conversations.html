@@ -18,6 +18,18 @@
         }
       </ul>
     }
+    @if (waiting().length) {
+      <h2 class="h6 mt-3">Waiting for your approval</h2>
+      <ul class="list-unstyled small">
+        @for (approval of waiting(); track approval.id) {
+          <li>
+            <a [routerLink]="['/chat', approval.conversationId]"
+              ><code>{{ approval.tool }}</code></a
+            >
+          </li>
+        }
+      </ul>
+    }
     @if (usage.hasValue()) {
       <p class="small text-body-secondary mt-3 mb-0">
         Today: {{ usage.value().costUsd | currency: 'USD' : 'symbol' : '1.2-4' }} ·
@@ -77,6 +89,15 @@
           <article class="card shadow-sm" [attr.aria-busy]="streaming">
             <div class="card-body">
               <app-timeline [parts]="turn.parts" [live]="streaming" />
+              @for (proposal of proposalsOf(turn.parts); track proposal.approvalId) {
+                @let approval = approvals().get(proposal.approvalId);
+                <app-approval
+                  [proposal]="proposal"
+                  [approval]="approval"
+                  [disabled]="busy() || !approval"
+                  (decided)="decide(proposal.approvalId, $event)"
+                />
+              }
               @if (answer) {
                 <!-- eslint-disable-next-line @angular-eslint/template/click-events-have-key-events, @angular-eslint/template/interactive-supports-focus -- citations are links, Enter fires click -->
                 <div
@@ -96,7 +117,7 @@
               @if (turn.stopReason === 'cancelled') {
                 <p class="small text-body-secondary mt-2 mb-0">Stopped.</p>
               } @else if (
-                turn.stopReason && turn.stopReason !== 'end' && turn.stopReason !== 'error'
+                turn.stopReason && !['end', 'error', 'awaiting_approval'].includes(turn.stopReason)
               ) {
                 <p class="small text-body-secondary mt-2 mb-0">
                   Stopped early: {{ turn.stopReason }}.
@@ -174,8 +195,8 @@
         }
       } @empty {
         <p class="text-body-secondary">
-          Ask a question. The agent searches the knowledge base, shows each tool call, and cites its
-          sources as [1], [2] … — select a citation to read the passage.
+          Ask a question. The agent searches the knowledge base, shows each tool call, asks before
+          any write, and cites its sources as [1], [2] … — select a citation to read the passage.
         </p>
       }
     </div>

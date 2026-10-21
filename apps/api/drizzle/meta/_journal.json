@@ -15,6 +15,13 @@
       "when": 1792525256341,
       "tag": "0001_conversations",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792527481416,
+      "tag": "0002_approvals_audit",
+      "breakpoints": true
     }
   ]
 }

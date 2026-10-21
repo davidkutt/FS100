@@ -17,7 +17,7 @@ import { AiClient, type Domain } from '../ai-client/ai-client.service.js';
 import type { AuthUser } from '../auth/auth.guard.js';
 import { TAXONOMY, type Taxonomy, unknownTopics } from '../catalog/taxonomy.js';
 import { DB, type Db } from '../db/db.module.js';
-import { type Document, documents } from '../db/schema.js';
+import { auditLog, type Document, documents } from '../db/schema.js';
 import type { LabelsBody } from './documents.controller.js';
 
 export interface Upload {
@@ -116,12 +116,18 @@ export class DocumentsService implements OnApplicationBootstrap {
     await this.settled(user, id, 'change');
     // Vectors first, like delete: if that fails, the row keeps the labels Qdrant still has.
     await this.ai.updateLabels(id, labels, requestId);
-    const [doc] = await this.db
-      .update(documents)
-      .set(labels)
-      .where(eq(documents.id, id))
-      .returning();
-    return doc;
+    return this.db.transaction(async (tx) => {
+      const [doc] = await tx.update(documents).set(labels).where(eq(documents.id, id)).returning();
+      await tx.insert(auditLog).values({
+        actorId: user.sub,
+        actorRoles: user.roles,
+        tool: 'documents.relabel',
+        kind: 'write',
+        argsRedacted: { docId: id, ...labels },
+        outcome: 'ok',
+      });
+      return doc;
+    });
   }
 
   async remove(user: AuthUser, id: string, requestId: string): Promise<void> {

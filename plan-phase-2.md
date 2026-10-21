@@ -538,19 +538,38 @@ snapshots `data/sample-docs/setup-*.md`, which M2.1 had moved to `docs/setup/` b
 
 ### M2.3 — Approvals, permissions, audit (~11 h)
 
-- [ ] Tables `approvals`, `audit_log` (app DB role without UPDATE/DELETE on `audit_log`)
-- [ ] AI service: write call → `approval_required` with HMAC-signed action (key from env, rotatable); resume verifies
+- [x] Tables `approvals`, `audit_log` (app DB role without UPDATE/DELETE on `audit_log`)
+- [x] AI service: write call → `approval_required` with HMAC-signed action (key from env, rotatable); resume verifies
   signature, `sub`, expiry and args hash; rejection becomes an observation
-- [ ] NestJS: state machine, `POST /api/approvals/:id`, role re-check at approval time, expiry job, `unknown` handling,
+- [x] NestJS: state machine, `POST /api/approvals/:id`, role re-check at approval time, expiry job, `unknown` handling,
   `signedAction` stripped before relay
-- [ ] Audit row for every tool call (read and write) from `tool_result` events: actor, service identity, tool, redacted
+- [x] Audit row for every tool call (read and write) from `tool_result` events: actor, service identity, tool, redacted
   args, outcome, trace id
-- [ ] Angular: approval card (exact args, risk, expiry countdown, approve/reject + note), pending list; admin audit page
-- [ ] Tests: tampered args, replay of an executed action, expired action, approval by another user, role downgrade
+- [x] Angular: approval card (exact args, risk, expiry countdown, approve/reject + note), pending list; admin audit page
+- [x] Tests: tampered args, replay of an executed action, expired action, approval by another user, role downgrade
   between proposal and approval, double click
 
 **Acceptance:** no write tool executes without an `approved` row; every tool call has exactly one audit row; all negative
 tests pass.
+
+**Done 2026-10-20.** Deviations: `audit_log` is append-only through a trigger (UPDATE, DELETE, TRUNCATE raise) instead
+of a separate DB role — the API connects as the database owner, which privileges would not bind; a retention job needs
+its own path (none yet). No timer job: pending approvals past `expires_at` become `expired` whenever approvals are read
+or decided. `approvals` has no `args_sha256` (the AI service owns the hash and checks it) and no `result` (the write's
+`tool_result` is a part of the continuation; `error` holds failures), but `call_id`, `note` and `created_at`; it is
+deleted with its conversation, the audit is not. The signed action is an HS256 JWT over approval id, `sub`,
+conversation, tool, call id, args hash and `exp`; `APPROVAL_SIGNING_KEY` is comma-separated (first signs, all verify),
+unset = write calls fail closed; `APPROVAL_TTL_MIN` lives in the AI service, which signs the expiry. `resume` is
+`{signed_action, decision, note?, args}` (args as shown to the user, snake_case like the other bodies) and is verified
+before the stream (else 422 → approval `failed`); `approval_required` carries `callId`; `tool_result.status` gains
+`rejected`. The resumed turn replays the `tool_call`, re-checks the role, and is stored as a new assistant message; the
+transcript ends at the question (the paused answer is dropped). One write per step (others get an error observation).
+Role re-check uses `min_role` from `/v1/tools`; admins see all approvals but get 404 when deciding others'.
+Audit: one row per `tool_result` plus one for a write settled without a result (`unknown`, or `failed` when refused);
+args redacted by key name and cut to 200 chars; `service_identity` stays null until a tool has one (M2.5); document
+relabelling is audited as `documents.relabel`. No write tool is registered yet (`kb.ingest_url` M2.4,
+`github_sandbox.create_issue` M2.5), so the flow is proven with test tools and a fake AI service; the live demo
+follows with M2.5.
 
 ### M2.4 — Own MCP server + token exchange (~13 h)
 
@@ -743,7 +762,6 @@ contract check, cost caps, gap signals (D49), README.
 DAILY_COST_CAP_USD_VIEWER=0.20
 DAILY_COST_CAP_USD_EDITOR=1.00
 DAILY_COST_CAP_USD_ADMIN=5.00
-APPROVAL_TTL_MIN=15
 CONVERSATION_RETENTION_DAYS=90
 AUDIT_RETENTION_DAYS=365
 TAXONOMY_CONFIG=../../config/taxonomy.yaml  # read by NestJS and the AI service (D48)
@@ -760,7 +778,8 @@ AGENT_TOOL_TIMEOUT_S=20
 AGENT_RUN_TIMEOUT_S=120
 AGENT_RUN_INPUT_TOKEN_BUDGET=60000
 AGENT_RUN_COST_CAP_USD=0.05
-APPROVAL_SIGNING_KEY=dev-only-change-me     # HMAC key for signed actions; rotate by config
+APPROVAL_SIGNING_KEY=dev-only-change-me-approval-signing-key  # HMAC key (≥ 32 chars); rotate: new,old
+APPROVAL_TTL_MIN=15                         # the AI service signs the expiry
 ROUTER=embedding                            # embedding | llm
 ROUTER_MODEL=                               # cheap model id when ROUTER=llm
 INGEST_URL_ALLOWED_HOSTS=kubernetes.io,www.keycloak.org,qdrant.tech,docs.github.com

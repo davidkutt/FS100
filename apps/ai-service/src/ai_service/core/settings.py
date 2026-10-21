@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     agent_run_timeout_s: float = 120
     agent_run_input_token_budget: int = 60_000
     agent_run_cost_cap_usd: float = 0.05
+    # Comma-separated: the first signs, all verify (rotation). Empty = write tools fail closed.
+    approval_signing_key: str = ""
+    approval_ttl_min: float = 15
     otel_exporter_otlp_endpoint: str = ""  # empty = tracing off (tests, CI)
     otel_service_name: str = "ai-service"
 

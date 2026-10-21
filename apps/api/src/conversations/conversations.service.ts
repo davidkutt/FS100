@@ -1,9 +1,13 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
 import type { AgentRequest } from '../ai-client/ai-client.service.js';
+import { redact } from '../audit/redact.js';
 import type { AuthUser } from '../auth/auth.guard.js';
 import { DB, type Db } from '../db/db.module.js';
 import {
+  type Approval,
+  approvals,
+  auditLog,
   type Conversation,
   conversations,
   feedback,
@@ -11,13 +15,29 @@ import {
   messages,
   usage,
 } from '../db/schema.js';
-import type { DoneEvent, Part } from './events.js';
+import {
+  type DoneEvent,
+  type Part,
+  partsOf,
+  type ProposalPart,
+  type ToolCallPart,
+  type ToolResultPart,
+} from './events.js';
 
 const HISTORY_MESSAGES = 20; // the AI service trims further by token budget (D41)
 const TURN_MAX_CHARS = 8000; // the AI service rejects longer turns
 
 export type Rating = { rating: 'up' | 'down'; comment?: string | null };
 export type MessageWithFeedback = Message & { feedback: Rating | null };
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+/** A relayed turn; `done` is missing when the run was cancelled or broke off. */
+export interface Answer {
+  parts: Part[];
+  done?: DoneEvent;
+  stopReason: string;
+  signedActions: Map<string, string>; // approvalId → signedAction of `approval_required`
+}
 
 /** Conversations are the system of record for agent turns (D28, D42); every query is per owner. */
 @Injectable()
@@ -109,13 +129,15 @@ export class ConversationsService {
     });
   }
 
-  /** `done` is missing when the run was cancelled or broke off; its usage is then unknown. */
+  /**
+   * The event tee (D42), in one transaction: the message, its usage, the proposed approvals, the
+   * resumed write's outcome and one audit row per tool result.
+   */
   async addAnswer(
     user: AuthUser,
     conversationId: string,
-    parts: Part[],
-    done: DoneEvent | undefined,
-    stopReason: string,
+    { parts, done, stopReason, signedActions }: Answer,
+    resumed?: Approval,
   ): Promise<void> {
     await this.db.transaction(async (tx) => {
       const [message] = await tx
@@ -144,11 +166,90 @@ export class ConversationsService {
           costUsd: done.usage.costUsd,
         });
       }
+      const proposals = partsOf<ProposalPart>(parts, 'approval_required');
+      if (proposals.length) {
+        await tx.insert(approvals).values(
+          proposals.map((proposal) => ({
+            id: proposal.approvalId,
+            conversationId,
+            messageId: message.id,
+            requesterId: user.sub,
+            callId: proposal.callId,
+            tool: proposal.tool,
+            args: proposal.args,
+            risk: proposal.risk,
+            signedAction: signedActions.get(proposal.approvalId)!,
+            expiresAt: new Date(proposal.expiresAt),
+          })),
+        );
+      }
+      const results = partsOf<ToolResultPart>(parts, 'tool_result');
+      const executed = resumed && results.find((result) => result.id === resumed.callId);
+      const calls = new Map(partsOf<ToolCallPart>(parts, 'tool_call').map((c) => [c.id, c]));
+      const audited = results.flatMap((result) => {
+        const call = calls.get(result.id);
+        if (!call) return [];
+        return [
+          {
+            actorId: user.sub,
+            actorRoles: user.roles,
+            conversationId,
+            approvalId: result === executed ? resumed?.id : null,
+            tool: call.name,
+            kind: call.kind,
+            argsRedacted: redact(call.args),
+            outcome: result.status,
+            traceId: done?.traceId,
+          },
+        ];
+      });
+      if (audited.length) await tx.insert(auditLog).values(audited);
+      if (resumed?.status === 'executing') {
+        await this.settle(tx, user, resumed, executed, done?.traceId);
+      }
       await tx
         .update(conversations)
         .set({ updatedAt: new Date() })
         .where(eq(conversations.id, conversationId));
     });
+  }
+
+  /**
+   * executing → succeeded | failed | unknown (ADR-0008). Without a result the write may have run,
+   * unless `refused` says the AI service turned it down; both get the write's audit row here.
+   */
+  private async settle(
+    tx: Tx,
+    user: AuthUser,
+    approval: Approval,
+    result?: ToolResultPart,
+    traceId?: string | null,
+    refused?: string,
+  ): Promise<void> {
+    const status = result?.status === 'ok' ? 'succeeded' : result || refused ? 'failed' : 'unknown';
+    await tx
+      .update(approvals)
+      .set({ status, error: status === 'failed' ? (result?.summary ?? refused) : null })
+      .where(and(eq(approvals.id, approval.id), eq(approvals.status, 'executing')));
+    if (result) return; // audited with the other tool results
+    await tx.insert(auditLog).values({
+      actorId: user.sub,
+      actorRoles: user.roles,
+      conversationId: approval.conversationId,
+      approvalId: approval.id,
+      tool: approval.tool,
+      kind: 'write',
+      argsRedacted: redact(approval.args),
+      outcome: status,
+      traceId,
+    });
+  }
+
+  /** A resumed write whose stream never started. */
+  settleUnstarted(user: AuthUser, approval: Approval, refused?: string): Promise<void> {
+    return this.db.transaction((tx) =>
+      this.settle(tx, user, approval, undefined, undefined, refused),
+    );
   }
 
   async rate(user: AuthUser, messageId: string, rating: Rating): Promise<void> {

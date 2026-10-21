@@ -1,7 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { type INestApplication, UnprocessableEntityException } from '@nestjs/common';
+import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
+import { DB, type Db } from '../src/db/db.module.js';
+import { auditLog } from '../src/db/schema.js';
 import { DocumentDto } from '../src/documents/documents.controller.js';
 import { DocumentsService } from '../src/documents/documents.service.js';
 import { ADMIN, EDITOR, createApp, token } from './support.js';
@@ -124,6 +127,15 @@ describe('Documents (e2e)', () => {
     await relabel(body.id, { domains: [] }, 400, EDITOR, 'user-4');
     await relabel(body.id, { topics: ['sre/x'] }, 400, EDITOR, 'user-4');
     await relabel(randomUUID(), { topics: [] }, 404, ADMIN);
+    const audited = await app
+      .get<Db>(DB)
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.tool, 'documents.relabel'));
+    expect(audited.map((row) => [row.actorId, row.argsRedacted])).toEqual([
+      ['user-4', { docId: body.id, ...labels }],
+      ['user-1', { docId: body.id, topics: [] }],
+    ]);
   });
 
   it('the same content again → 409, whatever the filename', async () => {
