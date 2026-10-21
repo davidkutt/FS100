@@ -1,0 +1,129 @@
+<h1 class="h3 mb-3">Audit log</h1>
+
+<form class="row g-2 align-items-end mb-3" (submit)="$event.preventDefault()">
+  <div class="col-sm-6 col-lg-2">
+    <label class="form-label small" for="audit-user">User id</label>
+    <input
+      id="audit-user"
+      name="user"
+      class="form-control form-control-sm"
+      [ngModelOptions]="{ updateOn: 'blur' }"
+      [(ngModel)]="user"
+    />
+  </div>
+  <div class="col-sm-6 col-lg-3">
+    <label class="form-label small" for="audit-tool">Tool</label>
+    <input
+      id="audit-tool"
+      name="tool"
+      class="form-control form-control-sm"
+      placeholder="kb.search_knowledge_base"
+      [ngModelOptions]="{ updateOn: 'blur' }"
+      [(ngModel)]="tool"
+    />
+  </div>
+  <div class="col-sm-4 col-lg-2">
+    <label class="form-label small" for="audit-outcome">Outcome</label>
+    <select
+      id="audit-outcome"
+      name="outcome"
+      class="form-select form-select-sm"
+      [(ngModel)]="outcome"
+    >
+      <option value="">any</option>
+      @for (outcome of outcomes; track outcome) {
+        <option [value]="outcome">{{ outcome }}</option>
+      }
+    </select>
+  </div>
+  <div class="col-sm-4 col-lg-2">
+    <label class="form-label small" for="audit-from">From (UTC)</label>
+    <input
+      id="audit-from"
+      name="from"
+      type="date"
+      class="form-control form-control-sm"
+      [(ngModel)]="from"
+    />
+  </div>
+  <div class="col-sm-4 col-lg-2">
+    <label class="form-label small" for="audit-to">To (UTC)</label>
+    <input
+      id="audit-to"
+      name="to"
+      type="date"
+      class="form-control form-control-sm"
+      [(ngModel)]="to"
+    />
+  </div>
+</form>
+
+@if (entries.error(); as error) {
+  <div class="alert alert-danger" role="alert">{{ problemDetail(error) }}</div>
+}
+@if (entries.hasValue()) {
+  <div class="table-responsive">
+    <table class="table table-sm align-middle small">
+      <caption>
+        Newest 200 tool calls; arguments are redacted.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Time</th>
+          <th scope="col">User</th>
+          <th scope="col">Tool</th>
+          <th scope="col">Outcome</th>
+          <th scope="col">Arguments</th>
+          <th scope="col">Trace</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (entry of entries.value(); track entry.id) {
+          <tr>
+            <td class="text-nowrap">{{ entry.ts | date: 'yyyy-MM-dd HH:mm:ss' : 'UTC' }}</td>
+            <td>
+              {{ entry.actorId }}
+              <span class="text-body-secondary">({{ entry.actorRoles.join(', ') }})</span>
+              @if (entry.serviceIdentity) {
+                <div class="text-body-secondary">as {{ entry.serviceIdentity }}</div>
+              }
+            </td>
+            <td>
+              <code>{{ entry.tool }}</code>
+              @if (entry.kind === 'write') {
+                <span class="badge text-bg-warning ms-1">write</span>
+              }
+            </td>
+            <td>
+              <span
+                class="badge"
+                [class]="entry.outcome === 'ok' ? 'text-bg-success' : 'text-bg-secondary'"
+                >{{ entry.outcome }}</span
+              >
+            </td>
+            <td>
+              <details>
+                <summary>show</summary>
+                <pre class="mb-0"><code>{{ entry.argsRedacted | json }}</code></pre>
+              </details>
+            </td>
+            <td>
+              @if (phoenixUrl && entry.traceId) {
+                <a
+                  [href]="phoenixUrl + '/redirects/traces/' + entry.traceId"
+                  target="_blank"
+                  rel="noopener"
+                  >Phoenix</a
+                >
+              }
+            </td>
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="6" class="text-body-secondary">No tool calls match.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}
