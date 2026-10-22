@@ -66,7 +66,8 @@ Only the web app and the NestJS API are browser-facing; all AI code lives in the
 ## Retrieval quality
 
 Every retrieval change is judged by `pnpm eval:retrieval` (60 questions, DE + EN, 10 unanswerable — see
-[evals/README.md](evals/README.md)); CI posts the same table on pull requests that touch the AI service.
+[evals/README.md](evals/README.md)); CI posts the same table on pull requests that touch the AI service and
+fails them when hit@5 or nDCG@10 drops more than 0.02 below the baseline below.
 The benchmark that picked the embedding model ([ADR-0004](docs/adr/0004-embedding-model-chunking-threshold.md),
 chunks 1000/150):
 
@@ -124,6 +125,9 @@ Open http://localhost:4200. Everything else — URLs, seed users, checks, troubl
 | `pnpm format` | Auto-format (prettier + ruff) |
 | `pnpm e2e` | Playwright smoke against http://localhost:4200 (login → upload → ask → citation) |
 | `pnpm eval:retrieval` | Retrieval eval against the golden set, in-memory Qdrant ([evals/README.md](evals/README.md)) |
+| `pnpm eval:agent` | Agent tasks against the corpus and fixture MCP servers; uses the LLM in `.env` (3 repeats, 2 USD cap) |
+| `pnpm eval:redteam` | Red-team seed set (injections, exfiltration, goal hijack), same setup as `eval:agent` |
+| `pnpm eval:routing` | Router accuracy on `routing_v1`: embedding vs LLM classifier |
 | `pnpm contracts:generate` | Regenerate `packages/contracts` (OpenAPI of both services incl. SSE event schemas, TS types); commit the result |
 
 ## Repository layout
@@ -142,7 +146,7 @@ infra/
   keycloak/       realm-kb.json (roles, clients, dev seed users)
   postgres/       init.sql (databases keycloak + app)
 data/sample-docs/ Demo + eval corpus with domain tags (domains.json, ATTRIBUTION.md)
-evals/            Golden datasets, eval docs; runs/ is git-ignored
+evals/            Datasets, fixture MCP servers + scenarios, eval docs; runs/ is git-ignored
 e2e/              Playwright smoke test (pnpm e2e)
 docs/
   architecture.md Components, ingest and chat flows, runtime modes
@@ -163,7 +167,7 @@ plan.md           Phase 1 plan (decisions, contracts, milestones)
 - [Startup guide](docs/setup/startup.md) — first start, daily routine, URLs, seed users, troubleshooting
 - [ADRs](docs/adr/README.md) — 0001 monorepo & pnpm · 0002 AI layer in Python · 0003 in-process embeddings ·
   0004 embedding model, chunking and score threshold · 0005 LLM access and model choice
-- [Evals](evals/README.md) — golden set, metrics, how to run and version
+- [Evals](evals/README.md) — retrieval, agent, red-team and routing sets, metrics, fixtures, how to run
 - [Red teaming](docs/security/red-teaming.md) — threat model, test catalogue, grading, process
 
 ## Roadmap
@@ -171,7 +175,7 @@ plan.md           Phase 1 plan (decisions, contracts, milestones)
 | Phase | Theme |
 |---|---|
 | 1 | Foundation + RAG slice + eval + tracing — *M1.0 – M1.6 done; M1.7 Azure spike postponed (local only for now)* |
-| **2** | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals — *in progress: M2.0 – M2.5 done* |
+| **2** | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals — *in progress: M2.0 – M2.6 done* |
 | 3 | Hybrid search, reranking, code-aware RAG, guardrails, routing + semantic cache, memory |
 | 4 | Kubernetes: Helm, k3d, GitOps-ready manifests |
 | 5 | Azure: Terraform, ACR, AKS / Container Apps, Key Vault, OIDC from GitHub |

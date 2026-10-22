@@ -223,8 +223,10 @@ pnpm e2e
 ```
 
 CI (`.github/workflows/`) runs `ci.yml` (lint, test, build, contract drift), `e2e.yml` (this smoke),
-`eval.yml` (retrieval eval on PRs touching the AI service or evals, report only) and, on `main`,
-`docker.yml` (multi-arch images to GHCR).
+`eval.yml` (retrieval eval on PRs touching the AI service, config or evals, **blocking** when hit@5 or
+nDCG@10 drops more than 0.02 below the baseline; real-model agent / red-team / routing evals by hand with a
+budget; nightly fixture contract) and, on `main`, `docker.yml` (multi-arch images to GHCR). The agent smoke
+(fake LLM + fixture MCP servers) runs with the tests.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`,
 `chore:`, `refactor:`, `test:`, `ci:` …), trunk-based on `main`.

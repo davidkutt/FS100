@@ -1,14 +1,15 @@
 import math
 import re
 from pathlib import Path
-from typing import Literal
+from typing import get_args
 from uuid import uuid4
 
 import pytest
-from pydantic import BaseModel
 
 from ai_service import embeddings
 from ai_service.embeddings import Embedder
+from ai_service.evals.agent import load_tasks
+from ai_service.evals.fixtures import GitHubFixture
 from ai_service.evals.metrics import (
     calibrate_threshold,
     hit_at,
@@ -22,18 +23,24 @@ from ai_service.evals.retrieval import (
     gains,
     load_dataset,
     load_manifest,
+    regressions,
     run,
     to_markdown,
 )
+from ai_service.evals.routing import load_items
 from ai_service.ingest import parse
 from ai_service.knowledge_base import Domain, Hit
-from ai_service.rag import AnswerStatus
 from support import FakeTextEmbedding
 
 REPO = Path(__file__).parents[3]
-DATASET = REPO / "evals/datasets/retrieval_v1.jsonl"
-AGENT_TASKS = REPO / "evals/datasets/agent_v0.jsonl"
+DATASETS = REPO / "evals/datasets"
+DATASET = DATASETS / "retrieval_v1.jsonl"
+FIXTURES = REPO / "evals/fixtures"
 CORPUS = REPO / "data/sample-docs"
+KB_TOOLS = {
+    f"kb.{tool}" for tool in ("search_knowledge_base", "get_document", "list_sources", "ingest_url")
+}
+NATIVE_TOOLS = {"github_sandbox.create_issue", "web.fetch"}
 
 
 def test_metrics_match_hand_computed_values() -> None:
@@ -123,45 +130,48 @@ def test_runner_reports_on_the_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
     assert "| **overall** |" in to_markdown(report)
 
 
-class Expect(BaseModel):
-    tools_required: list[str] = []
-    tools_forbidden: list[str] = []
-    cites_any: list[Relevant] = []
-    answer_regex: list[str] = []
-    max_steps: int
-    answer_status: AnswerStatus
+def test_regression_gate_allows_the_tolerance_and_flags_drops() -> None:
+    baseline = {"hit@5": 0.98, "ndcg@10": 0.86}
+
+    assert regressions({"hit@5": 0.96, "ndcg@10": 0.90}, baseline, 0.02) == []
+    assert regressions({"hit@5": 0.95, "ndcg@10": 0.86}, baseline, 0.02) == [
+        "hit@5 0.950 < baseline 0.980 - 0.02"
+    ]
 
 
-class AgentTask(BaseModel):
-    id: str
-    lang: Literal["de", "en"]
-    domains: list[Domain]
-    type: Literal["kb-lookup", "multi-hop", "cross-language", "abstain", "no-tool"]
-    prompt: str
-    expect: Expect
-    notes: str = ""
-
-
-def test_agent_task_set_is_well_formed_and_every_citation_resolves() -> None:
-    tasks = [AgentTask.model_validate_json(line) for line in AGENT_TASKS.read_text().splitlines()]
+def test_agent_task_sets_are_well_formed_and_every_reference_resolves() -> None:
     sections = {name: parse(name, (CORPUS / name).read_bytes()) for name in load_manifest(CORPUS)}
+    v0, v1 = load_tasks(DATASETS / "agent_v0.jsonl"), load_tasks(DATASETS / "agent_v1.jsonl")
+    redteam = load_tasks(DATASETS / "redteam_v0.jsonl")
+    tools = {*KB_TOOLS, *NATIVE_TOOLS, *(f"github.{t.name}" for t in GitHubFixture(FIXTURES).tools)}
 
-    assert len({t.id for t in tasks}) == len(tasks) >= 20
-    assert {t.type for t in tasks} == {
-        "kb-lookup",
-        "multi-hop",
-        "cross-language",
-        "abstain",
-        "no-tool",
+    assert len(v0) == 22 and v1[: len(v0)] == v0  # v0 is frozen and part of v1
+    assert len({t.id for t in v1}) == len(v1) >= 30
+    assert {t.type for t in v1} >= {
+        *("kb-lookup", "multi-hop", "cross-language", "abstain", "no-tool"),
+        *("tool-selection", "multi-tool", "write-approval", "role-denied", "injection"),
     }
-    for task in tasks:
+    assert len({t.id for t in redteam}) == len(redteam) >= 15
+    for task in [*v1, *redteam]:
         expect = task.expect
-        assert (expect.answer_status == "answered") == bool(expect.cites_any), task.id
-        assert (expect.answer_status == "no_kb") == (task.type == "no-tool"), task.id
-        assert {*expect.tools_required, *expect.tools_forbidden} <= {"kb.search_knowledge_base"}
-        for pattern in expect.answer_regex:
+        assert {*expect.tools_required, *expect.tools_forbidden} <= tools, task.id
+        assert expect.approval_expected == (task.type == "write-approval"), task.id
+        assert not task.scenario or (FIXTURES / f"scenarios/{task.scenario}.json").is_file()
+        for pattern in [*expect.answer_regex, *expect.answer_not_regex]:
             re.compile(pattern)
         for label in expect.cites_any:
             assert any(
                 label.matches(label.doc, s.page, s.heading) for s in sections.get(label.doc, [])
             ), f"{task.id}: {label} matches no section of the corpus"
+    for task in v1:
+        assert (task.expect.answer_status == "no_kb") >= (task.type == "no-tool"), task.id
+    assert all(task.owasp and task.expect.tools_forbidden for task in redteam)
+
+
+def test_routing_set_is_well_formed_and_covers_every_domain() -> None:
+    items = load_items(DATASETS / "routing_v1.jsonl")
+
+    assert len({i.id for i in items}) == len(items) >= 60
+    assert {d for i in items for d in i.domains} == set(get_args(Domain))
+    assert {i.lang for i in items} == {"de", "en"}
+    assert all(i.needs_tools == bool(i.domains) for i in items)

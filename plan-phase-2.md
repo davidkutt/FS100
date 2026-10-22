@@ -644,18 +644,40 @@ hop failed).
 
 ### M2.6 — Agent evaluation & red-team seed (~11 h)
 
-- [ ] Fixture MCP servers (`evals/fixtures/`): GitHub subset with the pinned tool names/schemas and seeded
+- [x] Fixture MCP servers (`evals/fixtures/`): GitHub subset with the pinned tool names/schemas and seeded
   scenarios; schema contract test against the real servers (manual / nightly)
-- [ ] Datasets: `agent_v1.jsonl` (~30: v0 + tool tasks), `redteam_v0.jsonl` (~15: injections in issue bodies and
+- [x] Datasets: `agent_v1.jsonl` (~30: v0 + tool tasks), `redteam_v0.jsonl` (~15: injections in issue bodies and
   documents, exfiltration via URLs, tool misuse, goal hijack; OWASP LLM / Agentic IDs), `routing_v1.jsonl` (~60 labelled)
-- [ ] Runner `kb-eval agent | redteam | routing`: repeats, metrics (D43), cost cap, JSON + Markdown report, per-domain view
-- [ ] Experiments: plain RAG vs agentic RAG on the retrieval golden set (citations, refusal, cost, latency) → ADR-0011;
+- [x] Runner `kb-eval agent | redteam | routing`: repeats, metrics (D43), cost cap, JSON + Markdown report, per-domain view
+- [x] Experiments: plain RAG vs agentic RAG on the retrieval golden set (citations, refusal, cost, latency) → ADR-0011;
   embedding vs LLM router → ADR-0012
-- [ ] CI: retrieval eval blocking with tolerance; agent smoke (fake LLM + fixtures) on every PR; manual real-model eval
+- [x] CI: retrieval eval blocking with tolerance; agent smoke (fake LLM + fixtures) on every PR; manual real-model eval
   workflow with a budget input
 
 **Acceptance:** `pnpm eval:agent` prints the report; red-team forbidden-tool checks ≥ 90 % pass; ADR-0011 and ADR-0012
 contain numbers; a deliberate retrieval regression fails CI.
+
+**Done 2026-10-21.** Baselines (`openai/gpt-6-luna`, embedding router, 3 repeats): `agent_v1` 34 tasks, success
+0.82, tool precision 0.95 / recall 0.99, arg validity 1.00, 2.4 steps, 0.08 ct and 5.3 s p50 per turn;
+`redteam_v0` 15 cases, forbidden-tool checks **1.00**, success 0.98 (one OpenRouter stream cut). Open findings
+from the runs: demo step 3 does not find the German disk-full runbook (`a-023` 0/3); near-miss abstentions cite
+the near miss, so D49 says `answered` (`a-019`, `a-020`); the agent sometimes asks for confirmation in chat
+instead of proposing the write, and once offered a viewer a write it does not have (`a-031`, `a-033`).
+ADR-0011 (agentic RAG stays the default; plain RAG 0.87 vs agentic 0.83 on the golden set, within noise, at
+1/7 of the cost) and ADR-0012 (embedding router stays the default; LLM classifier 0.98 vs 0.53 accuracy but
++2.6 s per turn) are **Proposed**. A gate check with chunks 200/0 drops hit@5 to 0.90 and exits 1.
+Deviations: one fixture server (GitHub) served in-process through an ASGI transport, so the real `McpServers`
+client, allow-list and read-only check run unchanged; the own MCP server's tools run in-process without
+Keycloak (`LocalMcp`); `web.fetch` is answered from the scenario too, and red-team documents live in
+`evals/fixtures/documents/` (ingested for `redteam` only). The contract test is an opt-in pytest
+(`MCP_CONTRACT_URL`, nightly in `eval.yml`); `tools.json` is recorded with `python -m
+ai_service.evals.fixtures`, without output schemas. The agent smoke is a pytest in the existing ai-service job.
+Repeats and cost cap are flags, not `EVAL_*` variables; the retrieval baseline lives in `eval.yml`
+(`--baseline hit@5=0.98 --baseline ndcg@10=0.86`, tolerance 0.02), also on pushes to `main`. Tool precision /
+recall count only tasks with `tools_required`; `states_instruction_ignored` is dropped (a model may quote an
+instruction it refuses). The golden set runs through the same runner (answerable → cite a label, unanswerable →
+abstain). The real-model workflow needs the `LLM_API_KEY` repository secret. Eval runs are not traced to
+Phoenix; prompt versions on eval runs come with M2.7.
 
 ### M2.7 — Prompt versioning, cost, docs (~6 h)
 
@@ -709,7 +731,7 @@ contract check, cost caps, gap signals (D49), README.
 - [ ] Identity on internal hops comes from exchanged tokens; the `user` body object is gone
 - [x] Own MCP server passes the MCP Inspector check and rejects foreign audiences
 - [x] GitHub MCP server pinned, read-only, allow-listed; lockdown on; one idempotent sandbox write
-- [ ] `pnpm eval:agent`, `eval:redteam`, `eval:routing` produce reports; ADR-0011/0012 contain numbers; retrieval eval blocks CI
+- [x] `pnpm eval:agent`, `eval:redteam`, `eval:routing` produce reports; ADR-0011/0012 contain numbers; retrieval eval blocks CI
 - [ ] Every turn produces one trace across the MCP hop; prompt versions on spans, messages and eval runs
 - [ ] Per-user usage and daily caps work; feedback stored with trace id
 - [ ] `taxonomy.yaml` validated in NestJS and used by the router; documents carry optional topics; every assistant
@@ -830,8 +852,7 @@ GITHUB_SANDBOX_REPO=<owner>/<sandbox-repo>
 
 # --- optional / eval ---
 OLLAMA_BASE_URL=http://localhost:11434/v1   # local proof of switch (models.yaml entry "local")
-EVAL_AGENT_REPEATS=3
-EVAL_COST_CAP_USD=2.00
+# eval repeats and cost cap are flags of kb-eval agent | redteam (--repeats 3, --cost-cap 2.00), not env vars
 ```
 
 ## Appendix B — Command cheat sheet (additions)

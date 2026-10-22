@@ -6,6 +6,8 @@ pnpm-lock.yaml
 **/node_modules/
 packages/contracts/
 apps/api/drizzle/
+# recorded from the pinned GitHub MCP server (python -m ai_service.evals.fixtures)
+evals/fixtures/github_mcp/
 
 # Python is formatted by ruff
 apps/ai-service/

@@ -16,6 +16,8 @@ Short, numbered records of decisions that shape FS100. Each ADR references the d
 | [0008](0008-run-state-and-approvals.md) | Stateless agent turns; approvals as HMAC-signed actions, at-most-once | Accepted |
 | [0009](0009-token-exchange-internal-hops.md) | Keycloak standard token exchange on the internal hops; delegation dropped for P2 | Accepted |
 | [0010](0010-own-mcp-server-sdk-v2.md) | Own MCP server and client on Python SDK v2 (GitHub MCP check) | Accepted |
+| [0011](0011-plain-vs-agentic-rag.md) | Agentic RAG for conversations; plain RAG stays the measured baseline | Proposed |
+| [0012](0012-embedding-vs-llm-router.md) | Embedding router by default; the LLM classifier stays opt-in | Proposed |
 
 ## Writing a new ADR
 
