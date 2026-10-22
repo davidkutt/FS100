@@ -57,7 +57,9 @@ drafts), M2.1 (agent harness: `agent.py`, `tools.py`, `POST /v1/agent` with SSE 
 `agent_v0`), M2.2 (conversations + event tee in NestJS, model registry, taxonomy + document topics,
 agent chat UI), M2.3 (signed approvals `approvals.py` + resume, NestJS approval state machine,
 append-only `audit_log`, approval card and admin audit page) and M2.4 (own MCP server `mcp_server.py` at
-`/mcp`, Keycloak token exchange on both hops, `kb.ingest_url` via `/internal/documents/from-url`) are done. Check the milestone in
+`/mcp`, Keycloak token exchange on both hops, `kb.ingest_url` via `/internal/documents/from-url`) are done, and so is
+M2.5 (external MCP servers from `config/mcp_servers.yaml` in `catalog.py`, pinned `github-mcp` container,
+`github_sandbox.create_issue`, embedding/LLM router `routing.py`). Check the milestone in
 [plan.md §8](plan.md#8-milestones-and-tasks) or [plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks)
 before building something: many features are deliberately scheduled for later milestones.
 

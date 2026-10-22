@@ -1182,6 +1182,39 @@
               "admin"
             ],
             "title": "Min Role"
+          },
+          "server": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Server"
+          },
+          "domains": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "db",
+                "dev",
+                "cloud",
+                "devops",
+                "mlops",
+                "ai",
+                "security",
+                "architecture",
+                "sre"
+              ]
+            },
+            "type": "array",
+            "title": "Domains"
+          },
+          "available": {
+            "type": "boolean",
+            "title": "Available"
           }
         },
         "type": "object",
@@ -1190,7 +1223,10 @@
           "description",
           "kind",
           "risk",
-          "min_role"
+          "min_role",
+          "server",
+          "domains",
+          "available"
         ],
         "title": "ToolInfo"
       },
@@ -1479,6 +1515,56 @@
         "title": "ErrorEvent",
         "type": "object"
       },
+      "RouteEvent": {
+        "properties": {
+          "domains": {
+            "items": {
+              "enum": [
+                "db",
+                "dev",
+                "cloud",
+                "devops",
+                "mlops",
+                "ai",
+                "security",
+                "architecture",
+                "sre"
+              ],
+              "type": "string"
+            },
+            "title": "Domains",
+            "type": "array"
+          },
+          "toolGroups": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Toolgroups",
+            "type": "array"
+          },
+          "router": {
+            "enum": [
+              "embedding",
+              "llm",
+              "user"
+            ],
+            "title": "Router",
+            "type": "string"
+          },
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          }
+        },
+        "required": [
+          "domains",
+          "toolGroups",
+          "router",
+          "confidence"
+        ],
+        "title": "RouteEvent",
+        "type": "object"
+      },
       "Source": {
         "properties": {
           "n": {
@@ -1627,6 +1713,17 @@
           },
           "args": {
             "title": "Args"
+          },
+          "serviceIdentity": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Serviceidentity"
           }
         },
         "required": [
@@ -1634,7 +1731,8 @@
           "name",
           "kind",
           "risk",
-          "args"
+          "args",
+          "serviceIdentity"
         ],
         "title": "ToolCallEvent",
         "type": "object"

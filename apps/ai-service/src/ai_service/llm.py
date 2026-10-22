@@ -5,7 +5,10 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import openai
+from openai.types import CompletionUsage
 from openai.types.chat import ChatCompletionMessageParam, ChatCompletionToolParam
+from openai.types.chat.parsed_chat_completion import ParsedChatCompletion
+from pydantic import BaseModel, ValidationError
 
 from ai_service.core.settings import Settings
 
@@ -49,6 +52,24 @@ class LlmProvider(Protocol):
         session_id: str | None = None,
         model: str | None = None,  # None = LLM_MODEL
     ) -> AsyncGenerator[LlmEvent]: ...
+
+
+class StructuredLlm(Protocol):
+    async def complete_json[T: BaseModel](
+        self, messages: list[Message], schema: type[T], model: str | None = None
+    ) -> tuple[T, Usage]: ...
+
+
+def _usage(usage: CompletionUsage, model: str) -> Usage:
+    cost = (usage.model_extra or {}).get("cost")  # OpenRouter only
+    details = usage.prompt_tokens_details
+    return Usage(
+        usage.prompt_tokens,
+        usage.completion_tokens,
+        None if cost is None else float(cost),
+        model,
+        (details.cached_tokens if details else None) or 0,
+    )
 
 
 class OpenAICompatProvider:
@@ -97,20 +118,41 @@ class OpenAICompatProvider:
                             call["name"] = call["name"] or part.function.name or ""
                             call["arguments"] += part.function.arguments or ""
                     if chunk.usage:
-                        cost = (chunk.usage.model_extra or {}).get("cost")  # OpenRouter only
-                        details = chunk.usage.prompt_tokens_details
-                        yield Usage(
-                            chunk.usage.prompt_tokens,
-                            chunk.usage.completion_tokens,
-                            None if cost is None else float(cost),
-                            chunk.model,
-                            (details.cached_tokens if details else None) or 0,
-                        )
+                        yield _usage(chunk.usage, chunk.model)
         except openai.APIError as error:
             yield LlmError(str(error))
             return
         for index, call in sorted(calls.items()):
             yield ToolCall(call["id"] or f"call_{index}", call["name"], call["arguments"])
+
+    async def complete_json[T: BaseModel](
+        self, messages: list[Message], schema: type[T], model: str | None = None
+    ) -> tuple[T, Usage]:
+        """Structured output (D41): the JSON Schema goes with the request, Pydantic checks the
+        reply, and an invalid reply gets one retry with the error."""
+        try:
+            completion = await self._parse(messages, schema, model)
+        except ValidationError as error:
+            correction = f"That reply did not match the schema: {error}\nReply with valid JSON."
+            retry: list[Message] = [*messages, {"role": "user", "content": correction}]
+            completion = await self._parse(retry, schema, model)
+        message = completion.choices[0].message
+        if message.parsed is None:
+            raise ValueError(message.refusal or "no structured reply")
+        if completion.usage is None:
+            return message.parsed, Usage(0, 0, None, completion.model)
+        return message.parsed, _usage(completion.usage, completion.model)
+
+    async def _parse[T: BaseModel](
+        self, messages: list[Message], schema: type[T], model: str | None
+    ) -> ParsedChatCompletion[T]:
+        return await self._client.chat.completions.parse(
+            model=model or self._model,
+            messages=messages,
+            response_format=schema,
+            max_tokens=self._max_output_tokens,
+            extra_body={"provider": {"require_parameters": True}},
+        )
 
 
 class FakeProvider:
@@ -145,8 +187,13 @@ class FakeProvider:
             yield Token(word + " ")
         yield Usage(0, 0, None, "fake")
 
+    async def complete_json[T: BaseModel](
+        self, messages: list[Message], schema: type[T], model: str | None = None
+    ) -> tuple[T, Usage]:
+        raise NotImplementedError("the fake provider has no structured output (ROUTER=embedding)")
 
-def create_provider(settings: Settings) -> LlmProvider:
+
+def create_provider(settings: Settings) -> OpenAICompatProvider | FakeProvider:
     if settings.llm_provider == "fake":
         return FakeProvider()
     if not settings.llm_api_key or not settings.llm_model:

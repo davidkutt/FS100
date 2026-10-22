@@ -171,7 +171,7 @@ plan.md           Phase 1 plan (decisions, contracts, milestones)
 | Phase | Theme |
 |---|---|
 | 1 | Foundation + RAG slice + eval + tracing — *M1.0 – M1.6 done; M1.7 Azure spike postponed (local only for now)* |
-| **2** | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals — *in progress: M2.0 – M2.4 done* |
+| **2** | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals — *in progress: M2.0 – M2.5 done* |
 | 3 | Hybrid search, reranking, code-aware RAG, guardrails, routing + semantic cache, memory |
 | 4 | Kubernetes: Helm, k3d, GitOps-ready manifests |
 | 5 | Azure: Terraform, ACR, AKS / Container Apps, Key Vault, OIDC from GitHub |

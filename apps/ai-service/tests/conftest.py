@@ -11,13 +11,23 @@ from ai_service.core.settings import Settings
 from ai_service.main import create_app
 from ai_service.mcp_client import McpClient
 from ai_service.tokens import Tokens
-from support import MARKDOWN, SIGNING_KEY, FakeTextEmbedding, exchange, fetch_jwks, token
+from support import (
+    MARKDOWN,
+    SIGNING_KEY,
+    FakeTextEmbedding,
+    FixedRouter,
+    exchange,
+    fetch_jwks,
+    token,
+)
 
 
 @pytest.fixture
 def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    """The app with the fake LLM and one ingested runbook; the agent's MCP hop stays in-process."""
+    """The app with the fake LLM and one ingested runbook; the agent's MCP hop stays in-process.
+    No routing (the fake embedder's word hashes would route at random) and no GitHub token."""
     monkeypatch.setattr(jwt.PyJWKClient, "fetch_data", fetch_jwks)
+    monkeypatch.delenv("GITHUB_PAT_READ", raising=False)
     monkeypatch.setattr(embeddings, "TextEmbedding", FakeTextEmbedding)
     monkeypatch.setattr(Tokens, "_fetch", exchange)
     settings = Settings(
@@ -26,6 +36,7 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     app = create_app(settings)
     monkeypatch.setattr(McpClient, "transport", httpx2.ASGITransport(app=app))
     with TestClient(app, headers={"Authorization": f"Bearer {token()}"}) as client:
+        app.state.agent.router = FixedRouter()
         client.post(
             "/v1/ingest",
             files={"file": ("runbook.md", MARKDOWN)},

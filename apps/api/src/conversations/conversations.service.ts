@@ -197,6 +197,7 @@ export class ConversationsService {
             approvalId: result === executed ? resumed?.id : null,
             tool: call.name,
             kind: call.kind,
+            serviceIdentity: call.serviceIdentity ?? null, // absent in parts stored before M2.5
             argsRedacted: redact(call.args),
             outcome: result.status,
             traceId: done?.traceId,
@@ -205,7 +206,8 @@ export class ConversationsService {
       });
       if (audited.length) await tx.insert(auditLog).values(audited);
       if (resumed?.status === 'executing') {
-        await this.settle(tx, user, resumed, executed, done?.traceId);
+        const identity = calls.get(resumed.callId)?.serviceIdentity;
+        await this.settle(tx, user, resumed, executed, done?.traceId, undefined, identity);
       }
       await tx
         .update(conversations)
@@ -225,6 +227,7 @@ export class ConversationsService {
     result?: ToolResultPart,
     traceId?: string | null,
     refused?: string,
+    serviceIdentity?: string | null,
   ): Promise<void> {
     const status = result?.status === 'ok' ? 'succeeded' : result || refused ? 'failed' : 'unknown';
     await tx
@@ -239,6 +242,7 @@ export class ConversationsService {
       approvalId: approval.id,
       tool: approval.tool,
       kind: 'write',
+      serviceIdentity,
       argsRedacted: redact(approval.args),
       outcome: status,
       traceId,

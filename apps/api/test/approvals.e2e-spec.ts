@@ -10,8 +10,21 @@ import { auditLog } from '../src/db/schema.js';
 import { ADMIN, createApp, EDITOR, fakeAiService, token } from './support.js';
 
 const ARGS = { title: 'Flaky test', body: 'x'.repeat(300) };
-const WRITE = { id: 'call_w', name: 'github_sandbox.create_issue', kind: 'write', risk: 'medium' };
-const READ = { id: 'call_r', name: 'kb.search_knowledge_base', kind: 'read', risk: 'low' };
+const IDENTITY = 'GITHUB_PAT_SANDBOX_WRITE';
+const WRITE = {
+  id: 'call_w',
+  name: 'github_sandbox.create_issue',
+  kind: 'write',
+  risk: 'medium',
+  serviceIdentity: IDENTITY,
+};
+const READ = {
+  id: 'call_r',
+  name: 'kb.search_knowledge_base',
+  kind: 'read',
+  risk: 'low',
+  serviceIdentity: null,
+};
 const TOOLS = [
   { name: WRITE.name, description: '', kind: 'write', risk: 'medium', min_role: 'editor' },
 ];
@@ -125,6 +138,7 @@ describe('Approvals and audit (e2e)', () => {
       outcome: row.outcome,
       kind: row.kind,
       tool: row.tool,
+      serviceIdentity: row.serviceIdentity,
     }));
 
   const succeeds = () =>
@@ -186,7 +200,9 @@ describe('Approvals and audit (e2e)', () => {
     const conversation = await detail(id, 'approver');
     expect(conversation.approvals[0]).toMatchObject({ status: 'succeeded', error: null });
     expect(conversation.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'assistant']);
-    expect(await audit(approvalId)).toEqual([{ outcome: 'ok', kind: 'write', tool: WRITE.name }]);
+    expect(await audit(approvalId)).toEqual([
+      { outcome: 'ok', kind: 'write', tool: WRITE.name, serviceIdentity: IDENTITY },
+    ]);
   });
 
   it('a double click runs the action once', async () => {
@@ -225,7 +241,7 @@ describe('Approvals and audit (e2e)', () => {
       note: 'Wrong repo',
     });
     expect(await audit(approvalId)).toEqual([
-      { outcome: 'rejected', kind: 'write', tool: WRITE.name },
+      { outcome: 'rejected', kind: 'write', tool: WRITE.name, serviceIdentity: IDENTITY },
     ]);
   });
 
@@ -278,7 +294,7 @@ describe('Approvals and audit (e2e)', () => {
     expect((await detail(id, 'broken')).approvals[0].status).toBe('unknown');
     expect(retry.status).toBe(409);
     expect(await audit(approvalId)).toEqual([
-      { outcome: 'unknown', kind: 'write', tool: WRITE.name },
+      { outcome: 'unknown', kind: 'write', tool: WRITE.name, serviceIdentity: IDENTITY },
     ]);
   });
 
@@ -297,7 +313,8 @@ describe('Approvals and audit (e2e)', () => {
       error: 'Invalid approval: the arguments differ',
     });
     expect(await audit(approvalId)).toEqual([
-      { outcome: 'failed', kind: 'write', tool: WRITE.name },
+      // Refused before the stream: no call reached a tool, so no service identity.
+      { outcome: 'failed', kind: 'write', tool: WRITE.name, serviceIdentity: null },
     ]);
   });
 
@@ -316,6 +333,7 @@ describe('Approvals and audit (e2e)', () => {
       expect.objectContaining({
         tool: READ.name,
         kind: 'read',
+        serviceIdentity: null,
         approvalId: null,
         argsRedacted: { query: 'issue #7', apiKey: '[redacted]' },
       }),

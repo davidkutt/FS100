@@ -5,6 +5,7 @@ type Events = Ai['schemas'];
 export type ToolCall = { type: 'tool_call' } & Events['ToolCallEvent'];
 export type ToolResult = { type: 'tool_result' } & Events['ToolResultEvent'];
 export type Source = Events['Source'];
+export type Route = { type: 'route' } & Events['RouteEvent'];
 /** The API strips `signedAction` (D29). */
 export type Proposal = { type: 'approval_required' } & Omit<
   Events['ApprovalRequiredEvent'],
@@ -14,6 +15,7 @@ export type Proposal = { type: 'approval_required' } & Omit<
 /** SSE v2 payloads under their event name, as the API stores them (`Message.parts`). */
 export type Part =
   | { type: 'text'; text: string }
+  | Route
   | ToolCall
   | ToolResult
   | ({ type: 'sources' } & Events['SourcesEvent'])

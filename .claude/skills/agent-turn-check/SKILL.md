@@ -7,6 +7,11 @@ description: Streams one `POST /v1/agent` turn against the locally running AI se
 
 Run from the repo root. Scratch files go to the session scratchpad (`$S` below).
 
+0. Against the user's own `pnpm dev`: list what their `.env` lacks before the first turn (names only,
+   never values): `comm -23 <(grep -oE '^[A-Z_0-9]+=' .env.example | sort -u) <(cat .env .env.local | grep -oE '^[A-Z_0-9]+=' | sort -u)`.
+   Without `APPROVAL_SIGNING_KEY` a write ends in `Agent run failed`; without `AI_KEYCLOAK_CLIENT_SECRET`
+   every `kb.*` call is a 401. Ask them for all missing lines plus one `pnpm dev` restart at once.
+   Writes and approvals through NestJS: `user-token` skill + `POST /api/approvals/<id>` `{"decision":"approve"|"reject"}`.
 1. Infra: `pnpm stack:up` (waits for healthy). Check port 8000 is free: `lsof -iTCP:8000 -sTCP:LISTEN`.
 2. AI service in the background, free first: `LLM_PROVIDER=fake pnpm dev ai > $S/ai.log 2>&1`
    (shell vars win over `.env`). Real model: `pnpm dev ai` — costs ~0.001 USD per turn; say so.

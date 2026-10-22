@@ -10,7 +10,7 @@
     "node": ">=24.15.0 <25"
   },
   "scripts": {
-    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "dev": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/dev.mjs",
     "build": "pnpm --recursive --filter \"./apps/*\" run build",
     "lint": "pnpm --recursive --filter \"./apps/*\" run lint && pnpm format:check && pnpm lint:ai",
     "lint:ai": "uv run --directory apps/ai-service ruff check . && uv run --directory apps/ai-service ruff format --check . && uv run --directory apps/ai-service pyright",

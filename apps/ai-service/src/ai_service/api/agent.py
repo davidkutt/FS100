@@ -82,7 +82,7 @@ def selected_model(
     return body.model
 
 
-def resumed(
+async def resumed(
     body: AgentRequest,
     agent: Annotated[Agent, Depends(get_agent)],
     caller: Annotated[Caller, Depends(get_caller)],
@@ -91,7 +91,7 @@ def resumed(
     if body.resume is None:
         return None
     try:
-        return agent.resume(body.resume, caller, body.conversation_id, body.domains)
+        return await agent.resume(body.resume, caller, body.conversation_id, body.domains)
     except ApprovalError as error:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT, f"Invalid approval: {error}"

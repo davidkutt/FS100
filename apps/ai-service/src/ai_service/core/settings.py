@@ -43,6 +43,15 @@ class Settings(BaseSettings):
     # Relative to the app directory (`pnpm dev`, tests); the image sets absolute paths.
     models_config: str = "../../config/models.yaml"
     taxonomy_config: str = "../../config/taxonomy.yaml"
+    mcp_servers_config: str = "../../config/mcp_servers.yaml"
+    # Domain routing (D33): the embedding router needs no tokens; `llm` asks ROUTER_MODEL.
+    router: Literal["embedding", "llm"] = "embedding"
+    router_model: str = ""  # empty = LLM_MODEL
+    # The repo the GitHub MCP server reads, and the one write (D37, D39); PATs live in `.env.local`.
+    github_repo: str = ""
+    github_sandbox_repo: str = ""
+    github_pat_sandbox_write: str = ""
+    web_fetch_allowed_hosts: str = ""  # comma-separated host[:port]; empty = no `web.fetch`
     agent_max_steps: int = 8
     agent_max_parallel_tools: int = 4
     agent_tool_timeout_s: float = 20

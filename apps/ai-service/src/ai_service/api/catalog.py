@@ -7,6 +7,7 @@ from ai_service.agent import Agent
 from ai_service.api.agent import get_agent, get_models
 from ai_service.catalog import ModelInfo
 from ai_service.core.auth import Caller, get_caller
+from ai_service.knowledge_base import Domain
 from ai_service.tools import Risk, Role, ToolKind
 
 router = APIRouter(prefix="/v1", tags=["catalog"])
@@ -18,6 +19,9 @@ class ToolInfo(BaseModel):
     kind: ToolKind
     risk: Risk
     min_role: Role
+    server: str | None  # the MCP server; null = native
+    domains: list[Domain]  # the routes that offer it; [] = every route
+    available: bool  # false: its MCP server is down or does not list it
 
 
 @router.get("/models")
@@ -27,11 +31,11 @@ def models(models: Annotated[dict[str, ModelInfo], Depends(get_models)]) -> list
 
 
 @router.get("/tools")
-def tools(
+async def tools(
     agent: Annotated[Agent, Depends(get_agent)], caller: Annotated[Caller, Depends(get_caller)]
 ) -> list[ToolInfo]:
     """The tool registry (D30); the API filters it by the caller's role."""
     return [
         ToolInfo.model_validate(tool, from_attributes=True)
-        for tool in sorted(agent.tools(None, caller), key=lambda tool: tool.name)
+        for tool in sorted(await agent.tools(None, caller), key=lambda tool: tool.name)
     ]

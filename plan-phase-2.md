@@ -59,7 +59,8 @@ behaviour is **measured** by an agent eval with fixture tool servers and a red-t
 2. Log in as `bob` (editor), start a conversation, pick the dev model in the model picker.
 3. Ask *"Why did the last CI run on main fail, and do we have a runbook for it?"* → the route chip shows `devops`; the
    timeline shows read-only `github.*` calls, then `kb.search_knowledge_base`; the answer cites the runbook `[1]` and
-   links the run.
+   links the run. *(P2: the chip needs `ROUTER=llm` (ADR-0012); citing the German disk-full runbook from an English
+   question needs hybrid search, P3a — see M2.5.)*
 4. Ask *"Open an issue for this in the sandbox repo."* → an approval card shows repo, title and body → **Approve** →
    exactly one issue is created and linked → audit entry. Repeat with **Reject** → the agent continues without acting.
 5. Ask *"Which ADRs do we have, and why does the AI layer live in Python?"* → `kb.list_sources(domains=[architecture])`
@@ -584,8 +585,8 @@ follows with M2.5.
 - [x] Token matrix extended: wrong audience on each hop → 401; missing `kb:write` → 403; viewer `ingest_url` → 403;
   expired exchanged token → re-exchanged
 - [x] *(spike, ≤ 1 h)* Keycloak 26.8 token exchange delegation (`act` claim) → keep or drop in ADR-0009
-- [ ] Manual check with MCP Inspector (open; steps in `docs/setup/startup.md` §4 — the SDK client and curl checks
-  passed) · [x] ADR-0009, ADR-0010
+- [x] Manual check with MCP Inspector v2.12 (steps in `docs/setup/startup.md` §4: 4 tools listed, `list_sources`
+  called as `bob`) · [x] ADR-0009, ADR-0010
 
 **Acceptance:** one agent turn yields one trace spanning NestJS → AI service → `/mcp`; the MCP server rejects tokens for
 any other audience; `ingest_url` never ingests without confirmation.
@@ -610,20 +611,36 @@ claim in the subject token (ADR-0009).
 
 ### M2.5 — External MCP servers, GitHub write, routing (~12 h)
 
-- [ ] MCP client manager: `mcp_servers.yaml`, http transport (stdio only if a server needs it), namespacing, allow-lists, list caching (`ttlMs`),
+- [x] MCP client manager: `mcp_servers.yaml`, http transport (stdio only if a server needs it), namespacing, allow-lists, list caching (`ttlMs`),
   deterministic tool order, per-server health and timeouts
-- [ ] GitHub MCP server container (pinned, `--read-only`, `--lockdown-mode`, toolsets) in Compose; allow-list from the
+- [x] GitHub MCP server container (pinned, `--read-only`, `--lockdown-mode`, toolsets) in Compose; allow-list from the
   pinned `tools/list`
-- [ ] `github_sandbox.create_issue` (native, PAT #2, idempotency marker, approval)
-- [ ] Architecture questions via `kb.list_sources(domains=[architecture])` + filtered search (no new server)
-- [ ] Router: embedding router (domain descriptions from `taxonomy.yaml`) + LLM classifier; `route` event; low-confidence fallback; structured-output helper
+- [x] `github_sandbox.create_issue` (native, PAT #2, idempotency marker, approval)
+- [x] Architecture questions via `kb.list_sources(domains=[architecture])` + filtered search (no new server)
+- [x] Router: embedding router (domain descriptions from `taxonomy.yaml`) + LLM classifier; `route` event; low-confidence fallback; structured-output helper
   (JSON Schema + Pydantic + one retry)
-- [ ] *(optional)* `web.fetch`: allow-listed hosts, size cap, HTML → text, untrusted label
-- [ ] Tests: allow-list enforcement, name collisions, role filtering of the tool list, idempotent issue creation
+- [x] *(optional)* `web.fetch`: allow-listed hosts, size cap, HTML → text, untrusted label — native tool in
+  `tools.py` (`WEB_FETCH_ALLOWED_HOSTS`, empty = unavailable); guards as for `ingest_url`, plus the checked address is
+  pinned per hop (rebinding); 2 MB decoded; HTML, text and JSON only; stdlib HTML → text keeps CSS-hidden text; the
+  page is untrusted tool output, not a numbered source
+- [x] Tests: allow-list enforcement, name collisions, role filtering of the tool list, idempotent issue creation
   (mocked GitHub), router fallback
 
 **Acceptance:** demo steps 3–5 work live; a viewer's model request never contains write tools; re-sending an
 approved `create_issue` creates no second issue.
+
+**Done 2026-10-22.** Demo steps 3–5 checked live as `bob` (`github-mcp` v2.0.2, `openai/gpt-6-luna`): step 3 reads
+the runs and job logs, searches the knowledge base and links the failed run; step 4 proposes the issue, the approved
+one is created once (`fs-100-sandbox#1`), re-sending the approval returns 409, a rejected one creates nothing, and
+every call is in the audit log; step 5 calls `kb.list_sources(domains=[architecture])` plus filtered searches and
+cites ADR-0002. Deviations: step 3 does not cite the German disk-full runbook. For the agent's English queries,
+dense bge-m3 scores it 0.50–0.55 (threshold 0.55) and ranks `fs100-plan.md` above it even without a threshold;
+telling the agent to search in German did not change that (`a-023` 0/3, twice). Hybrid search (P3a) is the fix;
+`a-023` stays its target. The route chip shows `devops` only with `ROUTER=llm`: the embedding router's confidence
+for that question is 0.61, below `MIN_CONFIDENCE` (ADR-0012). Tool lists are cached per the server's `ttlMs` (the
+GitHub server sends 0, so every turn lists); a server that is down leaves its tools `available: false` in
+`/v1/tools`. A turn stopped by the input-token budget streams no answer (seen once live, while the knowledge-base
+hop failed).
 
 ### M2.6 — Agent evaluation & red-team seed (~11 h)
 
@@ -690,8 +707,8 @@ contract check, cost caps, gap signals (D49), README.
 - [ ] No write executes without approval; at-most-once proven by tests; every tool call audited
 - [ ] Roles enforced server-side for tools, approvals and conversations; viewer cannot see restricted tools
 - [ ] Identity on internal hops comes from exchanged tokens; the `user` body object is gone
-- [ ] Own MCP server passes the MCP Inspector check and rejects foreign audiences
-- [ ] GitHub MCP server pinned, read-only, allow-listed; lockdown on; one idempotent sandbox write
+- [x] Own MCP server passes the MCP Inspector check and rejects foreign audiences
+- [x] GitHub MCP server pinned, read-only, allow-listed; lockdown on; one idempotent sandbox write
 - [ ] `pnpm eval:agent`, `eval:redteam`, `eval:routing` produce reports; ADR-0011/0012 contain numbers; retrieval eval blocks CI
 - [ ] Every turn produces one trace across the MCP hop; prompt versions on spans, messages and eval runs
 - [ ] Per-user usage and daily caps work; feedback stored with trace id
@@ -803,6 +820,7 @@ APPROVAL_TTL_MIN=15                         # the AI service signs the expiry
 ROUTER=embedding                            # embedding | llm
 ROUTER_MODEL=                               # cheap model id when ROUTER=llm
 INGEST_URL_ALLOWED_HOSTS=raw.githubusercontent.com  # read by the API; HTML pages need HTML → text first
+WEB_FETCH_ALLOWED_HOSTS=docs.github.com,kubernetes.io  # web.fetch (AI service); empty = tool unavailable
 
 # --- external tool identities (dev only; real values live in .env.local, never committed) ---
 GITHUB_PAT_READ=                            # fine-grained, read-only, this repo only

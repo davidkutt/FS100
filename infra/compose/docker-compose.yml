@@ -1,5 +1,6 @@
-# Local stack for FS100 (plan.md D18). Run from the repo root (scripts/stack.mjs adds the root `.env`):
-# - Mode A, `pnpm stack:up`: infra only — Postgres, Qdrant, Keycloak, Phoenix; apps run with `pnpm dev`.
+# Local stack for FS100 (plan.md D18). Run from the repo root (scripts/stack.mjs adds `.env` and `.env.local`):
+# - Mode A, `pnpm stack:up`: infra only — Postgres, Qdrant, Keycloak, Phoenix, GitHub MCP server; apps run
+#   with `pnpm dev`.
 # - Mode B, `pnpm stack:up:full`: also web, api and ai-service as containers (`profiles: [full]`).
 # Ports follow plan.md §5, identical in both modes, and are bound to 127.0.0.1 only.
 # All images are multi-arch (amd64 + arm64). Every credential here is a dev-only default.
@@ -106,6 +107,25 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # GitHub's MCP server for the agent's read-only `github.*` tools (D38, ADR-0010). In HTTP mode the AI
+  # service sends the PAT (GITHUB_PAT_READ) with each request, so the container holds no secret. Server-side
+  # read-only + lockdown; the allow-list lives in config/mcp_servers.yaml. Distroless: no healthcheck.
+  github-mcp:
+    image: ghcr.io/github/github-mcp-server:v2.0.2
+    command:
+      [
+        http,
+        --port,
+        '8082',
+        --read-only,
+        --lockdown-mode,
+        --toolsets,
+        'repos,issues,pull_requests,actions',
+      ]
+    ports:
+      - '127.0.0.1:8082:8082'
+    restart: unless-stopped
+
   # --- Mode B: the apps. Stop `pnpm dev` first (same ports). A bare variable name passes the value from
   # the shell or `.env` and stays unset otherwise, so the app's default applies; `=` entries point the
   # apps at each other inside the Compose network.
@@ -140,11 +160,19 @@ services:
       - AGENT_RUN_COST_CAP_USD
       - APPROVAL_SIGNING_KEY
       - APPROVAL_TTL_MIN
+      - ROUTER
+      - ROUTER_MODEL
+      - GITHUB_REPO
+      - GITHUB_SANDBOX_REPO
+      - GITHUB_PAT_READ # from .env.local
+      - GITHUB_PAT_SANDBOX_WRITE # from .env.local
+      - WEB_FETCH_ALLOWED_HOSTS
       - OTEL_SERVICE_NAME
       - AI_KEYCLOAK_REALM_URL=http://keycloak:8080/realms/kb
       - QDRANT_URL=http://qdrant:6333
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://phoenix:4317
       - AI_API_URL=http://api:3000
+      - GITHUB_MCP_URL=http://github-mcp:8082/mcp
     ports:
       - '127.0.0.1:8000:8000'
     volumes:

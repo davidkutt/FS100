@@ -181,8 +181,9 @@ MCP_TOKEN=$(curl -s -d grant_type=$X -d client_id=kb-ai -d client_secret=dev-onl
   http://localhost:8080/realms/kb/protocol/openid-connect/token | sed -E 's/.*"access_token":"([^"]+)".*/\1/')
 curl -s localhost:8000/mcp -H "Authorization: Bearer $MCP_TOKEN" -H 'content-type: application/json' \
   -H 'accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-  # search_knowledge_base, get_document, list_sources, ingest_url. MCP Inspector (npx @modelcontextprotocol/inspector):
-  # transport Streamable HTTP, URL http://localhost:8000/mcp, Authentication → Bearer token = $MCP_TOKEN (5 min)
+  # search_knowledge_base, get_document, list_sources, ingest_url. MCP Inspector v2 (npx @modelcontextprotocol/inspector;
+  # v1 0.17.x crashes on Node 24): Add Servers → Add manually, Streamable HTTP, URL http://localhost:8000/mcp;
+  # then the server's Settings → Custom Headers: Authorization = Bearer $MCP_TOKEN (valid 5 min — mint it right before)
 curl -s -o /dev/null -w '%{http_code}\n' -X DELETE localhost:8000/v1/documents/$DOC -H "Authorization: Bearer $TOKEN"  # 204
 
 # Postgres: both databases exist
@@ -299,6 +300,7 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | Symptom | Cause / fix |
 |---|---|
 | `pnpm stack:up` fails: `port is already allocated` | Another process uses 5432/6333/6334/8080/6006/4317 (often a native Postgres). Find it: `lsof -nP -iTCP:5432 -sTCP:LISTEN`; stop it, or stop the other Compose project |
+| `pnpm dev`: `[ai]` `Connection refused` (Qdrant :6333), `[api]` `ECONNREFUSED …:5432` | The infra is not running — `pnpm stack:reset` and `stack:down` stop it and do not start it again: `pnpm stack:up`, then `pnpm dev` |
 | `pnpm stack:up` times out on Keycloak | First start imports the realm and builds its Quarkus image: wait, then `pnpm stack:logs keycloak`. Low Docker memory is the usual root cause |
 | App login says "Invalid username or password" for `admin` | `admin` is the Keycloak server admin (realm `master`). Log in to the app as `alice` / `bob` / `carol` or **Register** — see [§3](#3-what-runs-where) |
 | New `KEYCLOAK_ADMIN_PASSWORD` / `POSTGRES_PASSWORD` not accepted | The volumes still hold the first-start values — see [Changing credentials in `.env`](#changing-credentials-in-env) |
@@ -313,7 +315,9 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | `[ai]` exits: `LLM_PROVIDER=openai_compat needs LLM_API_KEY and LLM_MODEL` | Set both in `.env` (OpenRouter key with a credit limit, model from [ADR-0005](../adr/0005-llm-access-and-model.md)), or `LLM_PROVIDER=fake` |
 | Chat and agent turns fail with 502 `Keycloak token endpoint: HTTP 400` | The realm predates M2.4 (no token exchange on `kb-api`): `pnpm stack:reset && pnpm stack:up` (wipes all local data), see §7 |
 | Agent `tool_result` errors `Keycloak token endpoint: HTTP 401` | `AI_KEYCLOAK_CLIENT_SECRET` is missing in `.env` or differs from the realm's `kb-ai` secret (`.env.example`) |
+| Agent proposes a write, then ends with `error` `Agent run failed` | `APPROVAL_SIGNING_KEY` is missing in `.env`, so writes fail closed. After pulling, list what `.env` lacks: `comm -23 <(grep -oE '^[A-Z_0-9]+=' .env.example \| sort) <(grep -oE '^[A-Z_0-9]+=' .env \| sort)` |
 | `kb.ingest_url` fails with `Host … is not allowed` | Only hosts in `INGEST_URL_ALLOWED_HOSTS` are fetched, and only PDF, Markdown or text files (HTML pages get 415) |
+| `web.fetch` missing for the agent, or `… is not an allowed host` | Editors and admins only; it reads only hosts in `WEB_FETCH_ALLOWED_HOSTS` (empty = unavailable), on every redirect too. Restart the AI service after changing it |
 | Chat ends with `event: error`, `LLM request failed` | `detail` carries the provider's answer: 401 wrong key, 402 credits used up, 429 rate limit after retries — see `data/sample-docs/runbook-llm-provider-outage.md` |
 | `[ai]` takes minutes to start, `/readyz` returns 503 | First start downloads the embedding model; watch the `[ai]` progress output. Changing `EMBEDDING_MODEL` downloads another one and starts with an empty collection (re-ingest) |
 | `pnpm stack:up:full`: `port is already allocated` on 3000/4200/8000 | `pnpm dev` (or one native app) still runs — stop it; both modes use the same ports |
