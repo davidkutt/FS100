@@ -1,5 +1,6 @@
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from contextlib import asynccontextmanager
+from typing import Any
 from uuid import uuid4
 
 from fastapi import Depends, FastAPI, Request, Response
@@ -9,19 +10,20 @@ from qdrant_client import QdrantClient
 from ai_service import __version__
 from ai_service.agent import Agent
 from ai_service.api import agent, catalog, chat, documents, health
-from ai_service.catalog import load_models, load_taxonomy
-from ai_service.core.auth import ServiceAuth
+from ai_service.catalog import McpServers, load_models, load_servers, load_taxonomy
+from ai_service.core.auth import Caller, ServiceAuth
 from ai_service.core.logging import request_id, setup_logging
 from ai_service.core.settings import Settings, get_settings
 from ai_service.core.tracing import setup_tracing
 from ai_service.embeddings import Embedder
-from ai_service.knowledge_base import KnowledgeBase
+from ai_service.knowledge_base import Domain, KnowledgeBase
 from ai_service.llm import create_provider
 from ai_service.mcp_client import McpClient
 from ai_service.mcp_server import create_mcp
 from ai_service.rag import ChatPipeline
+from ai_service.routing import create_router
 from ai_service.tokens import Tokens
-from ai_service.tools import kb_tools
+from ai_service.tools import ToolSpec, kb_tools, registry, sandbox_tools, web_tools
 
 
 class ServiceInfo(BaseModel):
@@ -37,7 +39,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     tokens = Tokens(settings)
     mcp = create_mcp(settings, lambda: app.state.kb, tokens)
     mcp_app = mcp.streamable_http_app(stateless_http=True, json_response=True)
-    kb_client = McpClient(settings.mcp_resource_url, tokens)
+    kb_client = McpClient(settings.mcp_resource_url)
+    servers = McpServers(load_servers(settings.mcp_servers_config))
+    native = sandbox_tools(settings) + web_tools(settings)
+
+    async def tools(domains: list[Domain] | None, caller: Caller) -> list[ToolSpec[Any]]:
+        # Native and own tools first: they win a name clash (D30).
+        return registry(kb_tools(kb_client, tokens, caller, domains), native, await servers.tools())
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
@@ -53,13 +61,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         llm = create_provider(settings)
         app.state.kb = kb
         app.state.models = load_models(settings.models_config)
-        app.state.taxonomy = load_taxonomy(settings.taxonomy_config)
+        app.state.taxonomy = taxonomy = load_taxonomy(settings.taxonomy_config)
         app.state.chat = ChatPipeline(
             kb, llm, settings.retrieval_top_k, settings.retrieval_score_threshold
         )
-        app.state.agent = Agent(
-            llm, settings, lambda domains, caller: kb_tools(kb_client, caller, domains)
-        )
+        router = create_router(settings, kb.embedder, taxonomy, llm)
+        app.state.agent = Agent(llm, settings, tools, router)
         # Starlette does not run a mounted app's lifespan.
         async with mcp.session_manager.run():
             yield

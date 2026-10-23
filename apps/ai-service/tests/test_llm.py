@@ -7,7 +7,9 @@ from typing import Any
 
 import httpx2
 import openai
+import pytest
 from openai.types.chat import ChatCompletionToolParam
+from pydantic import BaseModel, Field, ValidationError
 
 from ai_service.llm import (
     LlmError,
@@ -124,3 +126,60 @@ def test_api_errors_become_error_events() -> None:
     assert len(events) == 1
     assert isinstance(events[0], LlmError)
     assert "Out of credits" in events[0].detail
+
+
+class Verdict(BaseModel):
+    domains: list[str]
+    confidence: float = Field(ge=0, le=1)
+
+
+def completion(content: str) -> dict[str, Any]:
+    message = {"role": "assistant", "content": content}
+    return {
+        "id": "c",
+        "object": "chat.completion",
+        "created": 0,
+        "model": "test/model",
+        "choices": [{"index": 0, "message": message, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": 20, "completion_tokens": 5, "total_tokens": 25, "cost": 2e-5},
+    }
+
+
+def complete(*replies: str) -> tuple[Verdict, Usage, list[Any]]:
+    requests: list[Any] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(json.loads(request.content))
+        return httpx2.Response(200, json=completion(replies[len(requests) - 1]))
+
+    client = openai.AsyncOpenAI(
+        base_url="https://llm.test/v1",
+        api_key="test",
+        max_retries=0,
+        http_client=httpx2.AsyncClient(transport=httpx2.MockTransport(handler)),
+    )
+    provider = OpenAICompatProvider(client, "test/model", 100)
+    messages: list[Message] = [{"role": "user", "content": "Route this"}]
+    verdict, usage = asyncio.run(provider.complete_json(messages, Verdict, "cheap/model"))
+    return verdict, usage, requests
+
+
+def test_structured_output_sends_the_schema_and_retries_an_invalid_reply_once() -> None:
+    verdict, usage, requests = complete('{"domains": ["sre"], "confidence": 7}', VALID)
+
+    assert verdict == Verdict(domains=["devops"], confidence=0.9)
+    assert usage == Usage(20, 5, 2e-5, "test/model")
+    first, retry = requests
+    assert first["model"] == "cheap/model"
+    assert first["response_format"]["type"] == "json_schema"
+    assert first["response_format"]["json_schema"]["strict"] is True
+    assert first["provider"] == {"require_parameters": True}
+    assert "did not match the schema" in retry["messages"][-1]["content"]
+
+
+def test_structured_output_gives_up_after_the_retry() -> None:
+    with pytest.raises(ValidationError):
+        complete("not json", "still not json")
+
+
+VALID = '{"domains": ["devops"], "confidence": 0.9}'

@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import type { AgentRequest } from '../ai-client/ai-client.service.js';
 import { redact } from '../audit/redact.js';
 import type { AuthUser } from '../auth/auth.guard.js';
@@ -149,6 +149,7 @@ export class ConversationsService {
           stopReason,
           model: done?.model,
           promptVersion: done?.promptVersion,
+          promptHash: done?.promptHash,
           traceId: done?.traceId,
           answerStatus: done?.answerStatus,
           topScore: done?.topScore,
@@ -197,6 +198,7 @@ export class ConversationsService {
             approvalId: result === executed ? resumed?.id : null,
             tool: call.name,
             kind: call.kind,
+            serviceIdentity: call.serviceIdentity ?? null, // absent in parts stored before M2.5
             argsRedacted: redact(call.args),
             outcome: result.status,
             traceId: done?.traceId,
@@ -205,7 +207,8 @@ export class ConversationsService {
       });
       if (audited.length) await tx.insert(auditLog).values(audited);
       if (resumed?.status === 'executing') {
-        await this.settle(tx, user, resumed, executed, done?.traceId);
+        const identity = calls.get(resumed.callId)?.serviceIdentity;
+        await this.settle(tx, user, resumed, executed, done?.traceId, undefined, identity);
       }
       await tx
         .update(conversations)
@@ -225,6 +228,7 @@ export class ConversationsService {
     result?: ToolResultPart,
     traceId?: string | null,
     refused?: string,
+    serviceIdentity?: string | null,
   ): Promise<void> {
     const status = result?.status === 'ok' ? 'succeeded' : result || refused ? 'failed' : 'unknown';
     await tx
@@ -239,6 +243,7 @@ export class ConversationsService {
       approvalId: approval.id,
       tool: approval.tool,
       kind: 'write',
+      serviceIdentity,
       argsRedacted: redact(approval.args),
       outcome: status,
       traceId,
@@ -270,20 +275,5 @@ export class ConversationsService {
       .insert(feedback)
       .values({ messageId, userId: user.sub, ...values })
       .onConflictDoUpdate({ target: [feedback.messageId, feedback.userId], set: values });
-  }
-
-  /** Today (UTC) from the `usage` rows; daily caps build on this in M2.7. */
-  async usageToday(user: AuthUser) {
-    const [today] = await this.db
-      .select({
-        inputTokens: sql<number>`coalesce(sum(${usage.inputTokens}), 0)::int`,
-        cachedTokens: sql<number>`coalesce(sum(${usage.cachedTokens}), 0)::int`,
-        outputTokens: sql<number>`coalesce(sum(${usage.outputTokens}), 0)::int`,
-        costUsd: sql<number>`coalesce(sum(${usage.costUsd}), 0)::float8`,
-        turns: sql<number>`count(*)::int`,
-      })
-      .from(usage)
-      .where(and(eq(usage.userId, user.sub), gte(usage.createdAt, sql`date_trunc('day', now())`)));
-    return today;
   }
 }

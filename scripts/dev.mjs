@@ -1,8 +1,8 @@
 // Starts the apps natively with hot reload (Mode A, plan.md D18).
 // Usage: pnpm dev            -> web + api + ai
 //        pnpm dev api ai     -> only the named apps
-// The root `.env` is loaded by `node --env-file-if-exists=.env` (see package.json),
-// so every child process inherits the same environment.
+// The root `.env`, then `.env.local` (dev secrets such as the GitHub PATs, D37), are loaded by
+// `node --env-file-if-exists` (see package.json), so every child process inherits the same environment.
 import concurrently from 'concurrently';
 
 const aiPort = process.env.AI_PORT ?? '8000';

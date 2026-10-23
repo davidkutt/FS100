@@ -10,6 +10,7 @@ import { ConversationsModule } from './conversations/conversations.module.js';
 import { DbModule } from './db/db.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { HealthModule } from './health/health.module.js';
+import { UsageModule } from './usage/usage.module.js';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { HealthModule } from './health/health.module.js';
     CatalogModule,
     ConversationsModule,
     AuditModule,
+    UsageModule,
   ],
 })
 export class AppModule {}

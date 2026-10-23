@@ -71,7 +71,7 @@ export class Conversations {
   protected readonly list = httpResource<Schemas['Conversation'][]>(
     () => `${this.api}/api/conversations`,
   );
-  protected readonly usage = httpResource<Schemas['UsageToday']>(() => `${this.api}/api/me/usage`);
+  protected readonly usage = httpResource<Schemas['MyUsage']>(() => `${this.api}/api/me/usage`);
   private readonly pending = httpResource<Schemas['Approval'][]>(
     () => `${this.api}/api/approvals?status=pending`,
   );

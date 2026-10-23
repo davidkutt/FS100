@@ -57,7 +57,13 @@ drafts), M2.1 (agent harness: `agent.py`, `tools.py`, `POST /v1/agent` with SSE 
 `agent_v0`), M2.2 (conversations + event tee in NestJS, model registry, taxonomy + document topics,
 agent chat UI), M2.3 (signed approvals `approvals.py` + resume, NestJS approval state machine,
 append-only `audit_log`, approval card and admin audit page) and M2.4 (own MCP server `mcp_server.py` at
-`/mcp`, Keycloak token exchange on both hops, `kb.ingest_url` via `/internal/documents/from-url`) are done. Check the milestone in
+`/mcp`, Keycloak token exchange on both hops, `kb.ingest_url` via `/internal/documents/from-url`) are done, and so are
+M2.5 (external MCP servers from `config/mcp_servers.yaml` in `catalog.py`, pinned `github-mcp` container,
+`github_sandbox.create_issue`, embedding/LLM router `routing.py`), M2.6 (fixture GitHub MCP server in `evals/fixtures/`, `kb-eval agent | redteam | routing`, blocking retrieval
+gate in `eval.yml`, ADR-0011/0012 proposed) and M2.7 (prompt files `ai_service/prompts/*.md` with version + hash,
+daily cost caps in `apps/api/src/usage/`, admin usage page, system card, e2e approval smoke; only the README GIF
+is open); M2.8 (Claude Code / VS Code log in to `/mcp` via Keycloak CIMD, ADR-0014) is code-complete, the hand check
+in Claude Code is open. Check the milestone in
 [plan.md §8](plan.md#8-milestones-and-tasks) or [plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks)
 before building something: many features are deliberately scheduled for later milestones.
 
@@ -73,10 +79,10 @@ Qdrant alias `kb_current`). Keep those names.
 | `apps/ai-service` | **All AI code**: parse, chunk, embed, retrieve, prompt, LLM, evals, tracing. Internal only | FastAPI, Python 3.13 (uv), pydantic-settings, ruff, pyright strict, pytest |
 | `packages/contracts` | **Generated**, committed: OpenAPI of both services (+ SSE event schemas) and TS types | openapi-typescript |
 | `config/` | `models.yaml` (model registry, AI service), `taxonomy.yaml` (domains + sub-topics, API and AI service); copied into the images | YAML |
-| `infra/` | Compose (Postgres 17, Qdrant 1.19, Keycloak 26.8, Phoenix; `--profile full` adds the apps), realm export, DB init | Docker Compose |
+| `infra/` | Compose (Postgres 17, Qdrant 1.19, Keycloak 26.8 with experimental `cimd,resource-indicators`, Phoenix; `--profile full` adds the apps), realm export, DB init | Docker Compose |
 | `e2e/` | Playwright smoke (login → upload → ask → citation), runs against :4200 | Playwright |
 | `data/sample-docs/` | Demo + eval corpus; `domains.json` = file → domain tags; repo docs are frozen snapshots | — |
-| `evals/` | Golden datasets (`datasets/*.jsonl`, frozen per version); `runs/` git-ignored | — |
+| `evals/` | Datasets (`datasets/*.jsonl`, frozen per version), fixture MCP server + scenarios (`fixtures/`); `runs/` git-ignored | — |
 | `scripts/` | `dev.mjs` (runs apps), `stack.mjs` (compose wrapper) | Node |
 | `docs/adr/` | Architecture Decision Records — copy `template.md`, next free number, add to the index | — |
 | `docs/setup/` | `installation.md` (toolchain), `startup.md` (URLs, seed users, troubleshooting) | — |

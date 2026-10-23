@@ -1,29 +1,58 @@
-# Retrieval eval on the golden set (plan.md D19, D23): report only, never blocks a merge.
-# The summary lands in the job summary, the run files in the `retrieval-eval` artifact.
+# Evals (plan-phase-2 D43). The retrieval eval on the golden set blocks a merge when hit@5 or nDCG@10
+# drops more than 0.02 below the ADR-0004 baseline. The agent smoke (fake LLM + fixtures) runs with the
+# tests in ci.yml. Real-model evals cost money: only by hand (Actions → Eval → Run workflow), with a
+# budget and the `LLM_API_KEY` repository secret. Nightly: the fixture contract against the pinned
+# GitHub MCP server. Summaries land in the job summary, run files in the artifacts.
 name: Eval
 
 on:
   pull_request:
     paths:
       - apps/ai-service/**
+      - config/**
       - evals/**
       - data/sample-docs/**
       - .github/workflows/eval.yml
+  push:
+    branches: [main]
+    paths:
+      - apps/ai-service/**
+      - config/**
+      - evals/**
+      - data/sample-docs/**
+      - .github/workflows/eval.yml
+  schedule:
+    - cron: '17 3 * * *'
   workflow_dispatch:
+    inputs:
+      suite:
+        description: Real-model suite (none = retrieval eval only; contract = fixture contract)
+        type: choice
+        options: [none, agent, redteam, routing, contract]
+        default: none
+      model:
+        description: Model id at OpenRouter (agent, redteam; the classifier for routing)
+        default: openai/gpt-6-luna
+      repeats:
+        description: Repeats per task (agent, redteam)
+        default: '3'
+      budget_usd:
+        description: Cost cap for the whole run in USD (agent, redteam)
+        default: '2.00'
 
 permissions:
   contents: read
 
 concurrency:
-  group: eval-${{ github.ref }}
+  group: eval-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 jobs:
   retrieval:
     name: retrieval eval
+    if: github.event_name != 'schedule'
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    continue-on-error: true
     defaults:
       run:
         working-directory: apps/ai-service
@@ -39,10 +68,79 @@ jobs:
           path: apps/ai-service/.cache/fastembed
           key: fastembed-bge-m3
       - run: uv sync --locked
-      - run: uv run kb-eval retrieval
+      # Baseline: ADR-0004 (bge-m3, 1000/150). Raise it when a change improves retrieval.
+      - run: uv run kb-eval retrieval --baseline hit@5=0.98 --baseline ndcg@10=0.86 --tolerance 0.02
       - name: Job summary
+        if: always()
         run: cat ../../evals/runs/*.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: retrieval-eval
           path: evals/runs/
+
+  real-model:
+    name: ${{ inputs.suite }} eval (real model)
+    if: github.event_name == 'workflow_dispatch' && inputs.suite != 'none' && inputs.suite != 'contract'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        working-directory: apps/ai-service
+    env:
+      LLM_PROVIDER: openai_compat
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      LLM_MODEL: ${{ inputs.model }}
+      SUITE: ${{ inputs.suite }}
+      REPEATS: ${{ inputs.repeats }}
+      BUDGET: ${{ inputs.budget_usd }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/ai-service/uv.lock
+      - uses: actions/cache@v6
+        with:
+          path: apps/ai-service/.cache/fastembed
+          key: fastembed-bge-m3
+      - run: uv sync --locked
+      - run: |
+          if [ "$SUITE" = routing ]; then
+            uv run kb-eval routing --router embedding --router llm
+          else
+            uv run kb-eval "$SUITE" --repeats "$REPEATS" --cost-cap "$BUDGET"
+          fi
+      - name: Job summary
+        if: always()
+        run: cat ../../evals/runs/*.md >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: ${{ inputs.suite }}-eval
+          path: evals/runs/
+
+  fixture-contract:
+    name: fixture contract (pinned GitHub MCP server)
+    if: github.event_name == 'schedule' || inputs.suite == 'contract'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: apps/ai-service/uv.lock
+      - run: uv sync --locked --directory apps/ai-service
+      # The image and its flags come from Compose; listing tools needs no real PAT (ADR-0010).
+      - run: docker compose --file infra/compose/docker-compose.yml up --detach github-mcp
+      - name: Wait for the server
+        run: |
+          for _ in $(seq 30); do
+            curl --silent --output /dev/null http://localhost:8082/mcp && exit 0
+            sleep 1
+          done
+          exit 1
+      - run: uv run --directory apps/ai-service pytest tests/test_eval_agent.py -k pinned
+        env:
+          MCP_CONTRACT_URL: http://localhost:8082/mcp

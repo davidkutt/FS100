@@ -1,0 +1,26 @@
+# External MCP servers (D38), read by the AI service (MCP_SERVERS_CONFIG). Their tools reach the model as
+# `<server>.<tool>` — only the `allow`ed ones, and only if the server marks them read-only. The own
+# knowledge-base server (`kb.*`) and the sandbox write (`github_sandbox.create_issue`) are not listed here.
+# `${VAR:-default}` reads the environment; `bearer_env` names the variable that holds the credential
+# (real values in `.env.local`) and is the audit's service identity. Without it, the tools are unavailable.
+servers:
+  github:
+    # ghcr.io/github/github-mcp-server v2.0.2: --read-only --lockdown-mode, toolsets
+    # repos,issues,pull_requests,actions (infra/compose). Allow-list from its pinned tools/list (ADR-0010).
+    url: ${GITHUB_MCP_URL:-http://localhost:8082/mcp}
+    bearer_env: GITHUB_PAT_READ
+    allow:
+      - actions_get
+      - actions_list
+      - get_commit
+      - get_file_contents
+      - get_job_logs
+      - issue_read
+      - list_commits
+      - list_issues
+      - list_pull_requests
+      - pull_request_read
+      - search_issues
+    domains: [devops, dev]
+    min_role: viewer
+    timeout_s: 20

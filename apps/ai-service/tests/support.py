@@ -13,6 +13,7 @@ from jwt.algorithms import RSAAlgorithm
 from numpy.typing import NDArray
 
 from ai_service.core.settings import Settings
+from ai_service.routing import Route
 from ai_service.tokens import Tokens
 
 MARKDOWN = b"# Runbook\n\n## Rollback\nUndo the release with kubectl rollout undo.\n"
@@ -56,6 +57,16 @@ async def exchange(_self: Tokens, form: dict[str, str]) -> tuple[str, int]:
     roles = tuple(subject["realm_access"]["roles"])
     mcp = Settings().mcp_resource_url
     return token(aud=mcp, sub=subject["sub"], roles=roles, scope=form["scope"]), 300
+
+
+class FixedRouter:
+    """Routes every question the same way; unset = low confidence, i.e. every tool, no filter."""
+
+    def __init__(self, route: Route | None = None) -> None:
+        self._route = route or Route([], True, 0.0, "embedding")
+
+    async def route(self, question: str) -> Route:
+        return self._route
 
 
 class FakeTextEmbedding:

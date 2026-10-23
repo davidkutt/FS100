@@ -5,12 +5,12 @@ Run from `apps/ai-service` (as `pnpm eval:retrieval` does); default paths are re
 
 import argparse
 import time
-import warnings
 from datetime import UTC, datetime
+from functools import partial
 from pathlib import Path
 from statistics import mean
-from typing import Literal
-from uuid import NAMESPACE_URL, uuid5
+from typing import Any, Literal
+from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, TypeAdapter
 from qdrant_client import QdrantClient
@@ -96,6 +96,25 @@ def load_manifest(corpus: Path) -> dict[str, list[Domain]]:
     return _manifest.validate_json((corpus / MANIFEST).read_bytes())
 
 
+def doc_id(filename: str) -> UUID:
+    """Stable per file, so a report can name a cited document."""
+    return uuid5(NAMESPACE_URL, filename)
+
+
+def ingest_corpus(kb: KnowledgeBase, corpus: Path) -> int:
+    """Every file of the corpus manifest, with its domains; returns the chunk count."""
+    return sum(
+        kb.ingest(
+            doc_id=doc_id(name),
+            filename=name,
+            data=(corpus / name).read_bytes(),
+            owner_id="eval",
+            domains=domains,
+        ).chunk_count
+        for name, domains in load_manifest(corpus).items()
+    )
+
+
 def gains(item: GoldenItem, hits: list[Hit]) -> list[int]:
     found: set[int] = set()
     result: list[int] = []
@@ -129,18 +148,8 @@ def run(
 ) -> RunReport:
     kb = KnowledgeBase(QdrantClient(":memory:"), embedder, "eval", chunk_size, chunk_overlap)
     kb.ensure_collection()
-    manifest = load_manifest(corpus)
     started = time.perf_counter()
-    chunks = sum(
-        kb.ingest(
-            doc_id=uuid5(NAMESPACE_URL, name),
-            filename=name,
-            data=(corpus / name).read_bytes(),
-            owner_id="eval",
-            domains=domains,
-        ).chunk_count
-        for name, domains in manifest.items()
-    )
+    chunks = ingest_corpus(kb, corpus)
     ingest_s = time.perf_counter() - started
 
     results: list[ItemResult] = []
@@ -180,7 +189,7 @@ def run(
         dim=embedder.dim,
         chunk_size=chunk_size,
         chunk_overlap=chunk_overlap,
-        documents=len(manifest),
+        documents=len(load_manifest(corpus)),
         chunks=chunks,
         ingest_s=ingest_s,
         created_at=datetime.now(UTC).isoformat(timespec="seconds"),
@@ -249,15 +258,28 @@ def comparison(reports: list[RunReport]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def regressions(
+    overall: dict[str, float], baseline: dict[str, float], tolerance: float
+) -> list[str]:
+    """The metrics more than `tolerance` below their baseline (D43: the CI gate)."""
+    return [
+        f"{metric} {overall[metric]:.3f} < baseline {value:.3f} - {tolerance}"
+        for metric, value in baseline.items()
+        if overall[metric] < value - tolerance
+    ]
+
+
 def _chunk_arg(value: str) -> tuple[int, int]:
     size, _, overlap = value.partition(":")
     return int(size), int(overlap or 0)
 
 
-def main() -> None:
-    settings = Settings()
-    parser = argparse.ArgumentParser(prog="kb-eval", description="FS100 evaluation harness")
-    commands = parser.add_subparsers(dest="command", required=True)
+def _metric_arg(value: str) -> tuple[str, float]:
+    metric, _, number = value.partition("=")
+    return metric, float(number)
+
+
+def add_command(commands: Any, settings: Settings) -> None:
     cmd = commands.add_parser("retrieval", help="golden-set retrieval eval: hit@k, MRR, nDCG")
     cmd.add_argument(
         "--dataset", type=Path, default=Path("../../evals/datasets/retrieval_v1.jsonl")
@@ -274,11 +296,22 @@ def main() -> None:
         metavar="SIZE:OVERLAP",
         help="repeat to benchmark (default: CHUNK_SIZE:CHUNK_OVERLAP)",
     )
-    args = parser.parse_args()
-    warnings.filterwarnings("ignore", "Payload indexes have no effect in the local Qdrant")
+    cmd.add_argument(
+        "--baseline",
+        action="append",
+        type=_metric_arg,
+        default=[],
+        metavar="METRIC=VALUE",
+        help="fail (exit 1) if an overall metric drops below VALUE - tolerance, e.g. hit@5=0.98",
+    )
+    cmd.add_argument("--tolerance", type=float, default=0.02)
+    cmd.set_defaults(run=partial(_main, settings=settings))
 
+
+def _main(args: argparse.Namespace, settings: Settings) -> None:
     args.out.mkdir(parents=True, exist_ok=True)
     reports: list[RunReport] = []
+    failed: list[str] = []
     for model in args.model or [settings.embedding_model]:
         embedder = Embedder(model, settings.embedding_cache_dir)
         for size, overlap in args.chunk or [(settings.chunk_size, settings.chunk_overlap)]:
@@ -293,5 +326,9 @@ def main() -> None:
             Path(f"{stem}.md").write_text(markdown)
             print(markdown)
             print(f"→ {Path(stem).resolve()}.json\n", flush=True)
+            failed += regressions(report.overall, dict(args.baseline), args.tolerance)
     if len(reports) > 1:
         print(comparison(reports))
+    if failed:
+        print("Retrieval regression:\n" + "\n".join(f"- {line}" for line in failed))
+        raise SystemExit(1)

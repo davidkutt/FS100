@@ -93,7 +93,7 @@ Ports are fixed and identical in Mode A and Mode B (plan.md §5). Everything bin
 | Service | URL | Login (dev only) |
 |---|---|---|
 | Web (Angular) | http://localhost:4200 | seed users below (Keycloak login, PKCE) |
-| API (NestJS) | http://localhost:3000/healthz · `/readyz` · `/api/*` needs a user token (`/api/me`, `/api/documents`, `/api/conversations`, `/api/approvals`, `/api/models`, `/api/taxonomy`, `/api/chat`, `/api/search`, admin: `/api/status`, `/api/admin/audit`) | — |
+| API (NestJS) | http://localhost:3000/healthz · `/readyz` · `/api/*` needs a user token (`/api/me`, `/api/documents`, `/api/conversations`, `/api/approvals`, `/api/models`, `/api/taxonomy`, `/api/chat`, `/api/search`, `/api/me/usage`, admin: `/api/status`, `/api/admin/audit`, `/api/admin/usage`) | — |
 | AI service (FastAPI) | http://localhost:8000 · `/healthz`, `/readyz` · Swagger UI: http://localhost:8000/docs · `/v1/*` needs a token with `aud=kb-ai` (a user's, exchanged by the API, or the API's service token) · MCP server: http://localhost:8000/mcp (token with `aud=http://localhost:8000/mcp`, scope `kb:read`), metadata at `/.well-known/oauth-protected-resource/mcp` | — |
 | Keycloak admin console | http://localhost:8080/admin/ | `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD` from the first start (default `admin` / `dev-only-change-me`) |
 | Keycloak account console (realm `kb`) | http://localhost:8080/realms/kb/account | seed users below |
@@ -126,7 +126,9 @@ tokens carry `aud=kb-api`), `kb-api` (confidential, secret `dev-only-change-me`;
 `aud=kb-ai` and has a service account with `aud=kb-ai` for system calls), `kb-ai` (confidential, secret
 `dev-only-change-me`; exchanges those tokens for the MCP server via the optional client scopes `kb:read` /
 `kb:write`, whose audience mapper adds `http://localhost:8000/mcp`; its service account holds the `kb-api` client
-role `ingest-on-behalf` for `/internal/documents/from-url`).
+role `ingest-on-behalf` for `/internal/documents/from-url`). Claude Code and VS Code get a client of their own on
+their first login, created from their Client ID Metadata Document ([§4](#use-the-knowledge-base-from-claude-code--vs-code)).
+Every public client must use PKCE S256.
 
 ## 4. Check that everything works
 
@@ -181,8 +183,9 @@ MCP_TOKEN=$(curl -s -d grant_type=$X -d client_id=kb-ai -d client_secret=dev-onl
   http://localhost:8080/realms/kb/protocol/openid-connect/token | sed -E 's/.*"access_token":"([^"]+)".*/\1/')
 curl -s localhost:8000/mcp -H "Authorization: Bearer $MCP_TOKEN" -H 'content-type: application/json' \
   -H 'accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
-  # search_knowledge_base, get_document, list_sources, ingest_url. MCP Inspector (npx @modelcontextprotocol/inspector):
-  # transport Streamable HTTP, URL http://localhost:8000/mcp, Authentication → Bearer token = $MCP_TOKEN (5 min)
+  # search_knowledge_base, get_document, list_sources, ingest_url. MCP Inspector v2 (npx @modelcontextprotocol/inspector;
+  # v1 0.17.x crashes on Node 24): Add Servers → Add manually, Streamable HTTP, URL http://localhost:8000/mcp;
+  # then the server's Settings → Custom Headers: Authorization = Bearer $MCP_TOKEN (valid 5 min — mint it right before)
 curl -s -o /dev/null -w '%{http_code}\n' -X DELETE localhost:8000/v1/documents/$DOC -H "Authorization: Bearer $TOKEN"  # 204
 
 # Postgres: both databases exist
@@ -200,6 +203,42 @@ select one to read the passage, **Trace in Phoenix** opens the request's trace. 
 raw hits with scores and a dashed line at the score threshold. As `carol` (viewer) there are no upload
 or delete controls. Chat calls the real LLM unless `LLM_PROVIDER=fake`.
 
+### Use the knowledge base from Claude Code / VS Code
+
+MCP clients log in to the own MCP server through Keycloak themselves: no client to register, no token to
+paste ([ADR-0014](../adr/0014-external-mcp-clients-cimd.md)). Keycloak fetches the client's Client ID Metadata
+Document from claude.ai / vscode.dev (so it needs internet), creates a client for it and issues tokens with
+`aud=http://localhost:8000/mcp`.
+
+> **Experimental.** This relies on Keycloak's `cimd` and `resource-indicators` features, which are always on
+> in Compose and may change with any Keycloak upgrade. A realm imported before M2.8 lacks the client
+> policies: `pnpm stack:reset && pnpm stack:up` (wipes all local data, [§7](#changing-the-keycloak-realm)).
+
+**Claude Code:**
+
+```bash
+claude mcp add --transport http fs100-kb http://localhost:8000/mcp
+```
+
+In Claude Code, run `/mcp` → `fs100-kb` → *Authenticate*. The browser opens Keycloak: log in (e.g. `carol`)
+and allow access on the consent screen (once per user). Then ask, e.g., *"Search the FS100 knowledge base:
+what happens when the error budget is exhausted?"* — Claude Code calls `search_knowledge_base`.
+
+**VS Code** (`.vscode/mcp.json`, or *MCP: Add Server* → HTTP):
+
+```json
+{ "servers": { "fs100-kb": { "type": "http", "url": "http://localhost:8000/mcp" } } }
+```
+
+Start the server, allow the authentication prompt, log in in the browser; the tools are then available in
+chat (agent mode).
+
+External clients get the read tools (`search_knowledge_base`, `get_document`, `list_sources`) with your roles.
+The server advertises only `kb:read`, so `ingest_url` fails with `insufficient_scope: needs kb:write` — add
+documents in the app. Tokens live 5 minutes and the client refreshes them; after 30 minutes idle or 10 hours
+it asks you to log in again. Not supported: Claude Desktop and claude.ai connectors (they connect from
+Anthropic's cloud, which cannot reach `localhost`) and ChatGPT (Keycloak does not parse its metadata document).
+
 ## 5. Quality checks
 
 Run them before every push — they are also what CI runs.
@@ -212,8 +251,10 @@ pnpm format         # auto-fix formatting (prettier + ruff)
 ```
 
 **End-to-end smoke** (Playwright, `e2e/`): logs in as `bob`, uploads a generated Markdown file, asks a
-question, opens the citation and deletes the file again. It runs against whatever serves
-http://localhost:4200 — Mode B as in CI, or Mode A:
+question, opens the citation and deletes the file again; then asks the fake LLM to `Add <url>`, rejects the
+proposed `kb.ingest_url`, asks again and approves it (the API fetches `docs/adr/template.md` from this repo
+on GitHub, so it needs internet) and deletes the ingested file. It needs `LLM_PROVIDER=fake` and runs
+against whatever serves http://localhost:4200 — Mode B as in CI, or Mode A:
 
 ```bash
 pnpm --filter @fs100/e2e exec playwright install chromium   # once per machine
@@ -222,8 +263,10 @@ pnpm e2e
 ```
 
 CI (`.github/workflows/`) runs `ci.yml` (lint, test, build, contract drift), `e2e.yml` (this smoke),
-`eval.yml` (retrieval eval on PRs touching the AI service or evals, report only) and, on `main`,
-`docker.yml` (multi-arch images to GHCR).
+`eval.yml` (retrieval eval on PRs touching the AI service, config or evals, **blocking** when hit@5 or
+nDCG@10 drops more than 0.02 below the baseline; real-model agent / red-team / routing evals by hand with a
+budget; nightly fixture contract) and, on `main`, `docker.yml` (multi-arch images to GHCR). The agent smoke
+(fake LLM + fixture MCP servers) runs with the tests.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`,
 `chore:`, `refactor:`, `test:`, `ci:` …), trunk-based on `main`.
@@ -271,7 +314,8 @@ before the next `pnpm stack:up` (otherwise Keycloak can no longer connect to Pos
 
 Keycloak imports `infra/keycloak/realm-kb.json` **only if the realm does not exist yet**. After editing the
 file — or pulling a change to it, e.g. M2.4 (client `kb-ai` with secret and token exchange, scopes `kb:read` /
-`kb:write`, role `ingest-on-behalf`, self-registration off) — recreate the Keycloak state:
+`kb:write`, role `ingest-on-behalf`, self-registration off) or M2.8 (client policies for Claude Code / VS Code,
+PKCE for public clients) — recreate the Keycloak state:
 
 ```bash
 pnpm stack:reset && pnpm stack:up     # wipes ALL local data (also Qdrant and Phoenix)
@@ -299,6 +343,7 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | Symptom | Cause / fix |
 |---|---|
 | `pnpm stack:up` fails: `port is already allocated` | Another process uses 5432/6333/6334/8080/6006/4317 (often a native Postgres). Find it: `lsof -nP -iTCP:5432 -sTCP:LISTEN`; stop it, or stop the other Compose project |
+| `pnpm dev`: `[ai]` `Connection refused` (Qdrant :6333), `[api]` `ECONNREFUSED …:5432` | The infra is not running — `pnpm stack:reset` and `stack:down` stop it and do not start it again: `pnpm stack:up`, then `pnpm dev` |
 | `pnpm stack:up` times out on Keycloak | First start imports the realm and builds its Quarkus image: wait, then `pnpm stack:logs keycloak`. Low Docker memory is the usual root cause |
 | App login says "Invalid username or password" for `admin` | `admin` is the Keycloak server admin (realm `master`). Log in to the app as `alice` / `bob` / `carol` or **Register** — see [§3](#3-what-runs-where) |
 | New `KEYCLOAK_ADMIN_PASSWORD` / `POSTGRES_PASSWORD` not accepted | The volumes still hold the first-start values — see [Changing credentials in `.env`](#changing-credentials-in-env) |
@@ -313,12 +358,16 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | `[ai]` exits: `LLM_PROVIDER=openai_compat needs LLM_API_KEY and LLM_MODEL` | Set both in `.env` (OpenRouter key with a credit limit, model from [ADR-0005](../adr/0005-llm-access-and-model.md)), or `LLM_PROVIDER=fake` |
 | Chat and agent turns fail with 502 `Keycloak token endpoint: HTTP 400` | The realm predates M2.4 (no token exchange on `kb-api`): `pnpm stack:reset && pnpm stack:up` (wipes all local data), see §7 |
 | Agent `tool_result` errors `Keycloak token endpoint: HTTP 401` | `AI_KEYCLOAK_CLIENT_SECRET` is missing in `.env` or differs from the realm's `kb-ai` secret (`.env.example`) |
+| Agent proposes a write, then ends with `error` `Agent run failed` | `APPROVAL_SIGNING_KEY` is missing in `.env`, so writes fail closed. After pulling, list what `.env` lacks: `comm -23 <(grep -oE '^[A-Z_0-9]+=' .env.example \| sort) <(grep -oE '^[A-Z_0-9]+=' .env \| sort)` |
 | `kb.ingest_url` fails with `Host … is not allowed` | Only hosts in `INGEST_URL_ALLOWED_HOSTS` are fetched, and only PDF, Markdown or text files (HTML pages get 415) |
+| `web.fetch` missing for the agent, or `… is not an allowed host` | Editors and admins only; it reads only hosts in `WEB_FETCH_ALLOWED_HOSTS` (empty = unavailable), on every redirect too. Restart the AI service after changing it |
 | Chat ends with `event: error`, `LLM request failed` | `detail` carries the provider's answer: 401 wrong key, 402 credits used up, 429 rate limit after retries — see `data/sample-docs/runbook-llm-provider-outage.md` |
 | `[ai]` takes minutes to start, `/readyz` returns 503 | First start downloads the embedding model; watch the `[ai]` progress output. Changing `EMBEDDING_MODEL` downloads another one and starts with an empty collection (re-ingest) |
 | `pnpm stack:up:full`: `port is already allocated` on 3000/4200/8000 | `pnpm dev` (or one native app) still runs — stop it; both modes use the same ports |
 | `pnpm stack:up:full` waits for minutes on `ai-service` | First start downloads the embedding model into the volume: `pnpm stack:logs ai-service` |
 | Angular shows stale output | `rm -rf apps/web/.angular` and restart |
+| Claude Code / VS Code: Keycloak shows an error (e.g. `Invalid scopes: kb:read`) instead of the login form | The realm predates M2.8: `pnpm stack:reset && pnpm stack:up` (wipes all local data). Otherwise check `pnpm stack:logs keycloak` — Keycloak must reach claude.ai / vscode.dev |
+| Keycloak: every login fails with 500 `Condition with provider ID client-id-uri not found` | Keycloak runs without `--features=cimd,resource-indicators` (ADR-0014); keep them in the Compose `command` |
 | Login page: "Cookie not found" | Use `http://localhost:…`, not `127.0.0.1` — cookies and redirect URIs are bound to `localhost` |
 | Want a clean slate | `pnpm stack:reset`, `rm -rf node_modules apps/*/node_modules apps/ai-service/.venv`, then the steps in §1 |
 
@@ -334,5 +383,8 @@ is postponed while the project runs locally. Phase 2 ([plan-phase-2.md](../../pl
 (stored conversations, the agent chat UI with tool timeline and model picker, `config/taxonomy.yaml` with
 document sub-topics) and **M2.3** (approvals for write tools, audit log, admin audit page at
 http://localhost:4200/admin/audit) and **M2.4** (own MCP server at http://localhost:8000/mcp, Keycloak token
-exchange on both internal hops, `kb.ingest_url`) are done; next is M2.5 (GitHub MCP server, sandbox write,
-routing).
+exchange on both internal hops, `kb.ingest_url`), **M2.5** (GitHub MCP server, sandbox write, routing),
+**M2.6** (agent eval and red-team seed, `pnpm eval:agent`) and **M2.7** (prompt files with version and hash,
+daily cost caps with `/api/me/usage` and the admin usage page at http://localhost:4200/admin/usage, README and
+[system card](../system-card.md)) are done; **M2.8** (Claude Code / VS Code log in to the MCP server through
+Keycloak, [§4](#use-the-knowledge-base-from-claude-code--vs-code)) is code-complete.

@@ -59,7 +59,8 @@ behaviour is **measured** by an agent eval with fixture tool servers and a red-t
 2. Log in as `bob` (editor), start a conversation, pick the dev model in the model picker.
 3. Ask *"Why did the last CI run on main fail, and do we have a runbook for it?"* → the route chip shows `devops`; the
    timeline shows read-only `github.*` calls, then `kb.search_knowledge_base`; the answer cites the runbook `[1]` and
-   links the run.
+   links the run. *(P2: the chip needs `ROUTER=llm` (ADR-0012); citing the German disk-full runbook from an English
+   question needs hybrid search, P3a — see M2.5.)*
 4. Ask *"Open an issue for this in the sandbox repo."* → an approval card shows repo, title and body → **Approve** →
    exactly one issue is created and linked → audit entry. Repeat with **Reject** → the agent continues without acting.
 5. Ask *"Which ADRs do we have, and why does the AI layer live in Python?"* → `kb.list_sources(domains=[architecture])`
@@ -263,7 +264,7 @@ kb-agent/
 ├─ evals/
 │  ├─ datasets/{agent_v1.jsonl, redteam_v0.jsonl, routing_v1.jsonl}
 │  └─ fixtures/{github_mcp/, scenarios/}               # fixture MCP servers + seeded data
-├─ infra/compose/                # + github-mcp service, + `mcp-ext` profile (stretch)
+├─ infra/compose/                # + github-mcp service; Keycloak with cimd + resource-indicators (M2.8)
 └─ docs/
    ├─ adr/0007 … 0013
    └─ system-card.md             # stub, grows each phase
@@ -394,12 +395,14 @@ audit log but do not approve on behalf of others in P2.
   service account (role `ingest-on-behalf`) for `/internal/documents/from-url`.
 - **`kb-api`** — enable Standard token exchange; existing audience mapper → `kb-ai` stays.
 - **New client `kb-mcp`** — represents the MCP server (resource); attribute `resource_url = http://localhost:8000/mcp`
-  for the stretch path.
+  for the stretch path. *(Dropped in M2.8: the CIMD executor binds the audience, ADR-0014.)*
 - **Client scopes `kb:read`, `kb:write`** (Optional) with an **Audience** mapper, *Included Custom Audience* =
-  `http://localhost:8000/mcp`; assigned to `kb-ai` (and to CIMD clients in the stretch).
+  `http://localhost:8000/mcp`; assigned to `kb-ai` (and to CIMD clients in the stretch — as realm-default optional
+  scopes, M2.8).
 - **Self-registration off** by default (D44); enable only for demos, default role viewer.
 - Features: standard token exchange (on by default). Spike: `token-exchange-delegation` (preview in 26.8).
-  Stretch profile `mcp-ext`: `--features=cimd,resource-indicators` (experimental) + client policies for Claude Code / VS Code.
+  Stretch: `--features=cimd,resource-indicators` (experimental) + client policies for Claude Code / VS Code — always on
+  since M2.8, not a profile (ADR-0014).
 - Token lifetimes unchanged (5 min); exchanged tokens cached until exp − 30 s; resumes always use a fresh exchange.
 - Exact audience rules for exchange (requester must be in the subject token's audience) verified in the M2.0 spike.
 
@@ -584,8 +587,8 @@ follows with M2.5.
 - [x] Token matrix extended: wrong audience on each hop → 401; missing `kb:write` → 403; viewer `ingest_url` → 403;
   expired exchanged token → re-exchanged
 - [x] *(spike, ≤ 1 h)* Keycloak 26.8 token exchange delegation (`act` claim) → keep or drop in ADR-0009
-- [ ] Manual check with MCP Inspector (open; steps in `docs/setup/startup.md` §4 — the SDK client and curl checks
-  passed) · [x] ADR-0009, ADR-0010
+- [x] Manual check with MCP Inspector v2.12 (steps in `docs/setup/startup.md` §4: 4 tools listed, `list_sources`
+  called as `bob`) · [x] ADR-0009, ADR-0010
 
 **Acceptance:** one agent turn yields one trace spanning NestJS → AI service → `/mcp`; the MCP server rejects tokens for
 any other audience; `ingest_url` never ingests without confirmation.
@@ -610,54 +613,127 @@ claim in the subject token (ADR-0009).
 
 ### M2.5 — External MCP servers, GitHub write, routing (~12 h)
 
-- [ ] MCP client manager: `mcp_servers.yaml`, http transport (stdio only if a server needs it), namespacing, allow-lists, list caching (`ttlMs`),
+- [x] MCP client manager: `mcp_servers.yaml`, http transport (stdio only if a server needs it), namespacing, allow-lists, list caching (`ttlMs`),
   deterministic tool order, per-server health and timeouts
-- [ ] GitHub MCP server container (pinned, `--read-only`, `--lockdown-mode`, toolsets) in Compose; allow-list from the
+- [x] GitHub MCP server container (pinned, `--read-only`, `--lockdown-mode`, toolsets) in Compose; allow-list from the
   pinned `tools/list`
-- [ ] `github_sandbox.create_issue` (native, PAT #2, idempotency marker, approval)
-- [ ] Architecture questions via `kb.list_sources(domains=[architecture])` + filtered search (no new server)
-- [ ] Router: embedding router (domain descriptions from `taxonomy.yaml`) + LLM classifier; `route` event; low-confidence fallback; structured-output helper
+- [x] `github_sandbox.create_issue` (native, PAT #2, idempotency marker, approval)
+- [x] Architecture questions via `kb.list_sources(domains=[architecture])` + filtered search (no new server)
+- [x] Router: embedding router (domain descriptions from `taxonomy.yaml`) + LLM classifier; `route` event; low-confidence fallback; structured-output helper
   (JSON Schema + Pydantic + one retry)
-- [ ] *(optional)* `web.fetch`: allow-listed hosts, size cap, HTML → text, untrusted label
-- [ ] Tests: allow-list enforcement, name collisions, role filtering of the tool list, idempotent issue creation
+- [x] *(optional)* `web.fetch`: allow-listed hosts, size cap, HTML → text, untrusted label — native tool in
+  `tools.py` (`WEB_FETCH_ALLOWED_HOSTS`, empty = unavailable); guards as for `ingest_url`, plus the checked address is
+  pinned per hop (rebinding); 2 MB decoded; HTML, text and JSON only; stdlib HTML → text keeps CSS-hidden text; the
+  page is untrusted tool output, not a numbered source
+- [x] Tests: allow-list enforcement, name collisions, role filtering of the tool list, idempotent issue creation
   (mocked GitHub), router fallback
 
 **Acceptance:** demo steps 3–5 work live; a viewer's model request never contains write tools; re-sending an
 approved `create_issue` creates no second issue.
 
+**Done 2026-10-22.** Demo steps 3–5 checked live as `bob` (`github-mcp` v2.0.2, `openai/gpt-6-luna`): step 3 reads
+the runs and job logs, searches the knowledge base and links the failed run; step 4 proposes the issue, the approved
+one is created once (`fs-100-sandbox#1`), re-sending the approval returns 409, a rejected one creates nothing, and
+every call is in the audit log; step 5 calls `kb.list_sources(domains=[architecture])` plus filtered searches and
+cites ADR-0002. Deviations: step 3 does not cite the German disk-full runbook. For the agent's English queries,
+dense bge-m3 scores it 0.50–0.55 (threshold 0.55) and ranks `fs100-plan.md` above it even without a threshold;
+telling the agent to search in German did not change that (`a-023` 0/3, twice). Hybrid search (P3a) is the fix;
+`a-023` stays its target. The route chip shows `devops` only with `ROUTER=llm`: the embedding router's confidence
+for that question is 0.61, below `MIN_CONFIDENCE` (ADR-0012). Tool lists are cached per the server's `ttlMs` (the
+GitHub server sends 0, so every turn lists); a server that is down leaves its tools `available: false` in
+`/v1/tools`. A turn stopped by the input-token budget streams no answer (seen once live, while the knowledge-base
+hop failed).
+
 ### M2.6 — Agent evaluation & red-team seed (~11 h)
 
-- [ ] Fixture MCP servers (`evals/fixtures/`): GitHub subset with the pinned tool names/schemas and seeded
+- [x] Fixture MCP servers (`evals/fixtures/`): GitHub subset with the pinned tool names/schemas and seeded
   scenarios; schema contract test against the real servers (manual / nightly)
-- [ ] Datasets: `agent_v1.jsonl` (~30: v0 + tool tasks), `redteam_v0.jsonl` (~15: injections in issue bodies and
+- [x] Datasets: `agent_v1.jsonl` (~30: v0 + tool tasks), `redteam_v0.jsonl` (~15: injections in issue bodies and
   documents, exfiltration via URLs, tool misuse, goal hijack; OWASP LLM / Agentic IDs), `routing_v1.jsonl` (~60 labelled)
-- [ ] Runner `kb-eval agent | redteam | routing`: repeats, metrics (D43), cost cap, JSON + Markdown report, per-domain view
-- [ ] Experiments: plain RAG vs agentic RAG on the retrieval golden set (citations, refusal, cost, latency) → ADR-0011;
+- [x] Runner `kb-eval agent | redteam | routing`: repeats, metrics (D43), cost cap, JSON + Markdown report, per-domain view
+- [x] Experiments: plain RAG vs agentic RAG on the retrieval golden set (citations, refusal, cost, latency) → ADR-0011;
   embedding vs LLM router → ADR-0012
-- [ ] CI: retrieval eval blocking with tolerance; agent smoke (fake LLM + fixtures) on every PR; manual real-model eval
+- [x] CI: retrieval eval blocking with tolerance; agent smoke (fake LLM + fixtures) on every PR; manual real-model eval
   workflow with a budget input
 
 **Acceptance:** `pnpm eval:agent` prints the report; red-team forbidden-tool checks ≥ 90 % pass; ADR-0011 and ADR-0012
 contain numbers; a deliberate retrieval regression fails CI.
 
+**Done 2026-10-21.** Baselines (`openai/gpt-6-luna`, embedding router, 3 repeats): `agent_v1` 34 tasks, success
+0.82, tool precision 0.95 / recall 0.99, arg validity 1.00, 2.4 steps, 0.08 ct and 5.3 s p50 per turn;
+`redteam_v0` 15 cases, forbidden-tool checks **1.00**, success 0.98 (one OpenRouter stream cut). Open findings
+from the runs: demo step 3 does not find the German disk-full runbook (`a-023` 0/3); near-miss abstentions cite
+the near miss, so D49 says `answered` (`a-019`, `a-020`); the agent sometimes asks for confirmation in chat
+instead of proposing the write, and once offered a viewer a write it does not have (`a-031`, `a-033`).
+ADR-0011 (agentic RAG stays the default; plain RAG 0.87 vs agentic 0.83 on the golden set, within noise, at
+1/7 of the cost) and ADR-0012 (embedding router stays the default; LLM classifier 0.98 vs 0.53 accuracy but
++2.6 s per turn) are **Proposed**. A gate check with chunks 200/0 drops hit@5 to 0.90 and exits 1.
+Deviations: one fixture server (GitHub) served in-process through an ASGI transport, so the real `McpServers`
+client, allow-list and read-only check run unchanged; the own MCP server's tools run in-process without
+Keycloak (`LocalMcp`); `web.fetch` is answered from the scenario too, and red-team documents live in
+`evals/fixtures/documents/` (ingested for `redteam` only). The contract test is an opt-in pytest
+(`MCP_CONTRACT_URL`, nightly in `eval.yml`); `tools.json` is recorded with `python -m
+ai_service.evals.fixtures`, without output schemas. The agent smoke is a pytest in the existing ai-service job.
+Repeats and cost cap are flags, not `EVAL_*` variables; the retrieval baseline lives in `eval.yml`
+(`--baseline hit@5=0.98 --baseline ndcg@10=0.86`, tolerance 0.02), also on pushes to `main`. Tool precision /
+recall count only tasks with `tools_required`; `states_instruction_ignored` is dropped (a model may quote an
+instruction it refuses). The golden set runs through the same runner (answerable → cite a label, unanswerable →
+abstain). The real-model workflow needs the `LLM_API_KEY` repository secret. Eval runs are not traced to
+Phoenix; prompt versions on eval runs come with M2.7.
+
 ### M2.7 — Prompt versioning, cost, docs (~6 h)
 
-- [ ] Prompt files with `id@version` + hash on spans, messages and eval runs; ADR-0013
-- [ ] Usage aggregation per user and day; daily caps → `429`; `/api/me/usage`; admin usage page
+- [x] Prompt files with `id@version` + hash on spans, messages and eval runs; ADR-0013
+- [x] Usage aggregation per user and day; daily caps → `429`; `/api/me/usage`; admin usage page
 - [ ] README: Phase 2 pitch, Mermaid diagram (agent + MCP + token flow), GIF of the approval flow and the Phoenix trace,
-  ADR index; `docs/system-card.md` stub
-- [ ] Playwright smoke extended: agent turn (fake LLM), approve and reject paths
+  ADR index; `docs/system-card.md` stub — all but the GIF (recorded by hand)
+- [x] Playwright smoke extended: agent turn (fake LLM), approve and reject paths
 
 **Acceptance:** demo steps 1–10 reachable from the README alone; caps enforced (test).
 
+**Code-complete 2026-10-22**; open: the README GIF. Deviations: the prompt files live in the package
+(`apps/ai-service/src/ai_service/prompts/*.md`), so they ship in the wheel and the image needs no extra copy;
+the hash is the first 12 hex digits of the body's SHA-256; the text moved verbatim, so the versions stay
+`agent-system@2`, `rag-system@1`, `router@1` (the RAG snapshot test still passes). `done` gains `promptHash`,
+stored as `messages.prompt_hash`; spans carry `prompt.hash` next to `llm.prompt_template.version` (`agent.run`,
+`llm`, and `route` with `ROUTER=llm`); `kb-eval agent | redteam` reports list all three prompts, `kb-eval
+routing` names the classifier prompt. No lock file that forces a version bump (ADR-0013). Caps are checked
+before every LLM relay — conversation turns, approval decisions (before the decision, so a capped user's
+approval stays pending) and `/api/chat`, which now records its `done` usage too, else it would bypass the
+cap; the turn that crosses the cap may overshoot by its per-run cap; days are UTC; cost is what the
+provider reports (the fake reports none). `/api/me/usage` is `{capUsd, today, days}` (last 30 days with
+usage) and open to any role; `/api/admin/usage?user&from&to` returns the newest 200 user-days; the admin page
+sits next to the audit page (`features/admin/usage`), and the sidebar widget shows today against the cap
+(the 30 days only in the API). The fake LLM proposes `kb.ingest_url` for "Add <url>"; the smoke rejects one
+proposal, approves a second for `docs/adr/template.md` on raw.githubusercontent.com (so e2e needs internet)
+and deletes the document again — not run locally yet (the dev stack runs a real model), CI runs it.
+Verified live on the dev stack: `/api/me/usage`, `/api/admin/usage` (403 for editors), migration `0003`.
+
 ### M2.8 — Stretch: external MCP clients (~6 h)
 
-- [ ] Compose profile `mcp-ext`: Keycloak with `--features=cimd,resource-indicators`; client policy + profile for
-  Claude Code and VS Code; `resource_url` on `kb-mcp`
-- [ ] Verify the full flow: protected-resource discovery → CIMD → PKCE → `resource` → `aud`; viewer can search, cannot ingest
-- [ ] Docs: "Use the knowledge base from Claude Code / VS Code", with the experimental-feature caveat
+- [x] ~~Compose profile `mcp-ext`~~ Keycloak always with `--features=cimd,resource-indicators`; client policy + profile for
+  Claude Code and VS Code; ~~`resource_url` on `kb-mcp`~~ (ADR-0014)
+- [x] Verify the full flow: protected-resource discovery → CIMD → PKCE → `resource` → `aud`; viewer can search, cannot ingest
+  — scripted against the real metadata documents; the interactive Claude Code login is open
+- [x] Docs: "Use the knowledge base from Claude Code / VS Code", with the experimental-feature caveat
 
 **Acceptance:** demo step 11.
+
+**Code-complete 2026-10-22**; open: demo step 11 by hand in Claude Code (needs a browser and, on a stack from
+before M2.8, `pnpm stack:reset`). Deviations (ADR-0014): no `mcp-ext` profile — a realm import with the CIMD
+policies does not start without the features, and an existing realm with them fails every login (500), so
+Keycloak always runs with both experimental features and `pnpm stack:up:mcp-ext` does not exist. No `kb-mcp`
+client: the CIMD executor's resource allow-list (`http://localhost:8000/mcp`) adds the audience mapper and
+rejects other resources (`invalid_target`). CIMD-created clients get only realm-default scopes, *full scope*
+off and a consent screen, so `kb:read` / `kb:write` became realm-default optional scopes (`kb-web` and `kb-api`
+now list theirs and cannot request them), and a scope mapping on `kb:read` carries the realm roles. PKCE S256
+is enforced for every public client by its own policy, since the `pkce-enforcer` in a CIMD profile never runs
+on the created client. The MCP server is unchanged: its metadata advertises `kb:read` only, so external
+clients get the read tools, and `ingest_url` fails with `insufficient_scope` (no step-up; ADR-0010). Verified on
+a throwaway Keycloak with the AI service on :8001 (`.claude/skills/realm-check/cimd-login.sh`, Claude Code's
+and VS Code's real documents): carol searches via `/mcp`, cannot ingest (also with `kb:write`); kb-web tokens
+get 401; no PKCE, a foreign host or redirect, or a wrong `resource` are refused; the ADR-0009 matrix is
+unchanged.
 
 ---
 
@@ -690,14 +766,14 @@ contract check, cost caps, gap signals (D49), README.
 - [ ] No write executes without approval; at-most-once proven by tests; every tool call audited
 - [ ] Roles enforced server-side for tools, approvals and conversations; viewer cannot see restricted tools
 - [ ] Identity on internal hops comes from exchanged tokens; the `user` body object is gone
-- [ ] Own MCP server passes the MCP Inspector check and rejects foreign audiences
-- [ ] GitHub MCP server pinned, read-only, allow-listed; lockdown on; one idempotent sandbox write
-- [ ] `pnpm eval:agent`, `eval:redteam`, `eval:routing` produce reports; ADR-0011/0012 contain numbers; retrieval eval blocks CI
-- [ ] Every turn produces one trace across the MCP hop; prompt versions on spans, messages and eval runs
-- [ ] Per-user usage and daily caps work; feedback stored with trace id
+- [x] Own MCP server passes the MCP Inspector check and rejects foreign audiences
+- [x] GitHub MCP server pinned, read-only, allow-listed; lockdown on; one idempotent sandbox write
+- [x] `pnpm eval:agent`, `eval:redteam`, `eval:routing` produce reports; ADR-0011/0012 contain numbers; retrieval eval blocks CI
+- [x] Every turn produces one trace across the MCP hop; prompt versions on spans, messages and eval runs
+- [x] Per-user usage and daily caps work; feedback stored with trace id
 - [ ] `taxonomy.yaml` validated in NestJS and used by the router; documents carry optional topics; every assistant
   message stores `answerStatus` and `topScore`
-- [ ] ADR-0007 … 0013 written; README updated; system card stub exists
+- [x] ADR-0007 … 0013 written; README updated; system card stub exists
 - [ ] No secrets in git; PATs only in `.env.local`; `.env.example` complete
 
 ---
@@ -803,6 +879,7 @@ APPROVAL_TTL_MIN=15                         # the AI service signs the expiry
 ROUTER=embedding                            # embedding | llm
 ROUTER_MODEL=                               # cheap model id when ROUTER=llm
 INGEST_URL_ALLOWED_HOSTS=raw.githubusercontent.com  # read by the API; HTML pages need HTML → text first
+WEB_FETCH_ALLOWED_HOSTS=docs.github.com,kubernetes.io  # web.fetch (AI service); empty = tool unavailable
 
 # --- external tool identities (dev only; real values live in .env.local, never committed) ---
 GITHUB_PAT_READ=                            # fine-grained, read-only, this repo only
@@ -812,15 +889,14 @@ GITHUB_SANDBOX_REPO=<owner>/<sandbox-repo>
 
 # --- optional / eval ---
 OLLAMA_BASE_URL=http://localhost:11434/v1   # local proof of switch (models.yaml entry "local")
-EVAL_AGENT_REPEATS=3
-EVAL_COST_CAP_USD=2.00
+# eval repeats and cost cap are flags of kb-eval agent | redteam (--repeats 3, --cost-cap 2.00), not env vars
 ```
 
 ## Appendix B — Command cheat sheet (additions)
 
 ```bash
 pnpm stack:up                        # + GitHub MCP server container
-pnpm stack:up:mcp-ext                # stretch: Keycloak with cimd + resource-indicators
+# pnpm stack:up:mcp-ext              # dropped in M2.8: Keycloak always runs with cimd + resource-indicators (ADR-0014)
 pnpm eval:agent                      # agent tasks against fixture MCP servers
 pnpm eval:redteam                    # red-team seed set
 pnpm eval:routing                    # router accuracy (embedding vs LLM)

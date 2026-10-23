@@ -84,6 +84,7 @@ export const messages = pgTable(
     parts: jsonb().notNull(),
     model: text(),
     promptVersion: text(),
+    promptHash: text(),
     stopReason: text(),
     traceId: text(),
     answerStatus: text({ enum: ANSWER_STATUSES }),
@@ -190,7 +191,7 @@ export const auditLog = pgTable(
     ts: timestamp({ withTimezone: true }).notNull().defaultNow(),
     actorId: text().notNull(),
     actorRoles: text().array().notNull(),
-    serviceIdentity: text(), // e.g. a GitHub PAT; null while the AI service acts for the user
+    serviceIdentity: text(), // the credential's variable, e.g. GITHUB_PAT_READ; null = the user's token
     conversationId: uuid(),
     approvalId: uuid(),
     tool: text().notNull(),

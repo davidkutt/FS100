@@ -1,12 +1,21 @@
-import { JsonPipe } from '@angular/common';
+import { DecimalPipe, JsonPipe } from '@angular/common';
 import { Component, computed, input } from '@angular/core';
-import type { Part, ToolCall, ToolResult } from './parts';
+import type { Part, Route, ToolCall, ToolResult } from './parts';
 
-/** Tool activity of one answer; args and results stay collapsed until asked for. */
+/** Route and tool activity of one answer; args and results stay collapsed until asked for. */
 @Component({
   selector: 'app-timeline',
-  imports: [JsonPipe],
+  imports: [DecimalPipe, JsonPipe],
   template: `
+    @if (route(); as route) {
+      <p class="route small text-body-secondary mb-1">
+        Route
+        <span class="badge rounded-pill text-bg-info">{{
+          route.domains.length ? route.domains.join(', ') : 'all domains'
+        }}</span>
+        {{ route.router }} · {{ route.confidence | number: '1.2-2' }}
+      </p>
+    }
     <ol class="list-unstyled small mb-3">
       @for (call of calls(); track call.id) {
         @let result = results().get(call.id);
@@ -64,6 +73,9 @@ export class Timeline {
   /** Calls without a result are still running only while the answer streams. */
   readonly live = input(false);
 
+  protected readonly route = computed(() =>
+    this.parts().find((part): part is Route => part.type === 'route'),
+  );
   protected readonly calls = computed(() =>
     this.parts().filter((part): part is ToolCall => part.type === 'tool_call'),
   );

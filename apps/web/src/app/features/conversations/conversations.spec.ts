@@ -30,6 +30,15 @@ const MODELS = [
   { id: 'haiku', label: 'Haiku', supports_tools: true, tier: 'medium', min_role: 'editor' },
   { id: 'chatty', label: 'No tools', supports_tools: false, tier: 'low', min_role: 'viewer' },
 ];
+const TODAY = {
+  day: '2026-10-22',
+  inputTokens: 1000,
+  cachedTokens: 0,
+  outputTokens: 234,
+  costUsd: 0.0012,
+  turns: 2,
+};
+const USAGE = { capUsd: 1, today: TODAY, days: [TODAY] };
 const sse = (event: string, data: unknown) => `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 const message = (id: string, role: string, parts: unknown[], extra = {}) => ({
   id,
@@ -102,13 +111,7 @@ describe('Conversations', () => {
     http = TestBed.inject(HttpTestingController);
     TestBed.tick();
     http.expectOne('http://api/api/conversations').flush([]);
-    http.expectOne('http://api/api/me/usage').flush({
-      inputTokens: 1000,
-      cachedTokens: 0,
-      outputTokens: 234,
-      costUsd: 0.0012,
-      turns: 2,
-    });
+    http.expectOne('http://api/api/me/usage').flush(USAGE);
     http.expectOne('http://api/api/approvals?status=pending').flush(pending);
     http.expectOne('http://api/api/models').flush(MODELS);
     await fixture.whenStable();
@@ -133,7 +136,7 @@ describe('Conversations', () => {
       'Luna · low',
       'Haiku · medium',
     ]);
-    expect(page.textContent).toContain('Today: $0.0012 · 1,234 tokens · 2 turns');
+    expect(page.textContent).toContain('Today: $0.0012 of $1.00 · 1,234 tokens · 2 turns');
     fetchMock.mockResolvedValue(
       new Response(
         sse('step', { n: 1 }) +
@@ -154,7 +157,7 @@ describe('Conversations', () => {
     // The stored copy replaces the live turn: only stored messages can be rated.
     await vi.waitFor(() => expect(page.querySelector('button[aria-label=Helpful]')).not.toBeNull());
     http.expectOne('http://api/api/conversations').flush([detail('c1', [])]); // sidebar refresh
-    http.expectOne('http://api/api/me/usage').flush({});
+    http.expectOne('http://api/api/me/usage').flush(USAGE);
     http.expectOne('http://api/api/approvals?status=pending').flush([]);
 
     const [url, init] = fetchMock.mock.calls[0];

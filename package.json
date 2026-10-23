@@ -10,7 +10,7 @@
     "node": ">=24.15.0 <25"
   },
   "scripts": {
-    "dev": "node --env-file-if-exists=.env scripts/dev.mjs",
+    "dev": "node --env-file-if-exists=.env --env-file-if-exists=.env.local scripts/dev.mjs",
     "build": "pnpm --recursive --filter \"./apps/*\" run build",
     "lint": "pnpm --recursive --filter \"./apps/*\" run lint && pnpm format:check && pnpm lint:ai",
     "lint:ai": "uv run --directory apps/ai-service ruff check . && uv run --directory apps/ai-service ruff format --check . && uv run --directory apps/ai-service pyright",
@@ -26,6 +26,9 @@
     "stack:ps": "node scripts/stack.mjs --profile full ps",
     "stack:logs": "node scripts/stack.mjs --profile full logs --follow",
     "eval:retrieval": "uv run --directory apps/ai-service kb-eval retrieval",
+    "eval:agent": "uv run --directory apps/ai-service --env-file ../../.env kb-eval agent",
+    "eval:redteam": "uv run --directory apps/ai-service --env-file ../../.env kb-eval redteam",
+    "eval:routing": "uv run --directory apps/ai-service --env-file ../../.env kb-eval routing --router embedding --router llm",
     "contracts:generate": "uv run --directory apps/ai-service python -m ai_service.contracts ../../packages/contracts/ai-service.openapi.json && pnpm --filter @fs100/api build && node apps/api/dist/openapi.js packages/contracts/api.openapi.json && pnpm --filter @fs100/contracts generate"
   },
   "devDependencies": {

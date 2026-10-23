@@ -1,0 +1,60 @@
+{"id": "ro-001", "question": "How do I take a manual dump of the app database before a risky migration?", "lang": "en", "domains": ["db"], "needs_tools": true}
+{"id": "ro-002", "question": "Which index should we add to speed up lookups of messages by conversation?", "lang": "en", "domains": ["db"], "needs_tools": true}
+{"id": "ro-003", "question": "Wie lange werden die nächtlichen Postgres-Backups aufbewahrt?", "lang": "de", "domains": ["db"], "needs_tools": true}
+{"id": "ro-004", "question": "Can I restore a single table from last night's backup?", "lang": "en", "domains": ["db"], "needs_tools": true}
+{"id": "ro-005", "question": "Warum ist die Abfrage auf der Tabelle documents seit gestern so langsam?", "lang": "de", "domains": ["db"], "needs_tools": true}
+{"id": "ro-006", "question": "Do Drizzle migrations run automatically when the API container starts?", "lang": "en", "domains": ["db", "devops"], "needs_tools": true}
+{"id": "ro-007", "question": "Which Node version do I need to build the web app locally?", "lang": "en", "domains": ["dev"], "needs_tools": true}
+{"id": "ro-008", "question": "How do I run only one Vitest spec file in the API?", "lang": "en", "domains": ["dev"], "needs_tools": true}
+{"id": "ro-009", "question": "Wie lege ich eine neue Angular-Komponente mit dem Generator an?", "lang": "de", "domains": ["dev"], "needs_tools": true}
+{"id": "ro-010", "question": "Which pull requests are open right now?", "lang": "en", "domains": ["dev"], "needs_tools": true}
+{"id": "ro-011", "question": "What does issue #5 say about the flaky login test?", "lang": "en", "domains": ["dev"], "needs_tools": true}
+{"id": "ro-012", "question": "Welche Code-Konventionen gelten für Python im AI-Service?", "lang": "de", "domains": ["dev"], "needs_tools": true}
+{"id": "ro-013", "question": "What happens when our Azure budget alert fires?", "lang": "en", "domains": ["cloud"], "needs_tools": true}
+{"id": "ro-014", "question": "Welche Tags braucht jede Azure-Ressource?", "lang": "de", "domains": ["cloud"], "needs_tools": true}
+{"id": "ro-015", "question": "How do we tear down the ephemeral AKS cluster after a demo?", "lang": "en", "domains": ["cloud"], "needs_tools": true}
+{"id": "ro-016", "question": "Should the container app use a managed identity or a service principal?", "lang": "en", "domains": ["cloud"], "needs_tools": true}
+{"id": "ro-017", "question": "Wie beantrage ich mehr vCPU-Quota in der Azure-Region?", "lang": "de", "domains": ["cloud"], "needs_tools": true}
+{"id": "ro-018", "question": "Which private endpoints does the storage account need?", "lang": "en", "domains": ["cloud"], "needs_tools": true}
+{"id": "ro-019", "question": "Why did the last CI run on main fail?", "lang": "en", "domains": ["devops"], "needs_tools": true}
+{"id": "ro-020", "question": "How do I roll the API deployment back to the previous Helm revision?", "lang": "en", "domains": ["devops"], "needs_tools": true}
+{"id": "ro-021", "question": "Wie baue ich die Docker-Images für arm64 und amd64 gleichzeitig?", "lang": "de", "domains": ["devops"], "needs_tools": true}
+{"id": "ro-022", "question": "Which GitHub Actions workflow publishes the images to GHCR?", "lang": "en", "domains": ["devops"], "needs_tools": true}
+{"id": "ro-023", "question": "How do I start the whole stack as containers with Compose?", "lang": "en", "domains": ["devops"], "needs_tools": true}
+{"id": "ro-024", "question": "Wie bringe ich ein Terraform-Modul für die Staging-Umgebung aus?", "lang": "de", "domains": ["devops"], "needs_tools": true}
+{"id": "ro-025", "question": "How do we promote a fine-tuned model to production with an alias?", "lang": "en", "domains": ["mlops"], "needs_tools": true}
+{"id": "ro-026", "question": "Where are the MLflow runs of the last fine-tuning job?", "lang": "en", "domains": ["mlops"], "needs_tools": true}
+{"id": "ro-027", "question": "Wie tausche ich das Embedding-Modell aus, ohne die Suche zu unterbrechen?", "lang": "de", "domains": ["mlops"], "needs_tools": true}
+{"id": "ro-028", "question": "How long do we keep the old vector collection after re-embedding?", "lang": "en", "domains": ["mlops"], "needs_tools": true}
+{"id": "ro-029", "question": "Which GPU instance do we use to serve the local model?", "lang": "en", "domains": ["mlops"], "needs_tools": true}
+{"id": "ro-030", "question": "Wie messen wir, ob ein neues Embedding-Modell besser ist?", "lang": "de", "domains": ["mlops", "ai"], "needs_tools": true}
+{"id": "ro-031", "question": "Why does the agent cite [4] when only three sources are shown?", "lang": "en", "domains": ["ai"], "needs_tools": true}
+{"id": "ro-032", "question": "Which model does agent mode use by default, and what does a turn cost?", "lang": "en", "domains": ["ai"], "needs_tools": true}
+{"id": "ro-033", "question": "Was macht das Modell, wenn die Wissensdatenbank keine Antwort enthält?", "lang": "de", "domains": ["ai"], "needs_tools": true}
+{"id": "ro-034", "question": "How is the system prompt of the agent versioned?", "lang": "en", "domains": ["ai"], "needs_tools": true}
+{"id": "ro-035", "question": "What do we do when OpenRouter returns 429 for every request?", "lang": "en", "domains": ["ai"], "needs_tools": true}
+{"id": "ro-036", "question": "Wie viele Chunks gibt die Suche an das LLM weiter?", "lang": "de", "domains": ["ai"], "needs_tools": true}
+{"id": "ro-037", "question": "How often do we rotate the Keycloak client secret?", "lang": "en", "domains": ["security"], "needs_tools": true}
+{"id": "ro-038", "question": "Someone pasted an API key into Slack — what now?", "lang": "en", "domains": ["security"], "needs_tools": true}
+{"id": "ro-039", "question": "Welche Rollen gibt es im Realm, und was darf ein Viewer?", "lang": "de", "domains": ["security"], "needs_tools": true}
+{"id": "ro-040", "question": "How does the agent defend against prompt injection in issue bodies?", "lang": "en", "domains": ["security"], "needs_tools": true}
+{"id": "ro-041", "question": "Das TLS-Zertifikat der Staging-Domain läuft morgen ab — was tun?", "lang": "de", "domains": ["security", "devops"], "needs_tools": true}
+{"id": "ro-042", "question": "Do we sign our container images, and how is the SBOM produced?", "lang": "en", "domains": ["security"], "needs_tools": true}
+{"id": "ro-043", "question": "Why is all AI code in a separate Python service?", "lang": "en", "domains": ["architecture"], "needs_tools": true}
+{"id": "ro-044", "question": "Which ADRs do we have?", "lang": "en", "domains": ["architecture"], "needs_tools": true}
+{"id": "ro-045", "question": "Warum berechnen wir Embeddings im Prozess statt über eine API?", "lang": "de", "domains": ["architecture"], "needs_tools": true}
+{"id": "ro-046", "question": "Which service owns document metadata, and which one owns the vectors?", "lang": "en", "domains": ["architecture"], "needs_tools": true}
+{"id": "ro-047", "question": "How are the OpenAPI contracts between the API and the AI service generated?", "lang": "en", "domains": ["architecture"], "needs_tools": true}
+{"id": "ro-048", "question": "Warum ist das Repo ein Monorepo mit pnpm-Workspaces?", "lang": "de", "domains": ["architecture"], "needs_tools": true}
+{"id": "ro-049", "question": "Who writes the status updates during a SEV2, and how often?", "lang": "en", "domains": ["sre"], "needs_tools": true}
+{"id": "ro-050", "question": "What is the availability SLO for chat?", "lang": "en", "domains": ["sre"], "needs_tools": true}
+{"id": "ro-051", "question": "Der Server meldet no space left on device — was soll ich zuerst prüfen?", "lang": "de", "domains": ["sre"], "needs_tools": true}
+{"id": "ro-052", "question": "How much error budget is left this month for search latency?", "lang": "en", "domains": ["sre"], "needs_tools": true}
+{"id": "ro-053", "question": "Was gehört in ein Postmortem nach einem SEV1?", "lang": "de", "domains": ["sre"], "needs_tools": true}
+{"id": "ro-054", "question": "When does an outage of the LLM provider become an incident?", "lang": "en", "domains": ["sre"], "needs_tools": true}
+{"id": "ro-055", "question": "Thanks, that's all for now!", "lang": "en", "domains": [], "needs_tools": false}
+{"id": "ro-056", "question": "Guten Morgen! Wie geht's?", "lang": "de", "domains": [], "needs_tools": false}
+{"id": "ro-057", "question": "Can you say that again, but shorter?", "lang": "en", "domains": [], "needs_tools": false}
+{"id": "ro-058", "question": "Danke dir, bis später!", "lang": "de", "domains": [], "needs_tools": false}
+{"id": "ro-059", "question": "Hi there 👋", "lang": "en", "domains": [], "needs_tools": false}
+{"id": "ro-060", "question": "Never mind, I figured it out myself.", "lang": "en", "domains": [], "needs_tools": false}

@@ -485,6 +485,12 @@ export interface components {
              * @enum {string}
              */
             min_role: "viewer" | "editor" | "admin";
+            /** Server */
+            server: string | null;
+            /** Domains */
+            domains: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[];
+            /** Available */
+            available: boolean;
         };
         /** ValidationError */
         ValidationError: {
@@ -518,6 +524,8 @@ export interface components {
             model: string | null;
             /** Promptversion */
             promptVersion: string;
+            /** Prompthash */
+            promptHash: string;
             /** Traceid */
             traceId: string | null;
             /**
@@ -587,6 +595,20 @@ export interface components {
             /** Detail */
             detail: string;
         };
+        /** RouteEvent */
+        RouteEvent: {
+            /** Domains */
+            domains: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[];
+            /** Toolgroups */
+            toolGroups: string[];
+            /**
+             * Router
+             * @enum {string}
+             */
+            router: "embedding" | "llm" | "user";
+            /** Confidence */
+            confidence: number;
+        };
         /** Source */
         Source: {
             /** N */
@@ -642,6 +664,8 @@ export interface components {
             risk: "low" | "medium" | "high";
             /** Args */
             args: unknown;
+            /** Serviceidentity */
+            serviceIdentity: string | null;
         };
         /** ToolResultEvent */
         ToolResultEvent: {

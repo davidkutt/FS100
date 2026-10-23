@@ -1,5 +1,7 @@
 # Lint, test and build every app, check contract drift and the Compose file (plan.md D19).
-# Siblings: eval.yml (retrieval eval, report only), e2e.yml (Playwright smoke), docker.yml (GHCR images).
+# The agent smoke (fake LLM + fixture MCP servers) is part of the ai-service tests.
+# Siblings: eval.yml (retrieval eval, blocking; real-model evals by hand), e2e.yml (Playwright smoke),
+# docker.yml (GHCR images).
 name: CI
 
 on:

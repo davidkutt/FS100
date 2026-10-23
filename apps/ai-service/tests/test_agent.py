@@ -3,6 +3,7 @@ cancellation."""
 
 import asyncio
 import json
+import socket
 import time
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime, timedelta
@@ -19,17 +20,29 @@ from pydantic import BaseModel
 
 from ai_service import agent as agent_module
 from ai_service import approvals
+from ai_service import tools as tools_module
 from ai_service.agent import Agent, ApprovalRequiredEvent, Resume, Resumed
 from ai_service.approvals import ApprovalError
 from ai_service.core.auth import Caller
 from ai_service.core.settings import Settings
-from ai_service.knowledge_base import Hit
-from ai_service.llm import LlmError, LlmEvent, Message, Token, ToolCall, Usage
+from ai_service.knowledge_base import Domain, Hit
+from ai_service.llm import FakeProvider, LlmError, LlmEvent, Message, Token, ToolCall, Usage
 from ai_service.mcp_client import McpClient
 from ai_service.rag import ChatTurn
+from ai_service.routing import Route
 from ai_service.tokens import Tokens
-from ai_service.tools import ToolOutput, ToolSpec, TransientToolError, kb_tools
-from support import SIGNING_KEY, sse, token
+from ai_service.tools import (
+    FetchArgs,
+    IssueArgs,
+    ToolOutput,
+    ToolSpec,
+    TransientToolError,
+    kb_tools,
+    registry,
+    sandbox_tools,
+    web_tools,
+)
+from support import SIGNING_KEY, FixedRouter, sse, token
 
 CONVERSATION = uuid4()
 
@@ -80,23 +93,43 @@ def call(name: str, id: str = "c1", arguments: str = '{"q": "x"}') -> ToolCall:
     return ToolCall(id, name.replace(".", "_"), arguments)
 
 
-def agent(llm: ScriptedLlm, tools: list[ToolSpec[Args]], **settings: Any) -> Agent:
+def agent(
+    llm: ScriptedLlm,
+    tools: list[ToolSpec[Any]],
+    route: Route | None = None,
+    filters: list[list[Domain] | None] | None = None,
+    **settings: Any,
+) -> Agent:
+    """`filters` records the default search filter of each tool listing."""
     settings.setdefault("approval_signing_key", SIGNING_KEY)
-    return Agent(llm, Settings(**settings), lambda _domains, _caller: list(tools))
+
+    async def listing(domains: list[Domain] | None, _caller: Caller) -> list[ToolSpec[Any]]:
+        if filters is not None:
+            filters.append(domains)
+        return list(tools)
+
+    return Agent(llm, Settings(**settings), listing, FixedRouter(route))
 
 
 def stream(
-    agent: Agent, roles: tuple[str, ...] = ("editor",), resume: Resumed | None = None
+    agent: Agent,
+    roles: tuple[str, ...] = ("editor",),
+    resume: Resumed | None = None,
+    domains: list[Domain] | None = None,
 ) -> AsyncGenerator[ServerSentEvent]:
     turns = [ChatTurn(role="user", content="Q")]
-    return agent.stream(turns, None, Caller("bob", list(roles), ""), CONVERSATION, resume=resume)
+    caller = Caller("bob", list(roles), "")
+    return agent.stream(turns, domains, caller, CONVERSATION, resume=resume)
 
 
 def run(
-    agent: Agent, roles: tuple[str, ...] = ("editor",), resume: Resumed | None = None
+    agent: Agent,
+    roles: tuple[str, ...] = ("editor",),
+    resume: Resumed | None = None,
+    domains: list[Domain] | None = None,
 ) -> list[ServerSentEvent]:
     async def collect() -> list[ServerSentEvent]:
-        return [event async for event in stream(agent, roles, resume)]
+        return [event async for event in stream(agent, roles, resume, domains)]
 
     return asyncio.run(collect())
 
@@ -115,8 +148,9 @@ def test_agent_streams_v2_events_with_the_fake_llm(client: TestClient) -> None:
 
     names = [name for name, _ in events if name != "token"]
     data = dict(events)
-    assert names == ["step", "tool_call", "tool_result", "sources", "step", "done"]
-    assert [name for name, _ in events[5:-1]] == ["token"] * (len(events) - 6)
+    assert names == ["route", "step", "tool_call", "tool_result", "sources", "step", "done"]
+    assert [name for name, _ in events[6:-1]] == ["token"] * (len(events) - 7)
+    assert data["route"]["router"] == "embedding"
     assert data["tool_call"]["name"] == "kb.search_knowledge_base"
     assert data["tool_call"]["kind"] == "read"
     assert data["tool_result"]["status"] == "ok"
@@ -135,7 +169,8 @@ def test_agent_streams_v2_events_with_the_fake_llm(client: TestClient) -> None:
         "steps": 2,
         "toolCalls": 1,
     }
-    assert (done["protocolVersion"], done["promptVersion"]) == (2, "agent-system@1")
+    assert (done["protocolVersion"], done["promptVersion"]) == (2, "agent-system@2")
+    assert done["promptHash"] == agent_module.PROMPT.hash
 
 
 def test_unanswerable_question_abstains(client: TestClient) -> None:
@@ -352,7 +387,7 @@ def decide(
         note=note,
         args=proposal.args if args is None else args,
     )
-    return harness.resume(resume, Caller(sub, ["editor"], ""), conversation, None)
+    return asyncio.run(harness.resume(resume, Caller(sub, ["editor"], ""), conversation, None))
 
 
 def test_write_calls_propose_a_signed_action_and_end_the_turn() -> None:
@@ -395,7 +430,7 @@ def test_an_approved_action_runs_once_and_the_turn_continues() -> None:
 
     events = run(harness, resume=decide(harness, proposal))
 
-    assert [event.event for event in events[:3]] == ["tool_call", "tool_result", "step"]
+    assert [event.event for event in events[:4]] == ["route", "tool_call", "tool_result", "step"]
     assert (of(events, "tool_call")[0].id, of(events, "tool_result")[0].status) == ("w", "ok")
     assert ran == ["x"]
     *_, proposed, observed = llm.requests[-1][0]
@@ -498,7 +533,7 @@ def test_resume_over_http_is_verified_before_the_stream(client: TestClient) -> N
 
     assert tampered.status_code == 422
     assert "Invalid approval: the arguments differ" in tampered.json()["detail"]
-    assert [name for name, _ in events[:2]] == ["tool_call", "tool_result"]
+    assert [name for name, _ in events[:3]] == ["route", "tool_call", "tool_result"]
     assert ran == ["x"]
 
 
@@ -507,24 +542,27 @@ def test_an_approved_ingest_runs_once_through_the_mcp_server(
 ) -> None:
     app = cast(FastAPI, client.app)
     settings = Settings(approval_signing_key=SIGNING_KEY)
-    mcp = McpClient(settings.mcp_resource_url, Tokens(settings))
+    mcp = McpClient(settings.mcp_resource_url)
     url = "https://raw.githubusercontent.com/davidkutt/FS100/main/README.md"
-    ingest = call("kb.ingest_url", "w", json.dumps({"url": url, "domains": ["dev"]}))
-    app.state.agent = Agent(
-        ScriptedLlm([ingest]), settings, lambda domains, caller: kb_tools(mcp, caller, domains)
-    )
+
+    async def tools(domains: list[Domain] | None, caller: Caller) -> list[ToolSpec[Any]]:
+        return kb_tools(mcp, Tokens(settings), caller, domains)
+
+    # The fake proposes `ingest_url` for a URL in the question, as in the e2e smoke.
+    app.state.agent = Agent(FakeProvider(), settings, tools, FixedRouter())
     client.headers["Authorization"] = f"Bearer {token(roles=('editor', 'viewer'))}"
     fields = {"conversation_id": str(uuid4())}
 
-    proposal = dict(sse(client.post("/v1/agent", json=body("Add it", **fields))))
+    proposal = dict(sse(client.post("/v1/agent", json=body(f"Add {url}", **fields))))
     resume = {
         "signed_action": proposal["approval_required"]["signedAction"],
         "decision": "approve",
         "args": proposal["approval_required"]["args"],
     }
     asked_before = len(api)
-    events = dict(sse(client.post("/v1/agent", json=body("Add it", **fields, resume=resume))))
+    events = dict(sse(client.post("/v1/agent", json=body(f"Add {url}", **fields, resume=resume))))
 
+    assert proposal["approval_required"]["args"] == {"url": url, "domains": ["dev"]}
     assert proposal["done"]["stopReason"] == "awaiting_approval"
     assert asked_before == 0
     assert events["tool_result"]["status"] == "ok", events["tool_result"]
@@ -589,7 +627,7 @@ def test_llm_errors_end_with_an_error_and_done() -> None:
 
     events = run(agent(llm, []))
 
-    assert [e.event for e in events] == ["step", "token", "error", "done"]
+    assert [e.event for e in events] == ["route", "step", "token", "error", "done"]
     assert (of(events, "done")[0].stop_reason, of(events, "done")[0].answer_status) == (
         "error",
         "no_kb",
@@ -643,3 +681,271 @@ def test_disconnect_closes_the_llm_stream_within_a_second() -> None:
     elapsed = asyncio.run(cancel_after(agent(llm, []), "token", lambda: llm.closed == 1))
 
     assert elapsed < 1
+
+
+def offered(llm: ScriptedLlm, request: int = 0) -> list[str]:
+    return [t["function"]["name"] for t in llm.requests[request][1] or []]
+
+
+ROUTED_TOOLS = [tool("kb.search"), tool("github.list", domains=("devops",)), tool("gh_sbx.write")]
+
+
+@pytest.mark.parametrize(
+    ("route", "groups", "default"),
+    [
+        (Route(["devops"], True, 0.9, "embedding"), ["gh_sbx", "github", "kb"], ["devops"]),
+        (Route(["sre"], True, 0.9, "embedding"), ["gh_sbx", "kb"], ["sre"]),
+        (Route(["sre"], True, 0.5, "embedding"), ["gh_sbx", "github", "kb"], None),
+        (Route([], False, 0.95, "llm"), [], None),
+    ],
+    ids=["confident", "other domain", "low confidence", "no tools needed"],
+)
+def test_the_route_selects_tool_groups_and_the_default_search_filter(
+    route: Route, groups: list[str], default: list[Domain] | None
+) -> None:
+    llm = ScriptedLlm()
+    filters: list[list[Domain] | None] = []
+
+    events = run(agent(llm, ROUTED_TOOLS, route, filters))
+
+    event = of(events, "route")[0]
+    assert {name.rsplit("_", 1)[0] for name in offered(llm)} == set(groups)
+    assert (event.tool_groups, event.domains, event.router) == (groups, default or [], route.router)
+    assert event.confidence == route.confidence
+    assert filters == [default]
+
+
+def test_the_users_domains_win_and_a_failing_router_routes_nowhere() -> None:
+    class Broken:
+        async def route(self, question: str) -> Route:
+            raise ValueError("no JSON")
+
+    llm = ScriptedLlm()
+    filters: list[list[Domain] | None] = []
+    picked = agent(llm, ROUTED_TOOLS, filters=filters)
+    picked.router = Broken()
+    broken = agent(ScriptedLlm(), ROUTED_TOOLS, filters=filters)
+    broken.router = Broken()
+
+    by_user = of(run(picked, domains=["sre"]), "route")[0]
+    fallback = of(run(broken), "route")[0]
+
+    assert (by_user.router, by_user.domains, by_user.confidence) == ("user", ["sre"], 1.0)
+    assert offered(llm) == ["gh_sbx_write", "kb_search"]
+    assert (fallback.router, fallback.domains, fallback.confidence) == ("embedding", [], 0.0)
+    assert filters == [["sre"], None]
+
+
+def test_a_viewers_model_request_never_contains_write_tools() -> None:
+    settings = Settings(github_sandbox_repo="o/sandbox", github_pat_sandbox_write="pat")
+
+    async def tools(domains: list[Domain] | None, caller: Caller) -> list[ToolSpec[Any]]:
+        kb = kb_tools(McpClient("http://localhost:8000/mcp"), Tokens(settings), caller, domains)
+        return registry(kb, sandbox_tools(settings))
+
+    names: dict[str, set[str]] = {}
+    for role in ("viewer", "editor"):
+        llm = ScriptedLlm()
+        run(Agent(llm, settings, tools, FixedRouter()), roles=(role,))
+        names[role] = set(offered(llm))
+
+    assert names["viewer"] == {"kb_get_document", "kb_list_sources", "kb_search_knowledge_base"}
+    assert names["editor"] - names["viewer"] == {"kb_ingest_url", "github_sandbox_create_issue"}
+
+
+SANDBOX = Settings(github_sandbox_repo="o/sandbox", github_pat_sandbox_write="pat")
+
+
+def github_api(monkeypatch: pytest.MonkeyPatch, lose_first: bool = False) -> list[httpx2.Request]:
+    """A sandbox repo with one older issue; `lose_first` creates the first issue but answers 502."""
+    issues: list[dict[str, Any]] = [
+        {"number": 1, "html_url": "https://gh/o/sandbox/1", "body": None}
+    ]
+    requests: list[httpx2.Request] = []
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        if request.method == "GET":
+            return httpx2.Response(200, json=issues)
+        n = len(issues) + 1
+        issues.insert(
+            0, json.loads(request.content) | {"number": n, "html_url": f"https://gh/o/sandbox/{n}"}
+        )
+        return httpx2.Response(502 if lose_first and n == 2 else 201, json=issues[0])
+
+    monkeypatch.setattr(tools_module, "GITHUB_TRANSPORT", httpx2.MockTransport(answer))
+    monkeypatch.setattr(agent_module, "RETRY_BACKOFF_S", 0)
+    return requests
+
+
+def propose_issue() -> tuple[Agent, ApprovalRequiredEvent]:
+    args = json.dumps({"title": "CI times out", "body": "Run 42 timed out."})
+    llm = ScriptedLlm([call("github_sandbox.create_issue", "w", args)])
+    harness = agent(llm, sandbox_tools(SANDBOX))
+    return harness, of(run(harness), "approval_required")[0]
+
+
+@pytest.mark.parametrize("lose_first", [False, True], ids=["resent", "response lost"])
+def test_an_approved_issue_is_created_once(
+    monkeypatch: pytest.MonkeyPatch, lose_first: bool
+) -> None:
+    requests = github_api(monkeypatch, lose_first)
+    harness, proposal = propose_issue()
+
+    first = run(harness, resume=decide(harness, proposal))
+    again = run(harness, resume=decide(harness, proposal))
+
+    posts = [request for request in requests if request.method == "POST"]
+    assert len(posts) == 1
+    assert json.loads(posts[0].content) == {
+        "title": "CI times out",
+        "body": f"Run 42 timed out.\n\n<!-- kb-agent:{proposal.approval_id} -->",
+    }
+    assert posts[0].url == "https://api.github.com/repos/o/sandbox/issues"
+    assert posts[0].headers["authorization"] == "Bearer pat"
+    assert [of(events, "tool_result")[0].summary for events in (first, again)] == [
+        "issue #2 https://gh/o/sandbox/2"
+    ] * 2
+    assert of(first, "tool_call")[0].service_identity == "GITHUB_PAT_SANDBOX_WRITE"
+
+
+def test_the_sandbox_write_needs_an_approval_and_a_configured_repo(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests = github_api(monkeypatch)
+    [unconfigured] = sandbox_tools(Settings())
+    [configured] = sandbox_tools(SANDBOX)
+
+    async def unapproved() -> ToolOutput:
+        return await configured.run(IssueArgs(title="t", body="b"))
+
+    with pytest.raises(RuntimeError, match="approved action"):
+        asyncio.run(unapproved())
+    assert (unconfigured.available, configured.available) == (False, True)
+    assert requests == []
+
+
+PUBLIC_IP = "93.184.215.14"
+DNS = {
+    "docs.example": [PUBLIC_IP],
+    "rebind.example": [PUBLIC_IP, "10.0.0.7"],
+    "mapped.example": ["::ffff:127.0.0.1"],
+    "nat64.example": ["64:ff9b::7f00:1"],
+    "multicast.example": ["224.0.0.1"],
+    "metadata.example": ["169.254.169.254"],
+}
+WEB = Settings(web_fetch_allowed_hosts=",".join(DNS))
+PAGE = (
+    "<html><head><title>Runbook</title><style>h1 {}</style></head><body><h1>Deploy</h1>"
+    "<p>Run <b>make</b> deploy.</p><script>alert(1)</script></body></html>"
+)
+PAGES: dict[str, tuple[int, dict[str, str], bytes]] = {
+    "/": (200, {"content-type": "text/html; charset=utf-8"}, PAGE.encode()),
+    "/moved": (301, {"location": "/"}, b""),
+    "/away": (302, {"location": "https://evil.example/"}, b""),
+    "/inside": (302, {"location": "http://metadata.example/latest/"}, b""),
+    "/loop": (302, {"location": "/loop"}, b""),
+    "/big": (200, {"content-type": "text/plain"}, b"x" * (tools_module.WEB_MAX_BYTES + 1)),
+    "/file.pdf": (200, {"content-type": "application/pdf"}, b"%PDF-1.7"),
+}
+
+
+def web(monkeypatch: pytest.MonkeyPatch) -> list[httpx2.Request]:
+    requests: list[httpx2.Request] = []
+
+    def answer(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        status, headers, body = PAGES[request.url.path]
+        return httpx2.Response(status, headers=headers, content=body)
+
+    def resolve(host: str, port: int, *_: Any, **__: Any) -> list[tuple[Any, ...]]:
+        return [(0, socket.SOCK_STREAM, 0, "", (ip, port)) for ip in DNS[host]]
+
+    monkeypatch.setattr(tools_module, "WEB_TRANSPORT", httpx2.MockTransport(answer))
+    monkeypatch.setattr(socket, "getaddrinfo", resolve)
+    return requests
+
+
+def fetch(url: str) -> ToolOutput:
+    [tool] = web_tools(WEB)
+
+    async def go() -> ToolOutput:
+        return await tool.run(FetchArgs.model_validate({"url": url}))
+
+    return asyncio.run(go())
+
+
+def test_web_fetch_reads_a_page_as_text_from_the_checked_address(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    requests = web(monkeypatch)
+
+    page = fetch("https://docs.example/moved")
+
+    assert page.content == "https://docs.example/\n\nRunbook\nDeploy\nRun make deploy."
+    assert page.summary == "docs.example: 31 chars"
+    assert [(r.url.host, r.headers["host"], r.extensions["sni_hostname"]) for r in requests] == [
+        (PUBLIC_IP, "docs.example", "docs.example")
+    ] * 2
+
+
+@pytest.mark.parametrize(
+    ("url", "error"),
+    [
+        ("https://evil.example/", "not an allowed host"),
+        ("https://docs.example:8443/", "not an allowed host"),
+        ("http://public@127.0.0.1/", "not an allowed host"),
+        ("https://rebind.example/", "not a public address"),
+        ("https://mapped.example/", "not a public address"),
+        ("https://nat64.example/", "not a public address"),
+        ("https://multicast.example/", "not a public address"),
+        ("https://docs.example/away", "not an allowed host"),
+        ("https://docs.example/inside", "not a public address"),
+        ("https://docs.example/loop", "Too many redirects"),
+        ("https://docs.example/big", "larger than"),
+        ("https://docs.example/file.pdf", "is not read"),
+    ],
+)
+def test_web_fetch_refuses_what_its_guards_do_not_allow(
+    monkeypatch: pytest.MonkeyPatch, url: str, error: str
+) -> None:
+    requests = web(monkeypatch)
+
+    with pytest.raises(RuntimeError, match=error):
+        fetch(url)
+    assert {request.url.host for request in requests} <= {PUBLIC_IP}
+    assert web_tools(Settings())[0].available is False
+
+
+# What OpenAI-style strict function calling accepts; anything else fails the whole request.
+STRICT_FORMATS = {
+    "date-time",
+    "time",
+    "date",
+    "duration",
+    "email",
+    "hostname",
+    "ipv4",
+    "ipv6",
+    "uuid",
+}
+
+
+def test_native_tool_schemas_pass_strict_function_calling() -> None:
+    def formats(schema: Any) -> set[str]:
+        if isinstance(schema, dict):
+            node = cast(dict[str, Any], schema)
+            own = {node["format"]} if isinstance(node.get("format"), str) else set[str]()
+            return own.union(*(formats(value) for value in node.values()))
+        if isinstance(schema, list):
+            return set[str]().union(*(formats(item) for item in cast(list[Any], schema)))
+        return set()
+
+    caller = Caller("bob", ["editor"], "")
+    kb = kb_tools(McpClient("http://kb"), Tokens(SANDBOX), caller, None)
+    native = kb + sandbox_tools(SANDBOX) + web_tools(WEB)
+
+    for spec in native:
+        function = spec.definition()["function"]
+        assert function.get("strict") is True, spec.name
+        assert formats(function.get("parameters")) <= STRICT_FORMATS, spec.name

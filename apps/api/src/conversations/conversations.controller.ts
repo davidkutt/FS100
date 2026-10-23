@@ -26,6 +26,7 @@ import {
   type Approval,
   type Conversation,
 } from '../db/schema.js';
+import { UsageService } from '../usage/usage.service.js';
 import { ApprovalsService, type VisibleApproval } from './approvals.service.js';
 import {
   type Answer,
@@ -79,6 +80,7 @@ export const MessageDto = z
     parts: z.array(z.looseObject({ type: z.string() })),
     model: z.string().nullable(),
     promptVersion: z.string().nullable(),
+    promptHash: z.string().nullable(),
     stopReason: z.string().nullable(),
     traceId: z.string().nullable(),
     answerStatus: z.enum(ANSWER_STATUSES).nullable(),
@@ -114,16 +116,6 @@ export const ConversationDetail = ConversationDto.extend({
   approvals: z.array(ApprovalDto),
 }).meta({ id: 'ConversationDetail' });
 
-export const UsageToday = z
-  .object({
-    inputTokens: z.int(),
-    cachedTokens: z.int(),
-    outputTokens: z.int(),
-    costUsd: z.number(),
-    turns: z.int(),
-  })
-  .meta({ id: 'UsageToday' });
-
 @Controller()
 @Roles('viewer')
 export class ConversationsController {
@@ -132,6 +124,7 @@ export class ConversationsController {
     private readonly approvals: ApprovalsService,
     private readonly ai: AiClient,
     private readonly throttle: ChatThrottle,
+    private readonly usage: UsageService,
   ) {}
 
   @Get('conversations')
@@ -188,6 +181,7 @@ export class ConversationsController {
     @Body({ schema: NewMessage }) body: z.infer<typeof NewMessage>,
   ): Promise<void> {
     this.throttle.check(req.user.sub);
+    await this.usage.assertUnderCap(req.user);
     const conversation = await this.conversations.own(req.user, id);
     const history = await this.conversations.transcript(id);
     const turn = {
@@ -232,6 +226,8 @@ export class ConversationsController {
     @Body({ schema: Decision }) body: z.infer<typeof Decision>,
   ): Promise<void> {
     this.throttle.check(req.user.sub);
+    // Before the decision, so a capped user's approval stays pending.
+    await this.usage.assertUnderCap(req.user);
     let approval = await this.approvals.decide(
       req.user,
       id,
@@ -329,11 +325,5 @@ export class ConversationsController {
     @Body({ schema: Rating }) body: z.infer<typeof Rating>,
   ): Promise<void> {
     return this.conversations.rate(req.user, id, body);
-  }
-
-  @Get('me/usage')
-  @ApiOkResponse({ standardSchema: UsageToday })
-  usage(@Req() req: AuthRequest): Promise<z.infer<typeof UsageToday>> {
-    return this.conversations.usageToday(req.user);
   }
 }

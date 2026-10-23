@@ -39,6 +39,17 @@ describe('Timeline', () => {
     expect(item.textContent).toContain('truncated to its budget');
   });
 
+  it('shows the route: its domains, or all domains when the router was unsure', async () => {
+    const route = (domains: string[], confidence: number) =>
+      ({ type: 'route', domains, toolGroups: ['kb'], router: 'embedding', confidence }) as Part;
+
+    expect((await render([route(['devops'], 0.912)])).querySelector('.route')?.textContent).toMatch(
+      /Route\s*devops\s*embedding · 0\.91/,
+    );
+    expect((await render([route([], 0.3)])).textContent).toContain('all domains');
+    expect((await render([])).querySelector('.route')).toBeNull();
+  });
+
   it('marks calls without a result as running only while the answer streams', async () => {
     const parts = [call('c1', 'kb.search_knowledge_base')];
 

@@ -10,6 +10,7 @@ import jwt
 from mcp.server.auth.middleware.auth_context import get_access_token
 from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
+from mcp.server.caching import CacheHint
 from mcp.server.mcpserver import Elicit, MCPServer, Resolve
 from mcp.server.mcpserver.exceptions import ToolError
 from pydantic import AnyHttpUrl, BaseModel, Field, HttpUrl
@@ -95,6 +96,8 @@ def create_mcp(settings: Settings, kb: Callable[[], KnowledgeBase], tokens: Toke
     mcp = MCPServer(
         "fs100-kb",
         instructions="The FS100 knowledge base: runbooks, ADRs, setup guides and handbooks.",
+        # Clients may reuse the list (the SDK default `ttlMs: 0` makes them list before each call).
+        cache_hints={"tools/list": CacheHint(ttl_ms=300_000)},
         token_verifier=KbTokenVerifier(settings),
         auth=AuthSettings(
             issuer_url=AnyHttpUrl(settings.ai_keycloak_issuer),
