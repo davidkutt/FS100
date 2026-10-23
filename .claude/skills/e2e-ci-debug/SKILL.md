@@ -36,5 +36,9 @@ Run from the repo root; `$S` = session scratchpad.
 - Compose and Node parse `.env` differently: `KEY=   # note` is `""` for `pnpm dev`, `"# note"` for Compose.
 - `playwright install` can take ~10 min (`ENOTFOUND playwright.download.prss.microsoft.com` falls back); that
   is the CDN, not the test.
+- Angular drops whitespace between elements, so `hasText: /\bok\b/` never matches `<span>write</span><span>ok</span>`;
+  assert on the element (`has: page.getByText('ok', { exact: true })`). Read the DOM in `*.trace` (`grep -o`).
+- A test that fails after its write leaves the document behind; the retry then fails on the SHA-256 dedupe.
+  Debug the first attempt, not `-retry1`.
 - The smoke can't run against a `pnpm dev` with a real model: it needs `LLM_PROVIDER=fake` (ask before
   restarting the user's dev processes).

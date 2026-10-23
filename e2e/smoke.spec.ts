@@ -59,7 +59,8 @@ test('agent write → reject, then approve → runs once', async ({ page }) => {
   await expect(page.getByText('Approved and done.', { exact: true })).toBeVisible({
     timeout: 30_000,
   });
-  await expect(tool.filter({ hasText: /\bok\b/ })).toHaveCount(1);
+  // The status badge, not the text: Angular drops the spaces, so the summary reads "writeokdocument…".
+  await expect(tool.filter({ has: page.getByText('ok', { exact: true }) })).toHaveCount(1);
 
   await page.getByRole('link', { name: 'Documents' }).click();
   const row = page.getByRole('row', { name: /template\.md/ });
