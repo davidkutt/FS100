@@ -26,7 +26,7 @@ from ai_service.approvals import ApprovalError
 from ai_service.core.auth import Caller
 from ai_service.core.settings import Settings
 from ai_service.knowledge_base import Domain, Hit
-from ai_service.llm import LlmError, LlmEvent, Message, Token, ToolCall, Usage
+from ai_service.llm import FakeProvider, LlmError, LlmEvent, Message, Token, ToolCall, Usage
 from ai_service.mcp_client import McpClient
 from ai_service.rag import ChatTurn
 from ai_service.routing import Route
@@ -170,6 +170,7 @@ def test_agent_streams_v2_events_with_the_fake_llm(client: TestClient) -> None:
         "toolCalls": 1,
     }
     assert (done["protocolVersion"], done["promptVersion"]) == (2, "agent-system@2")
+    assert done["promptHash"] == agent_module.PROMPT.hash
 
 
 def test_unanswerable_question_abstains(client: TestClient) -> None:
@@ -543,24 +544,25 @@ def test_an_approved_ingest_runs_once_through_the_mcp_server(
     settings = Settings(approval_signing_key=SIGNING_KEY)
     mcp = McpClient(settings.mcp_resource_url)
     url = "https://raw.githubusercontent.com/davidkutt/FS100/main/README.md"
-    ingest = call("kb.ingest_url", "w", json.dumps({"url": url, "domains": ["dev"]}))
 
     async def tools(domains: list[Domain] | None, caller: Caller) -> list[ToolSpec[Any]]:
         return kb_tools(mcp, Tokens(settings), caller, domains)
 
-    app.state.agent = Agent(ScriptedLlm([ingest]), settings, tools, FixedRouter())
+    # The fake proposes `ingest_url` for a URL in the question, as in the e2e smoke.
+    app.state.agent = Agent(FakeProvider(), settings, tools, FixedRouter())
     client.headers["Authorization"] = f"Bearer {token(roles=('editor', 'viewer'))}"
     fields = {"conversation_id": str(uuid4())}
 
-    proposal = dict(sse(client.post("/v1/agent", json=body("Add it", **fields))))
+    proposal = dict(sse(client.post("/v1/agent", json=body(f"Add {url}", **fields))))
     resume = {
         "signed_action": proposal["approval_required"]["signedAction"],
         "decision": "approve",
         "args": proposal["approval_required"]["args"],
     }
     asked_before = len(api)
-    events = dict(sse(client.post("/v1/agent", json=body("Add it", **fields, resume=resume))))
+    events = dict(sse(client.post("/v1/agent", json=body(f"Add {url}", **fields, resume=resume))))
 
+    assert proposal["approval_required"]["args"] == {"url": url, "domains": ["dev"]}
     assert proposal["done"]["stopReason"] == "awaiting_approval"
     assert asked_before == 0
     assert events["tool_result"]["status"] == "ok", events["tool_result"]

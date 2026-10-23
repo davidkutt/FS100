@@ -28,7 +28,8 @@ client for the GitHub MCP server.
   the container calls itself on `localhost`, so the `ai-service:*` entry the spike suggested is not needed.
 - **Errors:** raise `ToolError` for messages the model may see. Any other exception becomes a generic
   "Error executing tool X". A missing `kb:write` or role is a `ToolError` too, not an HTTP 403: the SDK
-  checks `required_scopes` per endpoint only. Scope step-up for external clients belongs to M2.8.
+  checks `required_scopes` per endpoint only. No step-up for external clients either: they get `kb:read`
+  only (M2.8, [ADR-0014](0014-external-mcp-clients-cimd.md)).
 - **Tools** (`mcp_server.py`): `search_knowledge_base`, `get_document` (window + `next_offset`),
   `list_sources` (first chunk per document + a `doc_id` facet for counts; no `status` filter, Qdrant only
   holds ingested documents), `ingest_url`; resource `kb://documents/{doc_id}` (labels + headings).

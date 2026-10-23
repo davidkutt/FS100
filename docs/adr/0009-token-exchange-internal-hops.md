@@ -57,7 +57,8 @@ Findings:
 - **A11 holds:** only supported features were needed (no legacy `token-exchange` feature, no fine-grained
   admin permissions).
 - **Request the MCP audience by scope, not by `audience`:** the parameter only takes client ids. A `kb-mcp`
-  client is still useful for the CIMD stretch (`resource_url`), but not for the exchange.
+  client is still useful for the CIMD stretch (`resource_url`), but not for the exchange. *(M2.8: not needed
+  there either, [ADR-0014](0014-external-mcp-clients-cimd.md).)*
 - **Optional scopes are not role-gated:** a viewer can get `kb:write`. The resource server has to
   check the role. D35 already says scopes **plus** realm roles; the token matrix in M2.4 must include
   "viewer with `kb:write` → 403".

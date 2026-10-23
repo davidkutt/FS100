@@ -264,7 +264,7 @@ kb-agent/
 ├─ evals/
 │  ├─ datasets/{agent_v1.jsonl, redteam_v0.jsonl, routing_v1.jsonl}
 │  └─ fixtures/{github_mcp/, scenarios/}               # fixture MCP servers + seeded data
-├─ infra/compose/                # + github-mcp service, + `mcp-ext` profile (stretch)
+├─ infra/compose/                # + github-mcp service; Keycloak with cimd + resource-indicators (M2.8)
 └─ docs/
    ├─ adr/0007 … 0013
    └─ system-card.md             # stub, grows each phase
@@ -395,12 +395,14 @@ audit log but do not approve on behalf of others in P2.
   service account (role `ingest-on-behalf`) for `/internal/documents/from-url`.
 - **`kb-api`** — enable Standard token exchange; existing audience mapper → `kb-ai` stays.
 - **New client `kb-mcp`** — represents the MCP server (resource); attribute `resource_url = http://localhost:8000/mcp`
-  for the stretch path.
+  for the stretch path. *(Dropped in M2.8: the CIMD executor binds the audience, ADR-0014.)*
 - **Client scopes `kb:read`, `kb:write`** (Optional) with an **Audience** mapper, *Included Custom Audience* =
-  `http://localhost:8000/mcp`; assigned to `kb-ai` (and to CIMD clients in the stretch).
+  `http://localhost:8000/mcp`; assigned to `kb-ai` (and to CIMD clients in the stretch — as realm-default optional
+  scopes, M2.8).
 - **Self-registration off** by default (D44); enable only for demos, default role viewer.
 - Features: standard token exchange (on by default). Spike: `token-exchange-delegation` (preview in 26.8).
-  Stretch profile `mcp-ext`: `--features=cimd,resource-indicators` (experimental) + client policies for Claude Code / VS Code.
+  Stretch: `--features=cimd,resource-indicators` (experimental) + client policies for Claude Code / VS Code — always on
+  since M2.8, not a profile (ADR-0014).
 - Token lifetimes unchanged (5 min); exchanged tokens cached until exp − 30 s; resumes always use a fresh exchange.
 - Exact audience rules for exchange (requester must be in the subject token's audience) verified in the M2.0 spike.
 
@@ -681,22 +683,57 @@ Phoenix; prompt versions on eval runs come with M2.7.
 
 ### M2.7 — Prompt versioning, cost, docs (~6 h)
 
-- [ ] Prompt files with `id@version` + hash on spans, messages and eval runs; ADR-0013
-- [ ] Usage aggregation per user and day; daily caps → `429`; `/api/me/usage`; admin usage page
+- [x] Prompt files with `id@version` + hash on spans, messages and eval runs; ADR-0013
+- [x] Usage aggregation per user and day; daily caps → `429`; `/api/me/usage`; admin usage page
 - [ ] README: Phase 2 pitch, Mermaid diagram (agent + MCP + token flow), GIF of the approval flow and the Phoenix trace,
-  ADR index; `docs/system-card.md` stub
-- [ ] Playwright smoke extended: agent turn (fake LLM), approve and reject paths
+  ADR index; `docs/system-card.md` stub — all but the GIF (recorded by hand)
+- [x] Playwright smoke extended: agent turn (fake LLM), approve and reject paths
 
 **Acceptance:** demo steps 1–10 reachable from the README alone; caps enforced (test).
 
+**Code-complete 2026-10-22**; open: the README GIF. Deviations: the prompt files live in the package
+(`apps/ai-service/src/ai_service/prompts/*.md`), so they ship in the wheel and the image needs no extra copy;
+the hash is the first 12 hex digits of the body's SHA-256; the text moved verbatim, so the versions stay
+`agent-system@2`, `rag-system@1`, `router@1` (the RAG snapshot test still passes). `done` gains `promptHash`,
+stored as `messages.prompt_hash`; spans carry `prompt.hash` next to `llm.prompt_template.version` (`agent.run`,
+`llm`, and `route` with `ROUTER=llm`); `kb-eval agent | redteam` reports list all three prompts, `kb-eval
+routing` names the classifier prompt. No lock file that forces a version bump (ADR-0013). Caps are checked
+before every LLM relay — conversation turns, approval decisions (before the decision, so a capped user's
+approval stays pending) and `/api/chat`, which now records its `done` usage too, else it would bypass the
+cap; the turn that crosses the cap may overshoot by its per-run cap; days are UTC; cost is what the
+provider reports (the fake reports none). `/api/me/usage` is `{capUsd, today, days}` (last 30 days with
+usage) and open to any role; `/api/admin/usage?user&from&to` returns the newest 200 user-days; the admin page
+sits next to the audit page (`features/admin/usage`), and the sidebar widget shows today against the cap
+(the 30 days only in the API). The fake LLM proposes `kb.ingest_url` for "Add <url>"; the smoke rejects one
+proposal, approves a second for `docs/adr/template.md` on raw.githubusercontent.com (so e2e needs internet)
+and deletes the document again — not run locally yet (the dev stack runs a real model), CI runs it.
+Verified live on the dev stack: `/api/me/usage`, `/api/admin/usage` (403 for editors), migration `0003`.
+
 ### M2.8 — Stretch: external MCP clients (~6 h)
 
-- [ ] Compose profile `mcp-ext`: Keycloak with `--features=cimd,resource-indicators`; client policy + profile for
-  Claude Code and VS Code; `resource_url` on `kb-mcp`
-- [ ] Verify the full flow: protected-resource discovery → CIMD → PKCE → `resource` → `aud`; viewer can search, cannot ingest
-- [ ] Docs: "Use the knowledge base from Claude Code / VS Code", with the experimental-feature caveat
+- [x] ~~Compose profile `mcp-ext`~~ Keycloak always with `--features=cimd,resource-indicators`; client policy + profile for
+  Claude Code and VS Code; ~~`resource_url` on `kb-mcp`~~ (ADR-0014)
+- [x] Verify the full flow: protected-resource discovery → CIMD → PKCE → `resource` → `aud`; viewer can search, cannot ingest
+  — scripted against the real metadata documents; the interactive Claude Code login is open
+- [x] Docs: "Use the knowledge base from Claude Code / VS Code", with the experimental-feature caveat
 
 **Acceptance:** demo step 11.
+
+**Code-complete 2026-10-22**; open: demo step 11 by hand in Claude Code (needs a browser and, on a stack from
+before M2.8, `pnpm stack:reset`). Deviations (ADR-0014): no `mcp-ext` profile — a realm import with the CIMD
+policies does not start without the features, and an existing realm with them fails every login (500), so
+Keycloak always runs with both experimental features and `pnpm stack:up:mcp-ext` does not exist. No `kb-mcp`
+client: the CIMD executor's resource allow-list (`http://localhost:8000/mcp`) adds the audience mapper and
+rejects other resources (`invalid_target`). CIMD-created clients get only realm-default scopes, *full scope*
+off and a consent screen, so `kb:read` / `kb:write` became realm-default optional scopes (`kb-web` and `kb-api`
+now list theirs and cannot request them), and a scope mapping on `kb:read` carries the realm roles. PKCE S256
+is enforced for every public client by its own policy, since the `pkce-enforcer` in a CIMD profile never runs
+on the created client. The MCP server is unchanged: its metadata advertises `kb:read` only, so external
+clients get the read tools, and `ingest_url` fails with `insufficient_scope` (no step-up; ADR-0010). Verified on
+a throwaway Keycloak with the AI service on :8001 (`.claude/skills/realm-check/cimd-login.sh`, Claude Code's
+and VS Code's real documents): carol searches via `/mcp`, cannot ingest (also with `kb:write`); kb-web tokens
+get 401; no PKCE, a foreign host or redirect, or a wrong `resource` are refused; the ADR-0009 matrix is
+unchanged.
 
 ---
 
@@ -732,11 +769,11 @@ contract check, cost caps, gap signals (D49), README.
 - [x] Own MCP server passes the MCP Inspector check and rejects foreign audiences
 - [x] GitHub MCP server pinned, read-only, allow-listed; lockdown on; one idempotent sandbox write
 - [x] `pnpm eval:agent`, `eval:redteam`, `eval:routing` produce reports; ADR-0011/0012 contain numbers; retrieval eval blocks CI
-- [ ] Every turn produces one trace across the MCP hop; prompt versions on spans, messages and eval runs
-- [ ] Per-user usage and daily caps work; feedback stored with trace id
+- [x] Every turn produces one trace across the MCP hop; prompt versions on spans, messages and eval runs
+- [x] Per-user usage and daily caps work; feedback stored with trace id
 - [ ] `taxonomy.yaml` validated in NestJS and used by the router; documents carry optional topics; every assistant
   message stores `answerStatus` and `topScore`
-- [ ] ADR-0007 … 0013 written; README updated; system card stub exists
+- [x] ADR-0007 … 0013 written; README updated; system card stub exists
 - [ ] No secrets in git; PATs only in `.env.local`; `.env.example` complete
 
 ---
@@ -859,7 +896,7 @@ OLLAMA_BASE_URL=http://localhost:11434/v1   # local proof of switch (models.yaml
 
 ```bash
 pnpm stack:up                        # + GitHub MCP server container
-pnpm stack:up:mcp-ext                # stretch: Keycloak with cimd + resource-indicators
+# pnpm stack:up:mcp-ext              # dropped in M2.8: Keycloak always runs with cimd + resource-indicators (ADR-0014)
 pnpm eval:agent                      # agent tasks against fixture MCP servers
 pnpm eval:redteam                    # red-team seed set
 pnpm eval:routing                    # router accuracy (embedding vs LLM)

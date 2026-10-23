@@ -419,6 +419,80 @@
         ]
       }
     },
+    "/api/me/usage": {
+      "get": {
+        "operationId": "UsageController_mine",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MyUsage"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Usage"
+        ]
+      }
+    },
+    "/api/admin/usage": {
+      "get": {
+        "operationId": "UsageController_perUser",
+        "parameters": [
+          {
+            "name": "user",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "from",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          },
+          {
+            "name": "to",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "format": "date",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/UserUsageDay"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Usage"
+        ]
+      }
+    },
     "/api/conversations": {
       "get": {
         "operationId": "ConversationsController_list",
@@ -658,27 +732,6 @@
         "responses": {
           "204": {
             "description": ""
-          }
-        },
-        "tags": [
-          "Conversations"
-        ]
-      }
-    },
-    "/api/me/usage": {
-      "get": {
-        "operationId": "ConversationsController_usage",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UsageToday"
-                }
-              }
-            }
           }
         },
         "tags": [
@@ -1079,6 +1132,117 @@
         ],
         "additionalProperties": false
       },
+      "MyUsage": {
+        "type": "object",
+        "properties": {
+          "capUsd": {
+            "type": "number"
+          },
+          "today": {
+            "$ref": "#/components/schemas/UsageDay"
+          },
+          "days": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageDay"
+            }
+          }
+        },
+        "required": [
+          "capUsd",
+          "today",
+          "days"
+        ],
+        "additionalProperties": false
+      },
+      "UsageDay": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "inputTokens": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "cachedTokens": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "outputTokens": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "costUsd": {
+            "type": "number"
+          },
+          "turns": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          }
+        },
+        "required": [
+          "day",
+          "inputTokens",
+          "cachedTokens",
+          "outputTokens",
+          "costUsd",
+          "turns"
+        ],
+        "additionalProperties": false
+      },
+      "UserUsageDay": {
+        "type": "object",
+        "properties": {
+          "day": {
+            "type": "string",
+            "format": "date",
+            "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+          },
+          "inputTokens": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "cachedTokens": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "outputTokens": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "costUsd": {
+            "type": "number"
+          },
+          "turns": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "userId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "day",
+          "inputTokens",
+          "cachedTokens",
+          "outputTokens",
+          "costUsd",
+          "turns",
+          "userId"
+        ],
+        "additionalProperties": false
+      },
       "Conversation": {
         "type": "object",
         "properties": {
@@ -1215,6 +1379,10 @@
             "nullable": true,
             "type": "string"
           },
+          "promptHash": {
+            "nullable": true,
+            "type": "string"
+          },
           "stopReason": {
             "nullable": true,
             "type": "string"
@@ -1256,6 +1424,7 @@
           "parts",
           "model",
           "promptVersion",
+          "promptHash",
           "stopReason",
           "traceId",
           "answerStatus",
@@ -1440,42 +1609,6 @@
         "required": [
           "decision"
         ]
-      },
-      "UsageToday": {
-        "type": "object",
-        "properties": {
-          "inputTokens": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991
-          },
-          "cachedTokens": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991
-          },
-          "outputTokens": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991
-          },
-          "costUsd": {
-            "type": "number"
-          },
-          "turns": {
-            "type": "integer",
-            "minimum": -9007199254740991,
-            "maximum": 9007199254740991
-          }
-        },
-        "required": [
-          "inputTokens",
-          "cachedTokens",
-          "outputTokens",
-          "costUsd",
-          "turns"
-        ],
-        "additionalProperties": false
       },
       "AuditEntry": {
         "type": "object",

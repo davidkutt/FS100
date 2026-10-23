@@ -5,21 +5,17 @@ DevOps · MLOps · AI integration · Security · Architecture · SRE. Upload doc
 questions, get **streamed answers with citations** — with every retrieval change **measured** by an eval
 run and every request **traceable** from retrieval to prompt to model.
 
-The project is built in six phases; the full plan for Phase 1 lives in **[plan.md](plan.md)**.
+**Phase 2: the assistant is an agent.** It decides whether and where to search, reads CI runs, issues
+and code through the official **GitHub MCP server**, reaches its own knowledge base through **its own MCP
+server**, and **asks before it writes** — an issue in a sandbox repo or a document from a URL runs only
+after you approve the exact arguments, exactly once, with an audit entry. Identity travels as
+**Keycloak-exchanged tokens** on every internal hop, every turn is **one Phoenix trace** across the MCP hop, every
+prompt is a **versioned file** whose version and hash land on messages, traces and eval runs, and every
+user has a **daily cost cap**. Agent behaviour is measured too: task success, tool selection, cost and
+latency on fixture MCP servers, plus a red-team seed set.
 
-> **Status:** Phase 2 · **M2.4 own MCP server & token exchange** — Phase 1 is in place: the AI service ingests
-> PDF/Markdown/TXT into Qdrant, searches it with domain filters (measured by a 60-question golden set,
-> `pnpm eval:retrieval`) and streams cited answers over SSE; the NestJS API handles uploads (RBAC, dedupe,
-> background ingest) and relays chat and search; the Angular UI has upload, chat with clickable citations and a
-> retrieval inspector; everything also runs as containers, with contracts, e2e and the retrieval eval in CI.
-> New in Phase 2: an own agent loop (`POST /v1/agent`) that searches the knowledge base as a tool, streams its
-> tool activity as SSE v2 events and stops at hard limits (steps, time, tokens, cost); stored conversations in the
-> API with a tool-activity timeline, model picker (`config/models.yaml`), feedback and today's usage in the UI;
-> sub-topics from `config/taxonomy.yaml` on documents, relabelled without re-embedding; write tools stop for the
-> user's approval (HMAC-signed action, at-most-once state machine) and every tool call lands in an append-only audit
-> log with an admin page; the agent reaches the knowledge base through the service's own MCP server (`/mcp`:
-> search, documents, sources, `ingest_url` behind approval), and user identity travels as Keycloak-exchanged tokens on
-> every hop — see [roadmap](#roadmap).
+The project is built in six phases: [plan.md](plan.md) (Phase 1, done except the postponed Azure spike)
+and [plan-phase-2.md](plan-phase-2.md) (Phase 2, M2.0 – M2.7 done; M2.8 code-complete).
 
 ---
 
@@ -33,35 +29,54 @@ The project is built in six phases; the full plan for Phase 1 lives in **[plan.m
 | Identity | Keycloak 26.8 — realm `kb`, OIDC Authorization Code + PKCE, roles `viewer` < `editor` < `admin` |
 | Data | Postgres 17 (`app`, `keycloak`) · Qdrant 1.19 (vectors) |
 | LLM & tracing | OpenRouter / Hugging Face router via one OpenAI-compatible adapter · Arize Phoenix (OpenTelemetry) |
+| Agent & tools | Own loop (no framework) · MCP Python SDK v2 (own server + client) · GitHub MCP server v2.0.2 |
 | Tooling | pnpm 12 workspaces + catalogs · uv · Docker Compose · GitHub Actions |
 
-## Architecture (Phase 1 target)
+## Architecture
 
 ```mermaid
 flowchart LR
   browser["Browser<br/>Angular :4200"]
+  ext["Claude Code · VS Code"]
   kc["Keycloak :8080<br/>realm kb"]
-  api["NestJS API :3000<br/>auth · RBAC · documents · SSE relay"]
-  ai["AI service :8000<br/>ingest · retrieval · chat · evals"]
-  pg[("Postgres :5432<br/>app · keycloak")]
-  qd[("Qdrant :6333<br/>alias kb_current")]
-  llm["LLM API<br/>OpenRouter · HF · fake"]
-  px["Phoenix :6006<br/>OTLP traces"]
+  api["NestJS API :3000<br/>conversations · approvals<br/>audit · usage caps"]
+  subgraph ai["AI service :8000"]
+    agent["agent loop<br/>router · limits<br/>untrusted wrapper"]
+    mcp["own MCP server /mcp<br/>kb.search · get_document<br/>list_sources · ingest_url"]
+  end
+  ghmcp["GitHub MCP server :8082<br/>read-only · lockdown"]
+  gh["GitHub API<br/>sandbox repo"]
+  pg[("Postgres<br/>app · keycloak")]
+  qd[("Qdrant<br/>kb_current")]
+  llm["LLM<br/>OpenRouter · fake"]
+  px["Phoenix :6006"]
 
   browser -- "OIDC code + PKCE" --> kc
-  browser -- "REST + SSE · JWT aud=kb-api" --> api
-  api -- "JWKS" --> kc
+  browser -- "REST + SSE v2 · aud=kb-api" --> api
+  api -- "hop 1: token exchange" --> kc
+  api -- "SSE · aud=kb-ai" --> agent
+  agent -- "hop 2: token exchange" --> kc
+  agent -- "MCP · aud=/mcp · kb:read / kb:write" --> mcp
+  agent -- "MCP · read-only PAT" --> ghmcp
+  agent -- "REST · sandbox PAT, approved only" --> gh
+  ext -- "CIMD + PKCE + resource" --> kc
+  ext -- "MCP · aud=/mcp · kb:read" --> mcp
+  mcp --> qd
+  mcp -. "ingest_url: service account + onBehalfOf" .-> api
+  agent --> llm
   api --> pg
-  api -- "REST + SSE · client-credentials aud=kb-ai" --> ai
-  kc --> pg
-  ai --> qd
-  ai --> llm
-  ai -. "traces" .-> px
+  ai -. "one trace per turn" .-> px
 ```
 
-Only the web app and the NestJS API are browser-facing; all AI code lives in the Python service
-([ADR-0002](docs/adr/0002-ai-layer-in-python.md)). Ingest and chat flows step by step:
-**[docs/architecture.md](docs/architecture.md)**.
+A turn: the API checks the user's role and daily cap, exchanges their token for `aud=kb-ai` and relays
+the agent's SSE v2 events (`route`, `step`, `tool_call`, `tool_result`, `sources`, `token`,
+`approval_required`, `done`), storing each into the conversation, the audit log and the usage table. The
+AI service exchanges the token again for its own MCP server, so the knowledge-base tools see the user,
+not a service. A write call ends the turn with an HMAC-signed action; the API keeps it, shows an approval
+card and resumes the turn once the user decides ([ADR-0008](docs/adr/0008-run-state-and-approvals.md)).
+Only the web app and the API are browser-facing; all AI code lives in the Python service
+([ADR-0002](docs/adr/0002-ai-layer-in-python.md)). Flows step by step: [docs/architecture.md](docs/architecture.md)
+(Phase 1) and [plan-phase-2.md §5](plan-phase-2.md#5-architecture-phase-2).
 
 ## Retrieval quality
 
@@ -110,6 +125,38 @@ pnpm dev             # web :4200 · api :3000 · ai-service :8000, hot reload
 Open http://localhost:4200. Everything else — URLs, seed users, checks, troubleshooting — is in the
 **[startup guide](docs/setup/startup.md)**.
 
+## Demo (Phase 2)
+
+The acceptance demo of [plan-phase-2.md §1](plan-phase-2.md#1-goal-and-demo-script), from a fresh clone
+after the [Quickstart](#quickstart). Steps 3–6 need a real model (`LLM_API_KEY`, `LLM_MODEL` in `.env`);
+steps 3–4 also need `GITHUB_REPO`, `GITHUB_SANDBOX_REPO` in `.env` and two fine-grained PATs in
+`.env.local` (read-only on the repo, issues write on a sandbox repo only — see `.env.example`).
+
+1. `pnpm stack:up` (infra incl. the GitHub MCP container) and `pnpm dev` — or `pnpm stack:up:full`.
+2. Log in at http://localhost:4200 as `bob` / `bob` (editor), upload `data/sample-docs/` under
+   **Documents** with the domains from `domains.json`, open **Chat** and pick a model.
+3. Ask *"Why did the last CI run on main fail, and do we have a runbook for it?"* — the timeline shows the
+   read-only `github.*` calls and `kb.search_knowledge_base`; the answer links the run and cites `[n]`.
+4. Ask *"Open an issue for this in the sandbox repo."* — an approval card shows repo, title and body;
+   **Approve** creates exactly one issue (deciding again returns 409), **Reject** lets the agent go on
+   without acting. Both land in **Audit log** (as `alice`).
+5. Ask *"Which ADRs do we have, and why does the AI layer live in Python?"* — `kb.list_sources` on the
+   architecture domain, then a filtered search; the answer cites ADR-0002.
+6. Ask a German question the documents answer, then an unanswerable one — the second abstains and is
+   stored with `answerStatus: abstained` and its top score (the gap signal).
+7. Press **Stop** mid-answer — the run is cancelled and stored with `stopReason: cancelled`.
+8. Log in as `carol` (viewer): the write tools are never offered to the model and the harness denies
+   them by role; the sidebar shows today's cost against her daily cap (0.20 USD), and once it is reached
+   every turn answers `429`. As `alice`, **Usage** lists cost per user and day.
+9. Open Phoenix (http://localhost:6006; every answer links its trace): `agent.run` → `llm` / `tool`
+   spans, including the own MCP server's spans, with prompt version, prompt hash and model.
+10. `pnpm eval:agent`, `pnpm eval:redteam`, `pnpm eval:routing` — reports in `evals/runs/`
+    ([evals/README.md](evals/README.md)); `pnpm eval:retrieval` is a blocking CI check.
+11. `claude mcp add --transport http fs100-kb http://localhost:8000/mcp`, then `/mcp` → *Authenticate* in
+    Claude Code: log in as `carol` in Keycloak and ask it to search the knowledge base — it calls
+    `search_knowledge_base`; `ingest_url` is refused ([startup guide](docs/setup/startup.md#use-the-knowledge-base-from-claude-code--vs-code),
+    also VS Code; experimental Keycloak features, [ADR-0014](docs/adr/0014-external-mcp-clients-cimd.md)).
+
 ## Commands
 
 | Command | What it does |
@@ -123,7 +170,7 @@ Open http://localhost:4200. Everything else — URLs, seed users, checks, troubl
 | `pnpm test` | Vitest (web, api) · pytest (ai-service) |
 | `pnpm build` | Production builds of web and api |
 | `pnpm format` | Auto-format (prettier + ruff) |
-| `pnpm e2e` | Playwright smoke against http://localhost:4200 (login → upload → ask → citation) |
+| `pnpm e2e` | Playwright smoke against http://localhost:4200 with `LLM_PROVIDER=fake`: login → upload → ask → citation; approval reject → approve |
 | `pnpm eval:retrieval` | Retrieval eval against the golden set, in-memory Qdrant ([evals/README.md](evals/README.md)) |
 | `pnpm eval:agent` | Agent tasks against the corpus and fixture MCP servers; uses the LLM in `.env` (3 repeats, 2 USD cap) |
 | `pnpm eval:redteam` | Red-team seed set (injections, exfiltration, goal hijack), same setup as `eval:agent` |
@@ -137,10 +184,12 @@ apps/
   web/            Angular 22 frontend            → apps/web/README.md
   api/            NestJS 12 product API / BFF    → apps/api/README.md
   ai-service/     FastAPI AI service (uv)         → apps/ai-service/README.md
+                  prompts in src/ai_service/prompts/ (id@version front matter, ADR-0013)
                   each with a Dockerfile (build context: repo root, see .dockerignore)
 packages/
   contracts/      Generated OpenAPI documents + TS types of api and ai-service (pnpm contracts:generate)
-config/           models.yaml (model registry) · taxonomy.yaml (domains, sub-topics); baked into the images
+config/           models.yaml (model registry) · taxonomy.yaml (domains, sub-topics) · mcp_servers.yaml
+                  (external MCP servers, allow-lists); baked into the images
 infra/
   compose/        docker-compose.yml (infra; `--profile full` adds the three apps)
   keycloak/       realm-kb.json (roles, clients, dev seed users)
@@ -152,10 +201,12 @@ docs/
   architecture.md Components, ingest and chat flows, runtime modes
   setup/          installation.md · startup.md
   adr/            Architecture Decision Records
+  system-card.md  Models, data, safeguards, eval baselines, known limitations
   security/       red-teaming.md (playbook for attacking your own deployment)
 scripts/          dev.mjs · stack.mjs
 .github/          workflows: ci · e2e · eval · docker (GHCR) · dependabot.yml
 plan.md           Phase 1 plan (decisions, contracts, milestones)
+plan-phase-2.md   Phase 2 plan (agent, MCP, approvals)
 ```
 
 ## Documentation
@@ -165,17 +216,35 @@ plan.md           Phase 1 plan (decisions, contracts, milestones)
 - [Architecture](docs/architecture.md) — components, ingest and chat flows, Mode A vs. Mode B
 - [Installation guide](docs/setup/installation.md) — toolchain for macOS (Apple Silicon), Linux, Windows/WSL2
 - [Startup guide](docs/setup/startup.md) — first start, daily routine, URLs, seed users, troubleshooting
-- [ADRs](docs/adr/README.md) — 0001 monorepo & pnpm · 0002 AI layer in Python · 0003 in-process embeddings ·
-  0004 embedding model, chunking and score threshold · 0005 LLM access and model choice
+- [System card](docs/system-card.md) — models, data, safeguards, eval baselines, known limitations
 - [Evals](evals/README.md) — retrieval, agent, red-team and routing sets, metrics, fixtures, how to run
 - [Red teaming](docs/security/red-teaming.md) — threat model, test catalogue, grading, process
+
+**Architecture Decision Records** ([index and how to write one](docs/adr/README.md)):
+
+| ADR | Decision |
+|---|---|
+| [0001](docs/adr/0001-monorepo-and-pnpm.md) | Monorepo with pnpm workspaces, uv for Python |
+| [0002](docs/adr/0002-ai-layer-in-python.md) | All AI code lives in a Python service; NestJS is the product API |
+| [0003](docs/adr/0003-embeddings-in-process.md) | Embeddings computed in-process with fastembed |
+| [0004](docs/adr/0004-embedding-model-chunking-threshold.md) | Embedding model `bge-m3`, chunking 1000/150, score threshold 0.55 |
+| [0005](docs/adr/0005-llm-access-and-model.md) | One OpenAI-compatible LLM adapter; dev and demo model |
+| 0006 | Azure region and quota — postponed with M1.7 |
+| [0007](docs/adr/0007-agent-harness-and-limits.md) | Own agent harness with hard limits; dev model for agent mode |
+| [0008](docs/adr/0008-run-state-and-approvals.md) | Stateless agent turns; approvals as HMAC-signed actions, at-most-once |
+| [0009](docs/adr/0009-token-exchange-internal-hops.md) | Keycloak standard token exchange on the internal hops |
+| [0010](docs/adr/0010-own-mcp-server-sdk-v2.md) | Own MCP server and client on Python SDK v2 |
+| [0011](docs/adr/0011-plain-vs-agentic-rag.md) | Agentic RAG for conversations; plain RAG stays the measured baseline |
+| [0012](docs/adr/0012-embedding-vs-llm-router.md) | Embedding router by default; the LLM classifier stays opt-in |
+| [0013](docs/adr/0013-prompt-versioning.md) | Prompts as versioned files, with a content hash on every record |
+| [0014](docs/adr/0014-external-mcp-clients-cimd.md) | External MCP clients via Keycloak CIMD; its experimental features always on |
 
 ## Roadmap
 
 | Phase | Theme |
 |---|---|
 | 1 | Foundation + RAG slice + eval + tracing — *M1.0 – M1.6 done; M1.7 Azure spike postponed (local only for now)* |
-| **2** | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals — *in progress: M2.0 – M2.6 done* |
+| **2** | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals — *M2.0 – M2.7 done; M2.8 external MCP clients code-complete* |
 | 3 | Hybrid search, reranking, code-aware RAG, guardrails, routing + semantic cache, memory |
 | 4 | Kubernetes: Helm, k3d, GitOps-ready manifests |
 | 5 | Azure: Terraform, ACR, AKS / Container Apps, Key Vault, OIDC from GitHub |

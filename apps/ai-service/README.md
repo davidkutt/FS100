@@ -43,7 +43,7 @@ see `data/sample-docs/runbook-embedding-model-swap.md`. `QDRANT_URL=:memory:` ru
 Layout: `api/` routers (health, documents, chat) · `core/` settings, auth, JSON logging, tracing (OTLP →
 Phoenix, OpenInference spans for the `openai` SDK) · `ingest.py` parsers + chunker · `embeddings.py`
 fastembed + E5 prefixes · `knowledge_base.py` Qdrant collection/alias, ingest, search, delete · `llm.py`
-provider protocol, `openai_compat`, `fake` · `rag.py` prompt builder, citation check, gap signal, chat pipeline · `agent.py` agent loop (limits,
+provider protocol, `openai_compat`, `fake` · `prompts/` prompt files with `id`/`version` front matter, loaded with a content hash (ADR-0013) · `rag.py` prompt builder, citation check, gap signal, chat pipeline · `agent.py` agent loop (limits,
 parallel read tools, retries, cancellation), `mode=rag` adapter · `tools.py` `ToolSpec`, role policy,
 untrusted-output wrapper, KB tools via MCP · `mcp_server.py` the `/mcp` server · `mcp_client.py` calls it
 with the caller's hop-2 token from `tokens.py` (Keycloak exchange as `kb-ai`, cached) ·

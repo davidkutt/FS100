@@ -1,5 +1,5 @@
 import { Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, asc, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq } from 'drizzle-orm';
 import type { AgentRequest } from '../ai-client/ai-client.service.js';
 import { redact } from '../audit/redact.js';
 import type { AuthUser } from '../auth/auth.guard.js';
@@ -149,6 +149,7 @@ export class ConversationsService {
           stopReason,
           model: done?.model,
           promptVersion: done?.promptVersion,
+          promptHash: done?.promptHash,
           traceId: done?.traceId,
           answerStatus: done?.answerStatus,
           topScore: done?.topScore,
@@ -274,20 +275,5 @@ export class ConversationsService {
       .insert(feedback)
       .values({ messageId, userId: user.sub, ...values })
       .onConflictDoUpdate({ target: [feedback.messageId, feedback.userId], set: values });
-  }
-
-  /** Today (UTC) from the `usage` rows; daily caps build on this in M2.7. */
-  async usageToday(user: AuthUser) {
-    const [today] = await this.db
-      .select({
-        inputTokens: sql<number>`coalesce(sum(${usage.inputTokens}), 0)::int`,
-        cachedTokens: sql<number>`coalesce(sum(${usage.cachedTokens}), 0)::int`,
-        outputTokens: sql<number>`coalesce(sum(${usage.outputTokens}), 0)::int`,
-        costUsd: sql<number>`coalesce(sum(${usage.costUsd}), 0)::float8`,
-        turns: sql<number>`count(*)::int`,
-      })
-      .from(usage)
-      .where(and(eq(usage.userId, user.sub), gte(usage.createdAt, sql`date_trunc('day', now())`)));
-    return today;
   }
 }

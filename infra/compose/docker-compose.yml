@@ -51,7 +51,9 @@ services:
 
   keycloak:
     image: quay.io/keycloak/keycloak:26.8.1
-    command: ['start-dev', '--import-realm']
+    # Experimental, for Claude Code / VS Code at /mcp (ADR-0014). Never drop them: the realm's CIMD
+    # policies then break every login, and a fresh import refuses to start.
+    command: ['start-dev', '--import-realm', '--features=cimd,resource-indicators']
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak
@@ -202,6 +204,9 @@ services:
       - CORS_ORIGINS
       - UPLOAD_MAX_MB
       - CHAT_THROTTLE_PER_MIN
+      - DAILY_COST_CAP_USD_VIEWER
+      - DAILY_COST_CAP_USD_EDITOR
+      - DAILY_COST_CAP_USD_ADMIN
       - API_DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-dev-only-change-me}@postgres:5432/app
       - KEYCLOAK_REALM_URL=http://keycloak:8080/realms/kb
       - AI_SERVICE_URL=http://ai-service:8000

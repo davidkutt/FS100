@@ -18,7 +18,7 @@ from ai_service.embeddings import Embedder
 from ai_service.evals.metrics import percentile
 from ai_service.knowledge_base import Domain
 from ai_service.llm import create_provider
-from ai_service.routing import MIN_CONFIDENCE, EmbeddingRouter, LlmRouter, Route, Router
+from ai_service.routing import MIN_CONFIDENCE, PROMPT, EmbeddingRouter, LlmRouter, Route, Router
 
 
 class RoutingItem(BaseModel):
@@ -44,6 +44,7 @@ class RoutingReport(BaseModel):
     dataset: str
     router: str
     model: str | None
+    prompt: str | None  # id@version hash of the classifier's prompt (D46)
     created_at: str
     overall: dict[str, float]
     by_domain: dict[str, dict[str, float]]
@@ -102,6 +103,7 @@ async def run(router: Router, name: str, model: str | None, dataset: Path) -> Ro
         dataset=dataset.stem,
         router=name,
         model=model,
+        prompt=f"{PROMPT.ref} {PROMPT.hash}" if name == "llm" else None,
         created_at=datetime.now(UTC).isoformat(timespec="seconds"),
         overall=summarize(items, routed),
         by_domain={
@@ -128,7 +130,10 @@ def to_markdown(reports: list[RoutingReport]) -> str:
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
     lines = [f"## Routing eval · {reports[0].dataset}", "", *header]
-    lines += [row(f"**{r.router}** `{r.model}`", r.overall) for r in reports]
+    lines += [
+        row(f"**{r.router}** `{r.model}`" + (f" · `{r.prompt}`" if r.prompt else ""), r.overall)
+        for r in reports
+    ]
     for report in reports:
         lines += ["", f"### {report.router}", "", *header]
         lines += [row(f"domain `{d}`", m) for d, m in report.by_domain.items()]

@@ -7,6 +7,7 @@ from typing import Literal, Protocol
 import numpy as np
 from pydantic import BaseModel, Field
 
+from ai_service import prompts
 from ai_service.catalog import Taxonomy
 from ai_service.core.settings import Settings
 from ai_service.embeddings import Embedder
@@ -17,12 +18,7 @@ RouterName = Literal["embedding", "llm", "user"]
 # Calibrated on the retrieval_v1 questions with bge-m3 (ADR-0012); below it: every tool, no filter.
 MIN_CONFIDENCE = 0.8
 TEMPERATURE = 0.03  # softmax over cosine similarities
-PROMPT = """\
-Classify a question to an assistant for software, platform and operations engineers.
-Domains:
-{domains}
-Return the domains the question is about (usually one, [] if none), whether answering it needs \
-tools (the knowledge base or GitHub; false only for small talk), and your confidence from 0 to 1."""
+PROMPT = prompts.load("router")
 
 
 @dataclass(frozen=True)
@@ -77,7 +73,7 @@ class LlmRouter:
         domains = "\n".join(f"- {d}: {info.description}" for d, info in taxonomy.domains.items())
         self._llm = llm
         self._model = model
-        self._prompt = PROMPT.format(domains=domains)
+        self._prompt = PROMPT.text.format(domains=domains)
 
     async def route(self, question: str) -> Route:
         messages: list[Message] = [

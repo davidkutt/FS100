@@ -29,6 +29,7 @@ from mcp.server.mcpserver import MCPServer
 from pydantic import BaseModel
 from qdrant_client import QdrantClient
 
+from ai_service import agent, rag, routing
 from ai_service.agent import Agent, AgentDoneEvent, ApprovalRequiredEvent, ToolCallEvent, rag_turn
 from ai_service.catalog import McpServers, load_servers, load_taxonomy
 from ai_service.core.auth import Caller
@@ -120,6 +121,7 @@ class AgentReport(BaseModel):
     mode: Mode
     model: str
     router: str
+    prompts: dict[str, str]  # id@version → hash (D46)
     repeats: int
     created_at: str
     cost_usd: float
@@ -402,6 +404,7 @@ async def run(
         mode=mode,
         model=model,
         router="none" if mode == "rag" else settings.router,
+        prompts={p.ref: p.hash for p in (agent.PROMPT, rag.PROMPT, routing.PROMPT)},
         repeats=repeats,
         created_at=datetime.now(UTC).isoformat(timespec="seconds"),
         cost_usd=spent,
@@ -428,6 +431,8 @@ def to_markdown(report: AgentReport) -> str:
     lines = [
         f"## Agent eval · {report.dataset} · `{report.model}` · mode {report.mode} · "
         f"router {report.router}",
+        "",
+        "Prompts: " + " · ".join(f"`{ref}` {digest}" for ref, digest in report.prompts.items()),
         "",
         f"{len(report.tasks)} tasks x {report.repeats} repeats = {len(report.attempts)} turns · "
         f"cost {report.cost_usd:.4f} USD (cap {report.cost_cap_usd:.2f})"
