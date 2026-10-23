@@ -774,7 +774,7 @@ contract check, cost caps, gap signals (D49), README.
 - [ ] `taxonomy.yaml` validated in NestJS and used by the router; documents carry optional topics; every assistant
   message stores `answerStatus` and `topScore`
 - [x] ADR-0007 … 0013 written; README updated; system card stub exists
-- [ ] No secrets in git; PATs only in `.env.local`; `.env.example` complete
+- [x] No secrets in git; PATs only in `.env.local`; `.env.example` complete
 
 ---
 
