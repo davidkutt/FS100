@@ -84,6 +84,7 @@ export const messages = pgTable(
     parts: jsonb().notNull(),
     model: text(),
     promptVersion: text(),
+    promptHash: text(),
     stopReason: text(),
     traceId: text(),
     answerStatus: text({ enum: ANSWER_STATUSES }),

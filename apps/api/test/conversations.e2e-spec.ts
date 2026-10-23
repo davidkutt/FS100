@@ -18,6 +18,7 @@ const DONE = {
   usage: { inputTokens: 100, cachedTokens: 40, outputTokens: 20, costUsd: 0.0012 },
   model: 'openai/gpt-6-luna',
   promptVersion: 'agent-system@1',
+  promptHash: '1a2b3c4d5e6f',
   traceId: 'trace-1',
   protocolVersion: 2,
 };
@@ -129,10 +130,11 @@ describe('Conversations (e2e)', () => {
       topScore: 0.82,
       model: DONE.model,
       promptVersion: DONE.promptVersion,
+      promptHash: DONE.promptHash,
       traceId: DONE.traceId,
       feedback: null,
     });
-    expect(await (await api('GET', '/me/usage', { sub: 'turn' })).json()).toEqual({
+    expect((await (await api('GET', '/me/usage', { sub: 'turn' })).json()).today).toMatchObject({
       ...DONE.usage,
       turns: 1,
     });

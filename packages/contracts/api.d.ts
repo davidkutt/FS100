@@ -196,6 +196,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/me/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["UsageController_mine"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/usage": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["UsageController_perUser"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/conversations": {
         parameters: {
             query?: never;
@@ -292,22 +324,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/me/usage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get: operations["ConversationsController_usage"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/api/admin/audit": {
         parameters: {
             query?: never;
@@ -390,6 +406,30 @@ export interface components {
                 };
             };
         };
+        MyUsage: {
+            capUsd: number;
+            today: components["schemas"]["UsageDay"];
+            days: components["schemas"]["UsageDay"][];
+        };
+        UsageDay: {
+            /** Format: date */
+            day: string;
+            inputTokens: number;
+            cachedTokens: number;
+            outputTokens: number;
+            costUsd: number;
+            turns: number;
+        };
+        UserUsageDay: {
+            /** Format: date */
+            day: string;
+            inputTokens: number;
+            cachedTokens: number;
+            outputTokens: number;
+            costUsd: number;
+            turns: number;
+            userId: string;
+        };
         Conversation: {
             /** Format: uuid */
             id: string;
@@ -428,6 +468,7 @@ export interface components {
             })[];
             model: string | null;
             promptVersion: string | null;
+            promptHash: string | null;
             stopReason: string | null;
             traceId: string | null;
             /** @enum {string|null} */
@@ -480,13 +521,6 @@ export interface components {
             /** @enum {string} */
             decision: "approve" | "reject";
             note?: string;
-        };
-        UsageToday: {
-            inputTokens: number;
-            cachedTokens: number;
-            outputTokens: number;
-            costUsd: number;
-            turns: number;
         };
         AuditEntry: {
             id: number;
@@ -806,6 +840,48 @@ export interface operations {
             };
         };
     };
+    UsageController_mine: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MyUsage"];
+                };
+            };
+        };
+    };
+    UsageController_perUser: {
+        parameters: {
+            query?: {
+                user?: string;
+                from?: string;
+                to?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserUsageDay"][];
+                };
+            };
+        };
+    };
     ConversationsController_list: {
         parameters: {
             query?: never;
@@ -977,25 +1053,6 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
-            };
-        };
-    };
-    ConversationsController_usage: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UsageToday"];
-                };
             };
         };
     };

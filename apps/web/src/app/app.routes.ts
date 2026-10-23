@@ -40,5 +40,12 @@ export const routes: Routes = [
     data: { role: 'admin' },
     loadComponent: () => import('./features/admin/audit').then((m) => m.Audit),
   },
+  {
+    path: 'admin/usage',
+    title: 'Usage · FS100',
+    canActivate: [roleGuard],
+    data: { role: 'admin' },
+    loadComponent: () => import('./features/admin/usage').then((m) => m.Usage),
+  },
   { path: '**', redirectTo: '' },
 ];

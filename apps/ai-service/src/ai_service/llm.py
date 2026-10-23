@@ -156,7 +156,8 @@ class OpenAICompatProvider:
 
 
 class FakeProvider:
-    """Deterministic and free (tests, CI, e2e): searches once if it may, then cites every source."""
+    """Deterministic and free (tests, CI, e2e): proposes `ingest_url` for "Add <url>", else
+    searches once if it may, then cites every source."""
 
     async def stream_chat(
         self,
@@ -165,19 +166,21 @@ class FakeProvider:
         session_id: str | None = None,
         model: str | None = None,  # None = LLM_MODEL
     ) -> AsyncGenerator[LlmEvent]:
-        search = next(
-            (
-                t["function"]["name"]
-                for t in tools or []
-                if t["function"]["name"].endswith("search_knowledge_base")
-            ),
-            None,
-        )
-        if search and messages[-1]["role"] == "user":
-            yield ToolCall("fake-1", search, json.dumps({"query": messages[-1].get("content")}))
+        names = [t["function"]["name"] for t in tools or []]
+        search = next((n for n in names if n.endswith("search_knowledge_base")), None)
+        ingest = next((n for n in names if n.endswith("ingest_url")), None)
+        question = str(messages[-1].get("content"))
+        call = None
+        if messages[-1]["role"] == "user":
+            if ingest and (url := re.search(r"\badd (https?://\S+)", question, re.IGNORECASE)):
+                call = ToolCall("fake-1", ingest, json.dumps({"url": url[1], "domains": ["dev"]}))
+            elif search:
+                call = ToolCall("fake-1", search, json.dumps({"query": question}))
+        if call:
+            yield call
             yield Usage(0, 0, None, "fake")
             return
-        sources = re.findall(r'<source n="(\d+)">', str(messages[-1].get("content")))
+        sources = re.findall(r'<source n="(\d+)">', question)
         answer = (
             f"Fake answer based on {' '.join(f'[{n}]' for n in sources)}."
             if sources

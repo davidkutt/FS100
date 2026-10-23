@@ -1322,6 +1322,10 @@
             "title": "Promptversion",
             "type": "string"
           },
+          "promptHash": {
+            "title": "Prompthash",
+            "type": "string"
+          },
           "traceId": {
             "anyOf": [
               {
@@ -1347,6 +1351,7 @@
           "usage",
           "model",
           "promptVersion",
+          "promptHash",
           "traceId",
           "protocolVersion"
         ],

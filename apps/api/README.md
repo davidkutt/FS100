@@ -24,15 +24,16 @@ Endpoints (plan.md §7.2; OpenAPI in `packages/contracts/api.openapi.json`):
 | `DELETE /api/documents/:id` | editor (own) / admin | vectors first, then the row; 409 while ingesting |
 | `GET · POST /api/conversations` | viewer | own conversations, newest first · `{title?, modelId?}` |
 | `GET · DELETE /api/conversations/:id` | owner (delete: also admin) | messages with `parts` (SSE v2 payloads by event name), gap signals and the caller's rating; others get 404 |
-| `POST /api/conversations/:id/messages` | owner | `{text, modelId?, mode?, domains?}` → SSE v2 relay of `/v1/agent` with the last 20 messages as text; events are stored as the assistant message (a stop → `stopReason: cancelled`); `approval_required` is stored as a pending approval and relayed without `signedAction` |
+| `POST /api/conversations/:id/messages` | owner | `{text, modelId?, mode?, domains?}`; 429 `daily_cap_exceeded` once the caller's cost today reaches the cap → SSE v2 relay of `/v1/agent` with the last 20 messages as text; events are stored as the assistant message (a stop → `stopReason: cancelled`); `approval_required` is stored as a pending approval and relayed without `signedAction` |
 | `GET /api/approvals?status=` | viewer | own approvals (admin: all), never with the signed action |
-| `POST /api/approvals/:id` | requester | `{decision: approve\|reject, note?}` → SSE v2 continuation of the turn; role re-checked against `/v1/tools` (403 `tool_not_permitted`), 409 `approval_state_conflict` unless `pending`, 410 `approval_expired`; a stream that ends without the write's result → `unknown`, never retried (ADR-0008) |
+| `POST /api/approvals/:id` | requester | `{decision: approve\|reject, note?}` → SSE v2 continuation of the turn; 429 `daily_cap_exceeded` (checked first, the approval stays pending); role re-checked against `/v1/tools` (403 `tool_not_permitted`), 409 `approval_state_conflict` unless `pending`, 410 `approval_expired`; a stream that ends without the write's result → `unknown`, never retried (ADR-0008) |
 | `GET /api/admin/audit` | admin | `?user&tool&outcome&from&to` (UTC days); newest 200 rows of the append-only `audit_log`: one per tool result, redacted args |
 | `POST /api/messages/:id/feedback` | owner | `{rating: up\|down, comment?}`; a second rating replaces the first |
-| `GET /api/me/usage` | any | today's (UTC) tokens, cost and turns from the `usage` rows |
+| `GET /api/me/usage` | any | `{capUsd, today, days}`: tokens, cost and turns per UTC day from the `usage` rows, last 30 days; the cap is the highest role's `DAILY_COST_CAP_USD_*` (D44) |
+| `GET /api/admin/usage` | admin | `?user&from&to` (UTC days); cost and tokens per user and day, newest 200 rows |
 | `GET /api/models` · `GET /api/tools` | viewer | relays of `/v1/models`, `/v1/tools`, cut to the caller's role |
 | `GET /api/taxonomy` | viewer | `config/taxonomy.yaml` (`TAXONOMY_CONFIG`), validated at boot |
-| `POST /api/chat` | viewer | SSE relay of `/v1/chat`, events unchanged; `CHAT_THROTTLE_PER_MIN` per user, shared with conversation messages |
+| `POST /api/chat` | viewer | SSE relay of `/v1/chat`, events unchanged; `CHAT_THROTTLE_PER_MIN` per user, shared with conversation messages; the `done` usage counts towards the daily cap (429 once reached) |
 | `POST /api/search` | viewer | relay of `/v1/search` |
 | `GET /api/status` | admin | `api`, `db`, `aiService`, `qdrant` |
 | `POST /internal/documents/from-url` | service account with the `kb-api` client role `ingest-on-behalf` (= `kb-ai`) | `{url, domains, onBehalfOf:{sub, name}}` for `kb.ingest_url`: fetches the URL (hosts in `INGEST_URL_ALLOWED_HOSTS`, no IP literals or private addresses, ≤ 3 redirects on the list, ≤ `UPLOAD_MAX_MB`), then stores it as the user's upload → 202 `{id, status}`; audited as `documents.from_url` with the service identity (trusted subsystem, D36) |

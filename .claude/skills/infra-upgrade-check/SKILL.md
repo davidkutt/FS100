@@ -32,7 +32,8 @@ real `fs100` stack cannot run at the same time.
    ```
 4. **Fresh import:** `down -v` the throwaway project, `up -d --wait postgres keycloak` again, then
    `curl localhost:8080/realms/kb/.well-known/openid-configuration` → 200 and a `kb-api` client-credentials
-   token with `aud=kb-ai`.
+   token with `aud=kb-ai`. Keycloak bump: the experimental CIMD features too (ADR-0014) —
+   `KEYCLOAK_URL=http://localhost:8080 .claude/skills/realm-check/cimd-login.sh carol` → `aud=http://localhost:8000/mcp`.
 5. **Retrieval eval** when `qdrant-client` changes: `pnpm eval:retrieval` before and after the bump; diff
    the two newest `evals/runs/*.md` from `| Slice` down — they must be identical.
 6. **Tear down:** list the volumes before deleting them, and only delete `fs100-m20_*`:

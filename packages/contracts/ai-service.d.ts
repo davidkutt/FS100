@@ -524,6 +524,8 @@ export interface components {
             model: string | null;
             /** Promptversion */
             promptVersion: string;
+            /** Prompthash */
+            promptHash: string;
             /** Traceid */
             traceId: string | null;
             /**

@@ -91,6 +91,15 @@
         "pkce.code.challenge.method": "S256",
         "post.logout.redirect.uris": "http://localhost:4200/*"
       },
+      "defaultClientScopes": [
+        "basic",
+        "roles",
+        "profile",
+        "email",
+        "web-origins",
+        "acr"
+      ],
+      "optionalClientScopes": [],
       "protocolMappers": [
         {
           "name": "audience-kb-api",
@@ -122,6 +131,15 @@
       "attributes": {
         "standard.token.exchange.enabled": "true"
       },
+      "defaultClientScopes": [
+        "basic",
+        "roles",
+        "profile",
+        "email",
+        "web-origins",
+        "acr"
+      ],
+      "optionalClientScopes": [],
       "protocolMappers": [
         {
           "name": "audience-kb-ai",
@@ -389,7 +407,7 @@
     },
     {
       "name": "kb:read",
-      "description": "Read the knowledge base through the MCP server",
+      "description": "Read the knowledge base through the MCP server. Realm-default optional, so CIMD clients (Claude Code, VS Code) get it; their tokens carry only the kb roles mapped to this scope (no full scope)",
       "protocol": "openid-connect",
       "attributes": {
         "include.in.token.scope": "true",
@@ -442,7 +460,138 @@
     "web-origins",
     "acr"
   ],
-  "defaultOptionalClientScopes": [],
+  "defaultOptionalClientScopes": [
+    "kb:read",
+    "kb:write"
+  ],
+  "scopeMappings": [
+    {
+      "clientScope": "kb:read",
+      "roles": [
+        "viewer",
+        "editor",
+        "admin"
+      ]
+    }
+  ],
+  "clientProfiles": {
+    "profiles": [
+      {
+        "name": "mcp-claude-code",
+        "description": "Claude Code's Client ID Metadata Document (experimental feature cimd); loopback redirects, so no same-domain check",
+        "executors": [
+          {
+            "executor": "client-id-metadata-document",
+            "configuration": {
+              "cimd-allow-permitted-domains": [
+                "claude.ai",
+                "localhost",
+                "127.0.0.1"
+              ],
+              "cimd-restrict-same-domain": "false",
+              "cimd-resource-indicator-allow-list": [
+                "http://localhost:8000/mcp"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "mcp-vscode",
+        "description": "VS Code's Client ID Metadata Document (experimental feature cimd); code.visualstudio.com hosts its logo_uri",
+        "executors": [
+          {
+            "executor": "client-id-metadata-document",
+            "configuration": {
+              "cimd-allow-permitted-domains": [
+                "vscode.dev",
+                "127.0.0.1",
+                "code.visualstudio.com"
+              ],
+              "cimd-restrict-same-domain": "false",
+              "cimd-resource-indicator-allow-list": [
+                "http://localhost:8000/mcp"
+              ]
+            }
+          }
+        ]
+      },
+      {
+        "name": "pkce-s256",
+        "description": "PKCE with S256; auto-configure sets it on clients the CIMD executor creates",
+        "executors": [
+          {
+            "executor": "pkce-enforcer",
+            "configuration": {
+              "auto-configure": "true"
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "clientPolicies": {
+    "policies": [
+      {
+        "name": "mcp-claude-code",
+        "enabled": true,
+        "conditions": [
+          {
+            "condition": "client-id-uri",
+            "configuration": {
+              "client-id-uri-scheme": [
+                "https"
+              ],
+              "client-id-uri-allow-permitted-domains": [
+                "claude.ai"
+              ]
+            }
+          }
+        ],
+        "profiles": [
+          "mcp-claude-code"
+        ]
+      },
+      {
+        "name": "mcp-vscode",
+        "enabled": true,
+        "conditions": [
+          {
+            "condition": "client-id-uri",
+            "configuration": {
+              "client-id-uri-scheme": [
+                "https"
+              ],
+              "client-id-uri-allow-permitted-domains": [
+                "vscode.dev"
+              ]
+            }
+          }
+        ],
+        "profiles": [
+          "mcp-vscode"
+        ]
+      },
+      {
+        "name": "pkce-for-public-clients",
+        "description": "The CIMD profiles' own pkce-enforcer does not run when the client is created, so PKCE is enforced for every public client",
+        "enabled": true,
+        "conditions": [
+          {
+            "condition": "client-access-type",
+            "configuration": {
+              "type": [
+                "public"
+              ]
+            }
+          }
+        ],
+        "profiles": [
+          "pkce-s256"
+        ]
+      }
+    ]
+  },
   "users": [
     {
       "username": "alice",

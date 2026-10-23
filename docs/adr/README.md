@@ -18,6 +18,8 @@ Short, numbered records of decisions that shape FS100. Each ADR references the d
 | [0010](0010-own-mcp-server-sdk-v2.md) | Own MCP server and client on Python SDK v2 (GitHub MCP check) | Accepted |
 | [0011](0011-plain-vs-agentic-rag.md) | Agentic RAG for conversations; plain RAG stays the measured baseline | Proposed |
 | [0012](0012-embedding-vs-llm-router.md) | Embedding router by default; the LLM classifier stays opt-in | Proposed |
+| [0013](0013-prompt-versioning.md) | Prompts as versioned files in the repo, with a content hash on every record | Accepted |
+| [0014](0014-external-mcp-clients-cimd.md) | External MCP clients via Keycloak CIMD, with the experimental features always on | Accepted |
 
 ## Writing a new ADR
 

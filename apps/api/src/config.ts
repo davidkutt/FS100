@@ -21,6 +21,10 @@ const schema = z.object({
     .transform((hosts) => hosts.split(',').map((host) => host.trim())),
   UPLOAD_MAX_MB: z.coerce.number().positive().default(20),
   CHAT_THROTTLE_PER_MIN: z.coerce.number().int().positive().default(20),
+  // LLM cost per user and UTC day by highest role (D44); once reached, LLM relays answer 429.
+  DAILY_COST_CAP_USD_VIEWER: z.coerce.number().nonnegative().default(0.2),
+  DAILY_COST_CAP_USD_EDITOR: z.coerce.number().nonnegative().default(1),
+  DAILY_COST_CAP_USD_ADMIN: z.coerce.number().nonnegative().default(5),
   // The repo's file, from src/ and dist/ alike; the image sets its own path.
   TAXONOMY_CONFIG: z
     .string()

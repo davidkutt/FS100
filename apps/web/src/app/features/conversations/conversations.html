@@ -31,10 +31,12 @@
       </ul>
     }
     @if (usage.hasValue()) {
+      @let today = usage.value().today;
       <p class="small text-body-secondary mt-3 mb-0">
-        Today: {{ usage.value().costUsd | currency: 'USD' : 'symbol' : '1.2-4' }} ·
-        {{ usage.value().inputTokens + usage.value().outputTokens | number }} tokens ·
-        {{ usage.value().turns }} {{ usage.value().turns === 1 ? 'turn' : 'turns' }}
+        Today: {{ today.costUsd | currency: 'USD' : 'symbol' : '1.2-4' }} of
+        {{ usage.value().capUsd | currency: 'USD' }} ·
+        {{ today.inputTokens + today.outputTokens | number }} tokens · {{ today.turns }}
+        {{ today.turns === 1 ? 'turn' : 'turns' }}
       </p>
     }
   </nav>
