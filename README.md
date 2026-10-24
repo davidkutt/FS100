@@ -166,6 +166,7 @@ steps 3–4 also need `GITHUB_REPO`, `GITHUB_SANDBOX_REPO` in `.env` and two fin
 | `pnpm stack:up:full` | Infra **and** the apps as containers (Mode B), rebuilt when changed |
 | `pnpm stack:ps` / `stack:logs [service]` | Status / logs of the infra |
 | `pnpm stack:reset` | Stop the infra and **delete** its volumes |
+| `pnpm mem` | Memory per app (RSS incl. child processes) and per container — the 16 GB budget of plan-phase-3.md D50 |
 | `pnpm lint` | angular-eslint · oxlint · prettier check · ruff · pyright |
 | `pnpm test` | Vitest (web, api) · pytest (ai-service) |
 | `pnpm build` | Production builds of web and api |

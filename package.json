@@ -25,6 +25,7 @@
     "stack:reset": "node scripts/stack.mjs --profile full down --volumes",
     "stack:ps": "node scripts/stack.mjs --profile full ps",
     "stack:logs": "node scripts/stack.mjs --profile full logs --follow",
+    "mem": "node scripts/mem.mjs",
     "eval:retrieval": "uv run --directory apps/ai-service kb-eval retrieval",
     "eval:agent": "uv run --directory apps/ai-service --env-file ../../.env kb-eval agent",
     "eval:redteam": "uv run --directory apps/ai-service --env-file ../../.env kb-eval redteam",

@@ -2,7 +2,8 @@
 
 Short, numbered records of decisions that shape FS100. Each ADR references the decision ids of
 [plan.md §3](../../plan.md#3-decisions) (`D1` … `D26`) or
-[plan-phase-2.md §3](../../plan-phase-2.md#3-decisions) (`D27` …).
+[plan-phase-2.md §3](../../plan-phase-2.md#3-decisions) (`D27` … `D49`) or
+[plan-phase-3.md §3](../../plan-phase-3.md#3-decisions) (`D50` …).
 
 | ADR | Title | Status |
 |---|---|---|
@@ -20,6 +21,10 @@ Short, numbered records of decisions that shape FS100. Each ADR references the d
 | [0012](0012-embedding-vs-llm-router.md) | Embedding router by default; the LLM classifier stays opt-in | Proposed |
 | [0013](0013-prompt-versioning.md) | Prompts as versioned files in the repo, with a content hash on every record | Accepted |
 | [0014](0014-external-mcp-clients-cimd.md) | External MCP clients via Keycloak CIMD, with the experimental features always on | Accepted |
+| [0015](0015-stored-originals-job-queue-reindex.md) | Stored originals, a Postgres job queue and an eval-gated re-index | Proposed (draft) |
+| [0016](0016-hybrid-search-sparse-side.md) | Hybrid search — the sparse side (BM25 server-side vs. bge-m3 sparse) | Proposed (draft) |
+| [0017](0017-reranker.md) | Reranker | Proposed (draft) |
+| [0018](0018-docling-parent-child-chunking.md) | Docling parsing and parent-child chunking | Proposed (draft) |
 
 ## Writing a new ADR
 

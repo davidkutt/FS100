@@ -63,9 +63,12 @@ M2.5 (external MCP servers from `config/mcp_servers.yaml` in `catalog.py`, pinne
 gate in `eval.yml`, ADR-0011/0012 proposed) and M2.7 (prompt files `ai_service/prompts/*.md` with version + hash,
 daily cost caps in `apps/api/src/usage/`, admin usage page, system card, e2e approval smoke; only the README GIF
 is open); M2.8 (Claude Code / VS Code log in to `/mcp` via Keycloak CIMD, ADR-0014) is code-complete, the hand check
-in Claude Code is open. Check the milestone in
-[plan.md §8](plan.md#8-milestones-and-tasks) or [plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks)
-before building something: many features are deliberately scheduled for later milestones.
+in Claude Code is open. **Phase 3 (retrieval quality, skills; then eval, safety, cost) has started** — M3a.0
+(golden set split into `dev`/`test` via a `split` field, baselines in `evals/baselines/p2-dense/`, `pnpm mem`,
+spikes, ADR-0015…0018 drafts) is done. Phase 3 ADRs start at 0015, not 0014. Check the milestone in
+[plan.md §8](plan.md#8-milestones-and-tasks), [plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks) or
+[plan-phase-3.md §8](plan-phase-3.md#8-milestones-and-tasks) before building something: many features are
+deliberately scheduled for later milestones.
 
 The plan's working title `kb-agent` lives on in identifiers (realm `kb`, clients `kb-web`/`kb-api`/`kb-ai`,
 Qdrant alias `kb_current`). Keep those names.
@@ -83,11 +86,12 @@ Qdrant alias `kb_current`). Keep those names.
 | `e2e/` | Playwright smoke (login → upload → ask → citation), runs against :4200 | Playwright |
 | `data/sample-docs/` | Demo + eval corpus; `domains.json` = file → domain tags; repo docs are frozen snapshots | — |
 | `evals/` | Datasets (`datasets/*.jsonl`, frozen per version), fixture MCP server + scenarios (`fixtures/`); `runs/` git-ignored | — |
-| `scripts/` | `dev.mjs` (runs apps), `stack.mjs` (compose wrapper) | Node |
+| `scripts/` | `dev.mjs` (runs apps), `stack.mjs` (compose wrapper), `mem.mjs` (memory budget) | Node |
 | `docs/adr/` | Architecture Decision Records — copy `template.md`, next free number, add to the index | — |
 | `docs/setup/` | `installation.md` (toolchain), `startup.md` (URLs, seed users, troubleshooting) | — |
 | `plan.md` | Phase 1 source of truth: decisions D1–D26, contracts §7, milestones §8, target layout §6 | — |
 | `plan-phase-2.md` | Phase 2 source of truth: decisions D27–D49, contracts §7, milestones M2.0–M2.8 | — |
+| `plan-phase-3.md` | Phase 3 source of truth: decisions D50–D75, contracts §7, milestones M3a.0–M3b.9 | — |
 | `architechture.md` | Cross-phase decisions by ID (REPO-*, DEV-* …). Filename is misspelled; keep it | — |
 | `_meta/ai-theory/` | Study notes, not product docs. Ignore unless asked | — |
 
