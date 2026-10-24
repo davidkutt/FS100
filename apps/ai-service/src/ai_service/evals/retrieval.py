@@ -55,6 +55,7 @@ class GoldenItem(BaseModel):
     answerable: bool
     relevant: list[Relevant] = []
     notes: str = ""
+    split: Literal["dev", "test"] | None = None
 
 
 class ItemResult(BaseModel):
@@ -144,7 +145,12 @@ def summarize(results: list[ItemResult]) -> dict[str, float]:
 
 
 def run(
-    embedder: Embedder, dataset: Path, corpus: Path, chunk_size: int, chunk_overlap: int
+    embedder: Embedder,
+    dataset: Path,
+    corpus: Path,
+    chunk_size: int,
+    chunk_overlap: int,
+    split: str | None = None,
 ) -> RunReport:
     kb = KnowledgeBase(QdrantClient(":memory:"), embedder, "eval", chunk_size, chunk_overlap)
     kb.ensure_collection()
@@ -154,6 +160,8 @@ def run(
 
     results: list[ItemResult] = []
     for item in load_dataset(dataset):
+        if split and item.split != split:
+            continue
         started = time.perf_counter()
         hits = kb.search(item.question, TOP_K)
         latency_ms = (time.perf_counter() - started) * 1000
@@ -184,7 +192,7 @@ def run(
     latencies = [r.latency_ms for r in results]
     domains = sorted({d for r in answerable for d in r.domains})
     return RunReport(
-        dataset=dataset.stem,
+        dataset=f"{dataset.stem}-{split}" if split else dataset.stem,
         model=embedder.model_name,
         dim=embedder.dim,
         chunk_size=chunk_size,
@@ -284,6 +292,9 @@ def add_command(commands: Any, settings: Settings) -> None:
     cmd.add_argument(
         "--dataset", type=Path, default=Path("../../evals/datasets/retrieval_v1.jsonl")
     )
+    cmd.add_argument(
+        "--split", choices=["dev", "test"], help="only this part (D51); default: all items"
+    )
     cmd.add_argument("--corpus", type=Path, default=Path("../../data/sample-docs"))
     cmd.add_argument("--out", type=Path, default=Path("../../evals/runs"))
     cmd.add_argument(
@@ -315,7 +326,7 @@ def _main(args: argparse.Namespace, settings: Settings) -> None:
     for model in args.model or [settings.embedding_model]:
         embedder = Embedder(model, settings.embedding_cache_dir)
         for size, overlap in args.chunk or [(settings.chunk_size, settings.chunk_overlap)]:
-            report = run(embedder, args.dataset, args.corpus, size, overlap)
+            report = run(embedder, args.dataset, args.corpus, size, overlap, args.split)
             reports.append(report)
             stem = (
                 f"{args.out}/{datetime.now(UTC):%Y%m%dT%H%M%SZ}__{report.dataset}__"

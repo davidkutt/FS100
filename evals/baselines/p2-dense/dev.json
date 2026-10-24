@@ -1,0 +1,681 @@
+{
+  "dataset": "retrieval_v1-dev",
+  "model": "BAAI/bge-m3",
+  "dim": 1024,
+  "chunk_size": 1000,
+  "chunk_overlap": 150,
+  "documents": 17,
+  "chunks": 218,
+  "ingest_s": 173.15273874999548,
+  "created_at": "2026-10-23T19:22:16+00:00",
+  "overall": {
+    "n": 30.0,
+    "hit@1": 0.8333333333333334,
+    "hit@5": 1.0,
+    "mrr@10": 0.8944444444444445,
+    "ndcg@10": 0.907066975290105,
+    "p50_ms": 55.541875000926666,
+    "p95_ms": 74.47895799123216
+  },
+  "by_domain": {
+    "ai": {
+      "n": 6.0,
+      "hit@1": 0.6666666666666666,
+      "hit@5": 1.0,
+      "mrr@10": 0.7777777777777778,
+      "ndcg@10": 0.8170327247564905
+    },
+    "architecture": {
+      "n": 3.0,
+      "hit@1": 0.3333333333333333,
+      "hit@5": 1.0,
+      "mrr@10": 0.5555555555555556,
+      "ndcg@10": 0.6634541693678359
+    },
+    "cloud": {
+      "n": 3.0,
+      "hit@1": 0.3333333333333333,
+      "hit@5": 1.0,
+      "mrr@10": 0.6111111111111112,
+      "ndcg@10": 0.7103099178571525
+    },
+    "db": {
+      "n": 3.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "dev": {
+      "n": 6.0,
+      "hit@1": 0.8333333333333334,
+      "hit@5": 1.0,
+      "mrr@10": 0.8888888888888888,
+      "ndcg@10": 0.8765270612407604
+    },
+    "devops": {
+      "n": 5.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 0.967888315659275
+    },
+    "mlops": {
+      "n": 3.0,
+      "hit@1": 0.6666666666666666,
+      "hit@5": 1.0,
+      "mrr@10": 0.7777777777777778,
+      "ndcg@10": 0.7771848765278742
+    },
+    "security": {
+      "n": 4.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 0.9799301972870469
+    },
+    "sre": {
+      "n": 7.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    }
+  },
+  "by_lang": {
+    "de": {
+      "n": 9.0,
+      "hit@1": 0.8888888888888888,
+      "hit@5": 1.0,
+      "mrr@10": 0.9259259259259259,
+      "ndcg@10": 0.9444444444444444
+    },
+    "en": {
+      "n": 21.0,
+      "hit@1": 0.8095238095238095,
+      "hit@5": 1.0,
+      "mrr@10": 0.8809523809523809,
+      "ndcg@10": 0.8910480599382452
+    }
+  },
+  "threshold": 0.6101730813032988,
+  "threshold_balanced_accuracy": 0.8666666666666667,
+  "items": [
+    {
+      "id": "r-004",
+      "question": "We deploy with GitOps — what changes when rolling back?",
+      "lang": "en",
+      "domains": ["devops"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6684674334993803,
+      "latency_ms": 69.33891600056086,
+      "top_hits": [
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › Rollback on Kubernetes (0.668)",
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › When to use this runbook (0.579)",
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › Decide (0.576)"
+      ]
+    },
+    {
+      "id": "r-005",
+      "question": "Which command wipes all local infrastructure data, and what exactly gets deleted?",
+      "lang": "en",
+      "domains": ["devops", "dev"],
+      "answerable": true,
+      "relevant_count": 2,
+      "gains": [1, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5309518243586806,
+      "latency_ms": 56.97245799819939,
+      "top_hits": [
+        "setup-startup.md § Startup guide — run FS100 locally › 7. Managing the infrastructure (0.531)",
+        "runbook-azure-cost-guard.md § Runbook: Azure cost guard › Teardown (0.529)",
+        "fs100-readme.md § FS100 — the FULL FULL stack › Commands (0.529)"
+      ]
+    },
+    {
+      "id": "r-006",
+      "question": "What is the incident commander responsible for, and should they debug?",
+      "lang": "en",
+      "domains": ["sre"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6972913677711461,
+      "latency_ms": 55.408041007467546,
+      "top_hits": [
+        "runbook-incident-response.md § Runbook: Incident response › Roles (0.697)",
+        "runbook-incident-response.md § Runbook: Incident response (0.564)",
+        "runbook-incident-response.md § Runbook: Incident response › Closing an incident (0.521)"
+      ]
+    },
+    {
+      "id": "r-010",
+      "question": "What availability target does chat have?",
+      "lang": "en",
+      "domains": ["sre"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.579539562279087,
+      "latency_ms": 45.27391699957661,
+      "top_hits": [
+        "slo-handbook.pdf § p2 (0.580)",
+        "slo-handbook.pdf § p1 (0.508)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 8. Milestones and tasks › M1.3 — AI service: grounded chat (~8 h) (0.500)"
+      ]
+    },
+    {
+      "id": "r-011",
+      "question": "Was passiert, wenn das Fehlerbudget aufgebraucht ist?",
+      "lang": "de",
+      "domains": ["sre"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6167016398622245,
+      "latency_ms": 56.974249993800186,
+      "top_hits": [
+        "slo-handbook.pdf § p2 (0.617)",
+        "slo-handbook.pdf § p3 (0.563)",
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › Decide (0.549)"
+      ]
+    },
+    {
+      "id": "r-012",
+      "question": "What burn rate triggers a page over the one-hour window?",
+      "lang": "en",
+      "domains": ["sre"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6156079990467783,
+      "latency_ms": 54.340000002412125,
+      "top_hits": [
+        "slo-handbook.pdf § p3 (0.616)",
+        "runbook-incident-response.md § Runbook: Incident response › First 15 minutes (0.487)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 4. Assumptions and open items (0.461)"
+      ]
+    },
+    {
+      "id": "r-014",
+      "question": "How long can chat be completely down per month before we are out of budget?",
+      "lang": "en",
+      "domains": ["sre"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6101730813032988,
+      "latency_ms": 57.724375001271255,
+      "top_hits": [
+        "slo-handbook.pdf § p2 (0.610)",
+        "runbook-azure-cost-guard.md § Runbook: Azure cost guard › Budget and alerts (0.599)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 8. Milestones and tasks › M1.3 — AI service: grounded chat (~8 h) (0.531)"
+      ]
+    },
+    {
+      "id": "r-016",
+      "question": "Is it safe to run docker volume prune when the disk is full?",
+      "lang": "en",
+      "domains": ["sre", "devops"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6002971693949464,
+      "latency_ms": 55.9558339882642,
+      "top_hits": [
+        "runbook-speicherplatz-voll.md § Runbook: Speicherplatz voll › Schnelle Entlastung (0.600)",
+        "runbook-speicherplatz-voll.md § Runbook: Speicherplatz voll (0.585)",
+        "setup-installation.md § Installation guide — local development toolchain › 2. macOS (Apple Silicon) › 2.5 Docker (0.571)"
+      ]
+    },
+    {
+      "id": "r-017",
+      "question": "Ab welcher Belegung soll ein Speicherplatz-Alarm auslösen?",
+      "lang": "de",
+      "domains": ["sre"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6795947939163463,
+      "latency_ms": 58.47804099903442,
+      "top_hits": [
+        "runbook-speicherplatz-voll.md § Runbook: Speicherplatz voll › Dauerhafte Lösung (0.680)",
+        "runbook-azure-cost-guard.md § Runbook: Azure cost guard › When an alert fires (0.570)",
+        "runbook-tls-zertifikat-erneuern.md § Runbook: TLS-Zertifikat erneuern › Wann dieses Runbook gilt (0.530)"
+      ]
+    },
+    {
+      "id": "r-019",
+      "question": "Wie stelle ich ein Postgres-Backup wieder her, ohne die Live-Datenbank zu überschreiben?",
+      "lang": "de",
+      "domains": ["db"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6870687172880674,
+      "latency_ms": 74.9664579925593,
+      "top_hits": [
+        "runbook-postgres-backup-restore.md § Runbook: Postgres backup and restore › Restore into a scratch database (0.687)",
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › Database migrations (0.629)",
+        "runbook-postgres-backup-restore.md § Runbook: Postgres backup and restore › Take a manual backup (0.581)"
+      ]
+    },
+    {
+      "id": "r-020",
+      "question": "How often do we practise bringing a backup back?",
+      "lang": "en",
+      "domains": ["db"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6335969670665486,
+      "latency_ms": 50.01779200392775,
+      "top_hits": [
+        "runbook-postgres-backup-restore.md § Runbook: Postgres backup and restore › Restore drill (0.634)",
+        "runbook-postgres-backup-restore.md § Runbook: Postgres backup and restore › Backup policy (0.623)",
+        "runbook-postgres-backup-restore.md § Runbook: Postgres backup and restore › Take a manual backup (0.609)"
+      ]
+    },
+    {
+      "id": "r-021",
+      "question": "Which columns does the documents table in Postgres have?",
+      "lang": "en",
+      "domains": ["db"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5573313377466234,
+      "latency_ms": 53.686333005316556,
+      "top_hits": [
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 7. Contracts (draft — generated OpenAPI/JSON Schema is authoritative) › 7.4 Postgres `app.documents` (Drizzle schema) (0.557)",
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › Database migrations (0.547)",
+        "setup-installation.md § Installation guide — local development toolchain › 6. Per-technology notes › Infrastructure — Docker images (`infra/compose/docker-compose.yml`) (0.517)"
+      ]
+    },
+    {
+      "id": "r-023",
+      "question": "In which order do I rotate a client secret without downtime?",
+      "lang": "en",
+      "domains": ["security"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.7231413137318835,
+      "latency_ms": 47.17595799593255,
+      "top_hits": [
+        "runbook-secret-rotation.md § Runbook: Rotate secrets and API keys › Zero-downtime order of operations (0.723)",
+        "runbook-secret-rotation.md § Runbook: Rotate secrets and API keys › Keycloak client secret (0.660)",
+        "runbook-secret-rotation.md § Runbook: Rotate secrets and API keys › Rotation schedule (0.625)"
+      ]
+    },
+    {
+      "id": "r-024",
+      "question": "Ein API-Key wurde versehentlich in Git committet. Was tun?",
+      "lang": "de",
+      "domains": ["security"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6523549611885631,
+      "latency_ms": 59.470749998581596,
+      "top_hits": [
+        "runbook-secret-rotation.md § Runbook: Rotate secrets and API keys › Leaked secret (0.652)",
+        "fs100-readme.md § FS100 — the FULL FULL stack › Contributing (0.574)",
+        "runbook-secret-rotation.md § Runbook: Rotate secrets and API keys › LLM provider key (0.558)"
+      ]
+    },
+    {
+      "id": "r-026",
+      "question": "How do I check when a TLS certificate expires?",
+      "lang": "en",
+      "domains": ["security", "devops"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6758251340862347,
+      "latency_ms": 49.78287499397993,
+      "top_hits": [
+        "runbook-tls-zertifikat-erneuern.md § Runbook: TLS-Zertifikat erneuern › Ablaufdatum prüfen (0.676)",
+        "runbook-tls-zertifikat-erneuern.md § Runbook: TLS-Zertifikat erneuern (0.635)",
+        "runbook-tls-zertifikat-erneuern.md § Runbook: TLS-Zertifikat erneuern › Automatische Erneuerung mit cert-manager reparieren (0.626)"
+      ]
+    },
+    {
+      "id": "r-029",
+      "question": "Why are embeddings computed inside the AI service instead of calling a hosted embedding API?",
+      "lang": "en",
+      "domains": ["ai", "architecture"],
+      "answerable": true,
+      "relevant_count": 2,
+      "gains": [0, 0, 1, 1, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6135071303515939,
+      "latency_ms": 73.73225000628736,
+      "top_hits": [
+        "runbook-embedding-model-swap.md § Runbook: Swap the embedding model › Background (0.614)",
+        "adr-0002-ai-layer-in-python.md § ADR-0002: All AI code lives in a Python service; NestJS is the product API › Decision (0.602)",
+        "adr-0003-embeddings-in-process.md § ADR-0003: Embeddings computed in-process with fastembed › Alternatives considered (0.600)"
+      ]
+    },
+    {
+      "id": "r-030",
+      "question": "Warum braucht ein E5-Modell die Präfixe query und passage?",
+      "lang": "de",
+      "domains": ["ai"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6544228114425084,
+      "latency_ms": 58.970416997908615,
+      "top_hits": [
+        "runbook-embedding-model-swap.md § Runbook: Swap the embedding model › Pitfalls (0.654)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 3. Decisions (0.537)",
+        "adr-0003-embeddings-in-process.md § ADR-0003: Embeddings computed in-process with fastembed › Decision (0.515)"
+      ]
+    },
+    {
+      "id": "r-031",
+      "question": "What happens to the indexed documents when I change EMBEDDING_MODEL?",
+      "lang": "en",
+      "domains": ["ai", "mlops"],
+      "answerable": true,
+      "relevant_count": 2,
+      "gains": [1, 0, 0, 0, 0, 1, 0, 0, 0, 0],
+      "top1_score": 0.6148578408425076,
+      "latency_ms": 58.420250003109686,
+      "top_hits": [
+        "runbook-embedding-model-swap.md § Runbook: Swap the embedding model › Background (0.615)",
+        "runbook-embedding-model-swap.md § Runbook: Swap the embedding model › Roll back (0.592)",
+        "adr-0003-embeddings-in-process.md § ADR-0003: Embeddings computed in-process with fastembed › Decision (0.579)"
+      ]
+    },
+    {
+      "id": "r-032",
+      "question": "How do I undo an embedding model switch?",
+      "lang": "en",
+      "domains": ["ai", "mlops"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6638219658569386,
+      "latency_ms": 46.587541000917554,
+      "top_hits": [
+        "runbook-embedding-model-swap.md § Runbook: Swap the embedding model › Roll back (0.664)",
+        "adr-0003-embeddings-in-process.md § ADR-0003: Embeddings computed in-process with fastembed › Decision (0.585)",
+        "runbook-embedding-model-swap.md § Runbook: Swap the embedding model › Switch (0.579)"
+      ]
+    },
+    {
+      "id": "r-034",
+      "question": "Wie wechsle ich vom OpenRouter auf den Hugging-Face-Router?",
+      "lang": "de",
+      "domains": ["ai"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6850925016422256,
+      "latency_ms": 74.47895799123216,
+      "top_hits": [
+        "runbook-llm-provider-outage.md § Runbook: LLM provider errors and outages › Switch the provider (0.685)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › Appendix A — Environment variables (`.env.example`) (0.593)",
+        "setup-installation.md § Installation guide — local development toolchain › 1. What you need — and what you don't (0.580)"
+      ]
+    },
+    {
+      "id": "r-036",
+      "question": "What must a candidate embedding model show before it may replace the current one?",
+      "lang": "en",
+      "domains": ["mlops", "ai"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5857733714620246,
+      "latency_ms": 56.355959008214995,
+      "top_hits": [
+        "adr-0003-embeddings-in-process.md § ADR-0003: Embeddings computed in-process with fastembed › Decision (0.586)",
+        "runbook-embedding-model-swap.md § Runbook: Swap the embedding model › Background (0.574)",
+        "runbook-embedding-model-swap.md § Runbook: Swap the embedding model › Before you switch (0.559)"
+      ]
+    },
+    {
+      "id": "r-038",
+      "question": "What is the monthly Azure budget and when do alerts fire?",
+      "lang": "en",
+      "domains": ["cloud"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.7390652707211334,
+      "latency_ms": 55.541875000926666,
+      "top_hits": [
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 8. Milestones and tasks › M1.7 — Azure readiness spike (mandatory, ~4 h, week 2) (0.739)",
+        "runbook-azure-cost-guard.md § Runbook: Azure cost guard › Budget and alerts (0.678)",
+        "runbook-azure-cost-guard.md § Runbook: Azure cost guard (0.583)"
+      ]
+    },
+    {
+      "id": "r-039",
+      "question": "Welche Tags muss jede Azure-Ressource tragen?",
+      "lang": "de",
+      "domains": ["cloud"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6599012542438787,
+      "latency_ms": 46.92929200245999,
+      "top_hits": [
+        "runbook-azure-cost-guard.md § Runbook: Azure cost guard › Tagging (0.660)",
+        "fs100-readme.md § FS100 — the FULL FULL stack › Roadmap (0.546)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 3. Decisions (0.535)"
+      ]
+    },
+    {
+      "id": "r-040",
+      "question": "A spending notification just arrived — where do I look first?",
+      "lang": "en",
+      "domains": ["cloud"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5730853074637786,
+      "latency_ms": 47.56500000075903,
+      "top_hits": [
+        "slo-handbook.pdf § p3 (0.573)",
+        "runbook-azure-cost-guard.md § Runbook: Azure cost guard › Budget and alerts (0.567)",
+        "runbook-azure-cost-guard.md § Runbook: Azure cost guard › When an alert fires (0.561)"
+      ]
+    },
+    {
+      "id": "r-043",
+      "question": "Warum nutzt das Projekt pnpm statt npm-Workspaces?",
+      "lang": "de",
+      "domains": ["architecture", "dev"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6464384951955816,
+      "latency_ms": 56.36054099886678,
+      "top_hits": [
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 3. Decisions (0.646)",
+        "adr-0001-monorepo-and-pnpm.md § ADR-0001: Monorepo with pnpm workspaces, uv for Python › Decision (0.581)",
+        "adr-0001-monorepo-and-pnpm.md § ADR-0001: Monorepo with pnpm workspaces, uv for Python › Alternatives considered (0.576)"
+      ]
+    },
+    {
+      "id": "r-044",
+      "question": "Why is there no build orchestrator like Nx or Turborepo?",
+      "lang": "en",
+      "domains": ["architecture", "dev"],
+      "answerable": true,
+      "relevant_count": 2,
+      "gains": [1, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5676929792661696,
+      "latency_ms": 56.70241700136103,
+      "top_hits": [
+        "adr-0001-monorepo-and-pnpm.md § ADR-0001: Monorepo with pnpm workspaces, uv for Python › Decision (0.568)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 3. Decisions (0.497)",
+        "adr-0001-monorepo-and-pnpm.md § ADR-0001: Monorepo with pnpm workspaces, uv for Python › Alternatives considered (0.486)"
+      ]
+    },
+    {
+      "id": "r-045",
+      "question": "Which ports do Keycloak, Qdrant and Phoenix listen on?",
+      "lang": "en",
+      "domains": ["devops"],
+      "answerable": true,
+      "relevant_count": 2,
+      "gains": [1, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6227341946942744,
+      "latency_ms": 55.85962499026209,
+      "top_hits": [
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 5. Architecture (Phase 1) (0.623)",
+        "setup-installation.md § Installation guide — local development toolchain › 6. Per-technology notes › Infrastructure — Docker images (`infra/compose/docker-compose.yml`) (0.622)",
+        "setup-startup.md § Startup guide — run FS100 locally › 3. What runs where (0.602)"
+      ]
+    },
+    {
+      "id": "r-048",
+      "question": "Wie viel Arbeitsspeicher sollte die Docker-VM auf dem Mac bekommen?",
+      "lang": "de",
+      "domains": ["dev"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6566717712277934,
+      "latency_ms": 55.46629200398456,
+      "top_hits": [
+        "setup-installation.md § Installation guide — local development toolchain › 2. macOS (Apple Silicon) › 2.5 Docker (0.657)",
+        "setup-installation.md § Installation guide — local development toolchain › 2. macOS (Apple Silicon) › 2.5 Docker (0.647)",
+        "setup-installation.md § Installation guide — local development toolchain › 1. What you need — and what you don't (0.536)"
+      ]
+    },
+    {
+      "id": "r-049",
+      "question": "The login page says 'Cookie not found' — what is wrong?",
+      "lang": "en",
+      "domains": ["dev"],
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6179232352228512,
+      "latency_ms": 49.69866600004025,
+      "top_hits": [
+        "setup-startup.md § Startup guide — run FS100 locally › 8. Troubleshooting (0.618)",
+        "setup-startup.md § Startup guide — run FS100 locally › 4. Check that everything works (0.524)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › Appendix A — Environment variables (`.env.example`) (0.522)"
+      ]
+    },
+    {
+      "id": "r-050",
+      "question": "Which seed users exist and which roles do they have?",
+      "lang": "en",
+      "domains": ["security", "dev"],
+      "answerable": true,
+      "relevant_count": 2,
+      "gains": [1, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5745455309333524,
+      "latency_ms": 53.30779199721292,
+      "top_hits": [
+        "setup-startup.md § Startup guide — run FS100 locally › 3. What runs where (0.575)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 8. Milestones and tasks › M1.1 — Local infra + auth walking skeleton (~8 h) (0.566)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 7. Contracts (draft — generated OpenAPI/JSON Schema is authoritative) › 7.7 Keycloak realm `kb` (0.507)"
+      ]
+    },
+    {
+      "id": "u-001",
+      "question": "How do I configure Kafka consumer groups for the ingestion queue?",
+      "lang": "en",
+      "domains": ["devops", "architecture"],
+      "answerable": false,
+      "relevant_count": 0,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5138683030914348,
+      "latency_ms": 48.22033300297335,
+      "top_hits": [
+        "adr-0003-embeddings-in-process.md § ADR-0003: Embeddings computed in-process with fastembed › Context (0.514)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 8. Milestones and tasks › M1.1 — Local infra + auth walking skeleton (~8 h) (0.473)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › Appendix A — Environment variables (`.env.example`) (0.468)"
+      ]
+    },
+    {
+      "id": "u-004",
+      "question": "How do I set up a MongoDB replica set?",
+      "lang": "en",
+      "domains": ["db"],
+      "answerable": false,
+      "relevant_count": 0,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5174890121497828,
+      "latency_ms": 46.78304199478589,
+      "top_hits": [
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 6. Repository layout (0.517)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 8. Milestones and tasks › M1.1 — Local infra + auth walking skeleton (~8 h) (0.513)",
+        "setup-installation.md § Installation guide — local development toolchain › 5. Verify the toolchain (0.510)"
+      ]
+    },
+    {
+      "id": "u-005",
+      "question": "Welche GPU-Instanz verwenden wir für das Fine-Tuning der Embeddings?",
+      "lang": "de",
+      "domains": ["mlops"],
+      "answerable": false,
+      "relevant_count": 0,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5783498687184296,
+      "latency_ms": 67.78204200963955,
+      "top_hits": [
+        "adr-0003-embeddings-in-process.md § ADR-0003: Embeddings computed in-process with fastembed › Decision (0.578)",
+        "adr-0003-embeddings-in-process.md § ADR-0003: Embeddings computed in-process with fastembed › Alternatives considered (0.545)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 3. Decisions (0.533)"
+      ]
+    },
+    {
+      "id": "u-006",
+      "question": "How do I configure SAML single sign-on with Azure AD in Keycloak?",
+      "lang": "en",
+      "domains": ["security"],
+      "answerable": false,
+      "relevant_count": 0,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5329252766017518,
+      "latency_ms": 56.98666600801516,
+      "top_hits": [
+        "setup-startup.md § Startup guide — run FS100 locally › 3. What runs where (0.533)",
+        "setup-startup.md § Startup guide — run FS100 locally › 3. What runs where (0.533)",
+        "runbook-secret-rotation.md § Runbook: Rotate secrets and API keys › Keycloak client secret (0.523)"
+      ]
+    },
+    {
+      "id": "u-009",
+      "question": "Which Grafana dashboard shows the Qdrant memory usage?",
+      "lang": "en",
+      "domains": ["sre"],
+      "answerable": false,
+      "relevant_count": 0,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.4944164516745297,
+      "latency_ms": 55.52687500312459,
+      "top_hits": [
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 8. Milestones and tasks › M1.2 — AI service: ingestion, retrieval, evaluation (~18 h) (0.494)",
+        "runbook-embedding-model-swap.md § Runbook: Swap the embedding model › Background (0.464)",
+        "setup-installation.md § Installation guide — local development toolchain › 6. Per-technology notes › AI service — `apps/ai-service` (0.463)"
+      ]
+    },
+    {
+      "id": "u-010",
+      "question": "How do I migrate the frontend from Angular to React?",
+      "lang": "en",
+      "domains": ["dev"],
+      "answerable": false,
+      "relevant_count": 0,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6068550339225476,
+      "latency_ms": 54.375541003537364,
+      "top_hits": [
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 5. Architecture (Phase 1) (0.607)",
+        "fs100-readme.md § FS100 — the FULL FULL stack › Repository layout (0.597)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 8. Milestones and tasks › M1.5 — Angular UI (~13 h) (0.578)"
+      ]
+    }
+  ]
+}

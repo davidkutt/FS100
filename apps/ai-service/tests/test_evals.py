@@ -112,6 +112,7 @@ def test_golden_set_is_well_formed_and_every_label_resolves() -> None:
     assert {i.lang for i in items} == {"de", "en"}
     for item in items:
         assert item.answerable == bool(item.relevant), item.id
+        assert item.split, item.id  # D51: every item is either tuning or held-out data
         for label in item.relevant:
             assert any(
                 label.matches(label.doc, s.page, s.heading) for s in sections.get(label.doc, [])
@@ -128,6 +129,16 @@ def test_runner_reports_on_the_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
     assert report.threshold is not None
     assert {"de", "en"} == set(report.by_lang)
     assert "| **overall** |" in to_markdown(report)
+
+
+def test_runner_runs_only_the_requested_split(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(embeddings, "TextEmbedding", FakeTextEmbedding)
+
+    report = run(Embedder("fake-e5"), DATASET, CORPUS, 1000, 150, split="test")
+
+    test_ids = {i.id for i in load_dataset(DATASET) if i.split == "test"}
+    assert report.dataset == "retrieval_v1-test"
+    assert {r.id for r in report.items} == test_ids
 
 
 def test_regression_gate_allows_the_tolerance_and_flags_drops() -> None:

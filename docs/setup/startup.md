@@ -289,6 +289,7 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`fe
 | `pnpm stack:up:full` | Same plus web, api and ai-service as containers (Mode B), rebuilt if changed |
 | `pnpm stack:ps` | Container status and health |
 | `pnpm stack:logs` / `pnpm stack:logs keycloak` | Follow logs (all services or one) |
+| `pnpm mem` | Memory of the apps started by `pnpm dev` (RSS incl. child processes) and of each container |
 | `pnpm stack:down` | Stop and remove containers; **keeps** data volumes |
 | `pnpm stack:reset` | Stop and **delete all local data** (Postgres incl. Keycloak, Qdrant, Phoenix, model cache of Mode B) |
 

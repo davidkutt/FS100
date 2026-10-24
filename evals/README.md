@@ -7,6 +7,7 @@ judged by an eval run, not by impression.
 pnpm eval:retrieval                                    # model + chunking from .env defaults
 pnpm eval:retrieval --model intfloat/multilingual-e5-small --model BAAI/bge-m3 \
                     --chunk 1000:150 --chunk 500:75     # benchmark: every model × every chunking
+pnpm eval:retrieval --split dev                        # tuning items only; `test` at milestone ends
 ```
 
 The runner (`kb-eval retrieval` in `apps/ai-service`) ingests the corpus listed in
@@ -33,7 +34,7 @@ One JSON object per line (plan.md §7.6):
 
 ```json
 {"id":"r-017","question":"…","lang":"de","domains":["devops"],"answerable":true,
- "relevant":[{"doc":"runbook-rollback.md","heading":"Rollback"}],"notes":"paraphrase"}
+ "relevant":[{"doc":"runbook-rollback.md","heading":"Rollback"}],"notes":"paraphrase","split":"dev"}
 ```
 
 - `relevant` labels a **document + heading** (matches any level of the chunk's heading path) or
@@ -41,6 +42,9 @@ One JSON object per line (plan.md §7.6):
 - Mix item types and say which in `notes`: direct lookup, paraphrase without keyword overlap,
   cross-language (DE ↔ EN), multi-chunk (several labels), unanswerable (`answerable: false`,
   `relevant: []`, ideally a near miss).
+- `split` (plan-phase-3.md D51): `dev` (36 items) is for tuning, `test` (24) only for the numbers a
+  milestone reports, so they stay unseen. Assigned once (seed 42, stratified by first domain, language
+  and item type); new items get theirs when they are written. Baselines: [`baselines/`](baselines/).
 - `tests/test_evals.py` checks that every label resolves to a section of the corpus.
 
 ## CI gate
@@ -144,5 +148,5 @@ tools), `needs_tools` accuracy, cost and latency, per domain.
 Datasets are frozen once a run has used them. Never edit items to make a run look better: fix a wrong
 label or add items only in a new version (`*_v2.jsonl`), noting what changed and why, and re-run the
 baseline on it. Fixture scenarios are part of a task's input: change them only together with a new
-dataset version.
-Phase 3 adds a separate tuning subset, so the test items stay unseen.
+dataset version. The `split` field was added to `retrieval_v1` once (M3a.0); questions and labels are
+unchanged.

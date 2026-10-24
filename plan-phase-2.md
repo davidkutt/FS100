@@ -801,6 +801,13 @@ contract check, cost caps, gap signals (D49), README.
 
 ## 12. Hand-off to Phase 3
 
+**Status at hand-off (2026-10-23, M3a.0).** M2.0–M2.8 are code-complete. Open, all by hand: the README GIF
+(M2.7), demo step 11 in Claude Code (M2.8) and the fresh-clone demo run; unticked §10 boxes were not
+re-checked for the hand-off. Deviations that reach Phase 3: ADR-0014 went to M2.8, so Phase 3's ADRs start at
+0015 (`plan-phase-3.md` renumbered); bge-m3 runs in fastembed as a custom model over the ONNX export of the
+Hugging Face repo (CLS pooling), whose graph also returns token embeddings (`plan-phase-3.md` A15); Phase 3
+starts 2026-10-23 instead of mid-February 2027.
+
 - Tool groups + router → **skills** with progressive disclosure (P3a)
 - Router + model registry → **model routing / cascades** (P3b)
 - Agent eval runner → **LLM-judge generation eval** and the full **CI gate** (P3b)
