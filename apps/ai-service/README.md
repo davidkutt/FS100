@@ -18,25 +18,39 @@ token for system calls; `sub` and realm roles come from that token):
 | Endpoint | What it does |
 |---|---|
 | `GET /healthz` · `GET /readyz` | liveness · readiness (embedding model loaded, Qdrant alias reachable) |
-| `POST /v1/ingest` | multipart `file` (PDF/MD/TXT), `doc_id`, `owner_id`, `domains` (repeat the field), `topics?` (taxonomy ids), `title?` → parse, chunk, embed, upsert; re-ingest replaces |
+| `POST /v1/documents` | multipart `file` (PDF/MD/TXT, ≤ 20 MB), `doc_id`, `owner_id`, `domains` (repeat the field), `topics?` (taxonomy ids), `title?` → original stored in Postgres `ai`, ingest queued → `202 {job_id, version}`; the same bytes keep their version, new bytes get the next one (D52) |
+| `GET /v1/jobs/{job_id}` | `{state: queued\|parsing\|embedding\|building\|evaluating\|ready\|failed\|cancelled, error?, result?}`; `result` is the ingest result or the re-index report |
+| `POST /v1/reindex` · `GET /v1/reindex` · `POST /v1/reindex/rollback` | admin only (role in the exchanged token): queue a re-index `{reason, force}` (force needs a reason) → `202 {job_id}`; alias target + latest runs with reports; point the alias back at the collection the last swap replaced (409 if none) (D55) |
 | `POST /v1/search` | `{query, top_k=5, score_threshold?, domains?, doc_ids?}` → hits with score, page, heading path |
 | `POST /v1/chat` | `{messages:[{role, content}], domains?}` → SSE `sources`, `token`…, `done` \| `error` (plan.md §7.3); retrieval uses `RETRIEVAL_TOP_K` / `RETRIEVAL_SCORE_THRESHOLD` |
 | `POST /v1/agent` | `{conversation_id, messages:[{role, parts:[{type:"text", text}]}], mode="agent"\|"rag", model?, domains?, resume?:{signed_action, decision, note?, args}}` → SSE v2 `step`, `tool_call`, `tool_result`, `sources`, `token`…, `approval_required`, `done` (+ `error`) (plan-phase-2 §7.3); a write call ends the turn with an HMAC-signed action (`APPROVAL_SIGNING_KEY`, `APPROVAL_TTL_MIN`), `resume` continues it after checking signature, expiry, `sub`, conversation and args hash (else 422, ADR-0008); `mode=rag` runs the `/v1/chat` pipeline as baseline; limits `AGENT_*` (ADR-0007) |
 | `PATCH /v1/documents/{doc_id}/labels` | `{domains?, topics?}` → payload update on every chunk, no re-embedding → 204; unknown topics → 422 |
 | `GET /v1/models` · `GET /v1/tools` | model registry (`MODELS_CONFIG`) and tool registry with `min_role`; `model` on `/v1/agent` must be a registry id the caller's role reaches (tool-capable in agent mode), else 422; none = `LLM_MODEL` |
-| `DELETE /v1/documents/{doc_id}` | removes all points of a document → 204 |
+| `DELETE /v1/documents/{doc_id}` | cancels a queued ingest, removes the points from every `kb__*` collection (a rollback cannot bring them back) and the stored originals → 204; 409 while its job runs |
 | `GET /v1/status` | authenticated status for the API's admin card (one span to Phoenix) |
 | `/mcp` | own MCP server (SDK v2, stateless Streamable HTTP, ADR-0010): tools `search_knowledge_base`, `get_document`, `list_sources`, `ingest_url` (asks for confirmation first, then calls the API's `/internal/documents/from-url`), resource `kb://documents/{doc_id}`; Bearer with `aud=MCP_RESOURCE_URL` and scope `kb:read` (`kb:write` + editor for `ingest_url`), else 401/403 with a `WWW-Authenticate` challenge |
 | `GET /.well-known/oauth-protected-resource/mcp` | RFC 9728 metadata of `/mcp` (public) |
 | `GET /` · `/docs` | service info · OpenAPI UI |
 
 On startup the service loads `EMBEDDING_MODEL` (first run downloads it into `EMBEDDING_CACHE_DIR`,
-0.5–2.3 GB) and points the Qdrant alias `kb_current` at the model's collection `kb__<model>__<dim>`;
-`/readyz` stays 503 until both are done. Chat calls the LLM named by `LLM_PROVIDER`: `openai_compat`
+0.5–2.3 GB), creates the Postgres database `ai` if missing and migrates it (`AI_DATABASE_URL`;
+`:memory:` = in-process, tests), starts the in-process job worker (`JOBS_INPROCESS_WORKER`, one job at a
+time) and, only if the Qdrant alias `kb_current` does not exist yet, points it at a new empty collection
+`kb__v2__<model>__<dim>__<timestamp>` (D54); after that only `pnpm kb:reindex` moves it. `/readyz` stays
+503 until the model and the alias are there. Chat calls the LLM named by `LLM_PROVIDER`: `openai_compat`
 (needs `LLM_API_KEY` + `LLM_MODEL`, else startup fails; OpenRouter or the HF router via `LLM_BASE_URL`)
-or `fake` (deterministic, free — the default when unset, used by tests and CI). A different model therefore starts with an empty collection —
-see `data/sample-docs/runbook-embedding-model-swap.md`. `QDRANT_URL=:memory:` runs Qdrant in-process
-(tests, evals).
+or `fake` (deterministic, free — the default when unset, used by tests and CI). A different
+`EMBEDDING_MODEL` needs `pnpm kb:reindex --force --reason …` (the gate cannot compare across models; the
+service logs a warning until then). `QDRANT_URL=:memory:` runs Qdrant in-process (tests, evals).
+
+**Re-index (D55, ADR-0015):** `pnpm kb:backfill-originals` stores the originals of documents indexed
+before Phase 3 (found in `data/sample-docs/` by SHA-256; the rest are listed for re-upload).
+`pnpm kb:reindex [--force --reason "…"]` queues the job for the running service's worker and prints the
+report: build from the stored originals → golden `dev` + `test` against the new and the live collection
+→ swap only if no `test` metric (hit@5, MRR@10, nDCG@10, abstention) drops by more than 0.02 and every
+live document has an original; a refused build is deleted. `pnpm kb:reindex --rollback` re-points the
+alias. Runs started on the admin page are in the API's audit log; CLI runs record `cli:<user>` and the
+reason in the run report only.
 
 **Evals:** `pnpm eval:retrieval` (CLI `kb-eval retrieval`) — see [`evals/README.md`](../../evals/README.md).
 
@@ -47,6 +61,8 @@ provider protocol, `openai_compat`, `fake` · `prompts/` prompt files with `id`/
 parallel read tools, retries, cancellation), `mode=rag` adapter · `tools.py` `ToolSpec`, role policy,
 untrusted-output wrapper, KB tools via MCP · `mcp_server.py` the `/mcp` server · `mcp_client.py` calls it
 with the caller's hop-2 token from `tokens.py` (Keycloak exchange as `kb-ai`, cached) ·
-`evals/` metrics + runner · `tests/` (no network, no model download: fastembed is faked, Qdrant runs in
+`storage.py` database `ai`: originals, job progress, migrations · `jobs.py` Procrastinate tasks (ingest,
+re-index, stalled-job retry) and the worker · `reindex.py` build, gate, swap, rollback · `admin.py`
+`kb-admin` CLI · `evals/` metrics + runner · `tests/` (no network, no model download: fastembed is faked, Qdrant runs in
 memory, the LLM is `fake` or a mocked HTTP endpoint). Add dependencies with `uv add <pkg>` (runtime) or
 `uv add --dev <pkg>`.

@@ -518,15 +518,43 @@ green" before M3a.1 was not re-run (paid LLM calls).
 
 ### M3a.1 — Stored originals, queue, collection v2, re-index (~12 h)
 
-- [ ] `ai` database + migrations; `source_documents`; backfill from `data/sample-docs/` (documents without a local
+- [x] `ai` database + migrations; `source_documents`; backfill from `data/sample-docs/` (documents without a local
   source are listed for re-upload or re-fetch)
-- [ ] Procrastinate app with in-process worker, queues, job states, idempotency, retries, cancel
-- [ ] `POST /v1/documents`, `GET /v1/jobs/{id}`; NestJS upload path switched to it; job states in the documents UI
-- [ ] Collection v2 (D54): versioned IDs, new payload and indexes
-- [ ] `kb-reindex` with the eval gate (D55), report, `--rollback`, `--force` + reason → audit; admin endpoints and page
-- [ ] Tests: idempotent jobs, worker crash mid-job → resume, the gate refuses a deliberately worse build, rollback
+- [x] Procrastinate app with in-process worker, queues, job states, idempotency, retries, cancel
+- [x] `POST /v1/documents`, `GET /v1/jobs/{id}`; NestJS upload path switched to it; job states in the documents UI
+- [x] Collection v2 (D54): versioned IDs, new payload and indexes
+- [x] `kb-reindex` with the eval gate (D55), report, `--rollback`, `--force` + reason → audit; admin endpoints and page
+- [x] Tests: idempotent jobs, worker crash mid-job → resume, the gate refuses a deliberately worse build, rollback
 
 **Acceptance:** demo steps 1 and 7; a re-index needs no re-upload; rollback takes under a minute.
+
+**Done 2026-10-24.** Checked end to end on throwaway state (API :3001, AI :8001 with bge-m3, own databases and
+alias): 17 documents uploaded through NestJS → queue in 177 s, none failed; `kb-admin reindex` built from the stored
+originals in 188 s and swapped, reproducing the `p2-dense` baselines exactly (`test` nDCG@10 0.780, hit@5 0.95; `dev`
+0.907); the same through `/api/admin/reindex` with both audit rows; rollback 0.04 s (API) and 1.0 s (CLI), two in a
+row walk the chain back. Memory (D50): batch cap 16 — the eval run's ingest peak is 2.52 GB (3.84 GB at fastembed's
+default 256, 3.02 GB at 32; same speed and metrics); the AI service with its in-process worker idles at 1.71 GB and
+peaks at 2.13 GB while ingesting.
+
+Deviations:
+- `POST /v1/ingest` is removed, not kept: nothing calls it; the curator (M3b.9) defers the ingest job directly.
+- `source_documents` has no `parsed` / `parser` / `parser_version` yet — they arrive with Docling (M3a.5). Labels are not
+  stored with the originals: a re-index takes them from the live collection's payload.
+- Job states add `building`, `evaluating`, `cancelled`; `contextualizing` comes in M3a.6. No `progress` field. Job ids
+  are integers and bodies snake_case (`{job_id, version}`). The report comes with `GET /v1/jobs/{id}` and
+  `GET /v1/reindex` (runs + reports), so there is no `/report` route; NestJS has `GET /api/admin/reindex` instead of
+  `/:jobId`.
+- Queues `ingest`, `reindex`, `maintenance` (stalled-job retry); `curator` and `eval` come with their milestones. No
+  `JOBS_INGEST_CONCURRENCY` or `QDRANT_COLLECTION_PREFIX`: one job at a time and `kb__v2` are constants; ingest and
+  re-index also share a lock.
+- Payload v2 gets `version`, `kind`, `lifecycle`, `priority`, `priority_topics` now; `lang`, `parent_id`,
+  `section_path`, chunk-level `topics` and the sparse vector come with M3a.2/5/6. NestJS `documents` gets only
+  `version` and `job_id`; its status drops `processing` for the job states.
+- NestJS syncs job states when documents are read (list, relabel, delete), not with a poller.
+- Deletes and relabels reach every `kb__*` collection, so a rollback cannot resurrect a deleted document. A refused build
+  is deleted; replaced collections are never deleted automatically (no 14-day cleanup yet).
+- A different embedding model cannot pass the gate (nothing to compare): it needs `--force --reason`.
+- CLI runs are not in `audit_log` (no user token); they record `cli:<user>` and the reason in the run report.
 
 ### M3a.2 — Hybrid search (~5 h)
 
@@ -828,8 +856,7 @@ user control over memory (if memory ships), curator promotion eval + approval + 
 # --- ai-service (FastAPI) ---
 AI_DATABASE_URL=postgresql://postgres:dev-only-change-me@localhost:5432/ai
 JOBS_INPROCESS_WORKER=true                 # false from P4 (separate worker Deployment)
-JOBS_INGEST_CONCURRENCY=1
-QDRANT_COLLECTION_PREFIX=kb__v2
+GOLDEN_DATASET=../../evals/datasets/retrieval_v1.jsonl   # the re-index gate (M3a.1; golden_v2 in M3a.10)
 SPARSE_MODE=bm25_server                    # bm25_server | bm25_client | bgem3 (ADR-0016)
 BM25_LANGUAGE_NEUTRAL=true
 RERANKER_MODEL=                            # ADR-0017

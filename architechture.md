@@ -1,7 +1,7 @@
 # Architecture & Design Decisions
 
 > **Project:** `kb-agent` (working title) — an assistant for the "Dev of the future".
-> **Status:** living document · last updated 2026-10-13 · Phase 1 details in `plan.md` · significant decisions also get an ADR in `docs/adr/`.
+> **Status:** living document · last updated 2026-10-24 · Phase 1 details in `plan.md` · significant decisions also get an ADR in `docs/adr/`.
 > **Phase** column = when a decision takes effect (1–6). `→` means introduced in one phase and extended in a later one.
 
 ---
@@ -74,9 +74,9 @@
 | SVC-3 | The Python AI service owns all AI logic: parsing, chunking, embeddings, retrieval, prompting, LLM calls, evaluation, tracing; later the agent loop, tools and MCP client | AI code, evals and traces live in one language and process; retrieval tuning without network hops; most AI tooling is Python-first | 1→2 |
 | SVC-4 | The AI service is internal only | Smaller attack surface; every request passes NestJS auth | 1 |
 | SVC-5 | Chat is stateless in Phase 1 (client sends the last N messages); persisted conversations follow in NestJS | Keeps the first slice small; conversations belong to the product domain | 1→2 |
-| SVC-6 | Ingestion: NestJS accepts the upload, returns `202 Accepted` and runs a background task that streams the file to the AI service; a real queue follows later | Smallest thing that works end-to-end; the async API shape already fits a queue | 1→3 |
-| SVC-7 | Boot-time recovery marks jobs stuck in `pending`/`processing` as `failed` | In-process background tasks are lost on restart; the status must stay truthful | 1 |
-| SVC-8 | Original files are not stored in Phase 1 (metadata and chunks only) | Avoids a blob-storage dependency until the cloud phase | 1 |
+| SVC-6 | Ingestion: NestJS accepts the upload, returns `202 Accepted` and hands the file to the AI service, which stores it and queues an ingest job (Procrastinate in Postgres `ai`, worker in the AI process); NestJS copies the job state into the row | Smallest thing that works end-to-end in P1; the queue (P3, D53) keeps the same async API shape | 1→3 |
+| SVC-7 | Boot-time recovery marks uploads the AI service never received (`pending`) as `failed`; queued jobs resume, a job whose worker died runs again | The status must stay truthful; jobs are idempotent per document version (D54) | 1→3 |
+| SVC-8 | Original files are not stored in Phase 1 (metadata and chunks only); from P3 the AI service keeps them in Postgres `ai` (`bytea`, ≤ 20 MB), so a re-index needs no re-upload | Avoids a blob-storage dependency until re-indexing needs the originals (D52); Blob storage can replace the column in P5 | 1→3 |
 
 ## 5. APIs, streaming & contracts
 

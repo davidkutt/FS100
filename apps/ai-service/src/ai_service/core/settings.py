@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     qdrant_url: str = "http://localhost:6333"  # ":memory:" = in-process Qdrant (tests, evals)
     qdrant_api_key: str | None = None
     qdrant_alias: str = "kb_current"
+    # Originals and jobs (D52, D53); created on boot if missing. ":memory:" = in-process (tests).
+    ai_database_url: str = "postgresql://postgres:dev-only-change-me@localhost:5432/ai"
+    jobs_inprocess_worker: bool = True  # false from P4: a separate worker Deployment
+    golden_dataset: str = "../../evals/datasets/retrieval_v1.jsonl"  # the re-index gate (D55)
     embedding_model: str = "BAAI/bge-m3"
     embedding_cache_dir: str = ".cache/fastembed"
     chunk_size: int = 1000

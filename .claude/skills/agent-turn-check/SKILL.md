@@ -43,7 +43,7 @@ Run from the repo root. Scratch files go to the session scratchpad (`$S` below).
 
 - Many `no hits` usually means the local corpus, not the harness: count the documents with
   `curl -s -X POST localhost:6333/collections/kb_current/facet -H 'content-type: application/json' -d '{"key":"doc_id","limit":100}'`
-  and ingest `data/sample-docs/*` via `/v1/ingest` (see docs/setup/startup.md §4) if the runbooks are missing.
+  and upload `data/sample-docs/*` via `/v1/documents` (see docs/setup/startup.md §4) if the runbooks are missing.
 - Parallel tool spans start at the same time: build the tree from `parent_id`, never from start order.
 - Phoenix REST: `GET localhost:6006/v1/projects/default/spans?trace_id=<id>&limit=100` → `data[]` with
   `context.span_id`, `parent_id`, `span_kind`, `attributes`.

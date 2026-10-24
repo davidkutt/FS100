@@ -116,6 +116,38 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/reindex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: operations["ReindexController_status"];
+        put?: never;
+        post: operations["ReindexController_start"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/reindex/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: operations["ReindexController_rollback"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/models": {
         parameters: {
             query?: never;
@@ -371,7 +403,9 @@ export interface components {
             domains: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[];
             topics: string[];
             /** @enum {string} */
-            status: "pending" | "processing" | "ready" | "failed";
+            status: "pending" | "queued" | "parsing" | "embedding" | "ready" | "failed";
+            version: number;
+            jobId: string | null;
             error: string | null;
             chunkCount: number | null;
             pageCount: number | null;
@@ -393,6 +427,12 @@ export interface components {
                 sub: string;
                 name: string;
             };
+        };
+        ReindexBody: {
+            /** @default  */
+            reason?: string;
+            /** @default false */
+            force?: boolean;
         };
         Taxonomy: {
             version: number;
@@ -749,6 +789,65 @@ export interface operations {
                         status: "pending";
                     };
                 };
+            };
+        };
+    };
+    ReindexController_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    ReindexController_start: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReindexBody"];
+            };
+        };
+        responses: {
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        jobId: number;
+                    };
+                };
+            };
+        };
+    };
+    ReindexController_rollback: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

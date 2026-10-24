@@ -144,24 +144,9 @@ def summarize(results: list[ItemResult]) -> dict[str, float]:
     }
 
 
-def run(
-    embedder: Embedder,
-    dataset: Path,
-    corpus: Path,
-    chunk_size: int,
-    chunk_overlap: int,
-    split: str | None = None,
-) -> RunReport:
-    kb = KnowledgeBase(QdrantClient(":memory:"), embedder, "eval", chunk_size, chunk_overlap)
-    kb.ensure_collection()
-    started = time.perf_counter()
-    chunks = ingest_corpus(kb, corpus)
-    ingest_s = time.perf_counter() - started
-
+def evaluate(kb: KnowledgeBase, items: list[GoldenItem]) -> list[ItemResult]:
     results: list[ItemResult] = []
-    for item in load_dataset(dataset):
-        if split and item.split != split:
-            continue
+    for item in items:
         started = time.perf_counter()
         hits = kb.search(item.question, TOP_K)
         latency_ms = (time.perf_counter() - started) * 1000
@@ -181,7 +166,24 @@ def run(
                 ],
             )
         )
+    return results
 
+
+def run(
+    embedder: Embedder,
+    dataset: Path,
+    corpus: Path,
+    chunk_size: int,
+    chunk_overlap: int,
+    split: str | None = None,
+) -> RunReport:
+    kb = KnowledgeBase(QdrantClient(":memory:"), embedder, "eval", chunk_size, chunk_overlap)
+    kb.ensure_collection()
+    started = time.perf_counter()
+    chunks = ingest_corpus(kb, corpus)
+    ingest_s = time.perf_counter() - started
+
+    results = evaluate(kb, [i for i in load_dataset(dataset) if not split or i.split == split])
     answerable = [r for r in results if r.answerable]
     unanswerable = [r.top1_score for r in results if not r.answerable]
     threshold, accuracy = (

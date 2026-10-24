@@ -14,7 +14,11 @@ export type AgentRequest = Schemas['AgentRequest'];
 export type Labels = Schemas['Labels'];
 export type SearchRequest = Schemas['SearchRequest'];
 export type SearchResponse = Schemas['SearchResponse'];
-export type IngestResult = Schemas['IngestResult'];
+export type Submitted = Schemas['Submitted'];
+export type JobStatus = Schemas['JobStatus'];
+export type ReindexRequest = Schemas['ReindexRequest'];
+export type ReindexStatus = Schemas['ReindexStatus'];
+export type Alias = Schemas['Alias'];
 export type ServiceStatus = Schemas['ServiceStatus'];
 export type Domain = NonNullable<SearchRequest['domains']>[number];
 
@@ -49,14 +53,54 @@ export class AiClient {
     return (await res.json()) as SearchResponse;
   }
 
-  async ingest(form: FormData, requestId: string): Promise<IngestResult> {
-    const res = await this.request('/v1/ingest', requestId, {
+  /** Stores the original and queues its ingest (D52); `job` reports the job's state. */
+  async submit(form: FormData, requestId: string): Promise<Submitted> {
+    const res = await this.request('/v1/documents', requestId, {
       method: 'POST',
       body: form,
-      // Embedding a 20 MB PDF on CPU takes minutes; without a cap a hung call keeps the row busy.
-      signal: AbortSignal.timeout(15 * 60_000),
+      signal: AbortSignal.timeout(60_000),
     });
-    return (await res.json()) as IngestResult;
+    return (await res.json()) as Submitted;
+  }
+
+  job(jobId: string, requestId: string): Promise<JobStatus> {
+    return this.get(`/v1/jobs/${jobId}`, requestId);
+  }
+
+  /** The re-index routes are for admins; the AI service checks the role in the exchanged token. */
+  async reindex(body: ReindexRequest, requestId: string, userToken: string): Promise<number> {
+    const res = await this.request(
+      '/v1/reindex',
+      requestId,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(30_000),
+      },
+      userToken,
+    );
+    return ((await res.json()) as Schemas['Queued']).job_id;
+  }
+
+  async reindexStatus(requestId: string, userToken: string): Promise<ReindexStatus> {
+    const res = await this.request(
+      '/v1/reindex',
+      requestId,
+      { signal: AbortSignal.timeout(30_000) },
+      userToken,
+    );
+    return (await res.json()) as ReindexStatus;
+  }
+
+  async rollback(requestId: string, userToken: string): Promise<Alias> {
+    const res = await this.request(
+      '/v1/reindex/rollback',
+      requestId,
+      { method: 'POST', signal: AbortSignal.timeout(30_000) },
+      userToken,
+    );
+    return (await res.json()) as Alias;
   }
 
   async updateLabels(docId: string, labels: Labels, requestId: string): Promise<void> {

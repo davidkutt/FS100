@@ -16,6 +16,8 @@ const doc = (id: string, ownerId: string, filename: string) => ({
   domains: ['devops'],
   topics: [],
   status: 'ready',
+  version: 1,
+  jobId: '1',
   error: null,
   chunkCount: 3,
   pageCount: null,
@@ -36,7 +38,10 @@ describe('Documents', () => {
   let http: HttpTestingController;
   let fixture: ComponentFixture<Documents>;
 
-  async function render(roles: string[]): Promise<HTMLElement> {
+  async function render(
+    roles: string[],
+    docs = [doc('a', 'bob', 'mine.md'), doc('b', 'alice', 'theirs.md')],
+  ): Promise<HTMLElement> {
     TestBed.configureTestingModule({
       providers: [
         provideHttpClient(),
@@ -54,9 +59,7 @@ describe('Documents', () => {
     TestBed.tick();
     http = TestBed.inject(HttpTestingController);
     http.expectOne('http://api/api/taxonomy').flush(TAXONOMY);
-    http
-      .expectOne('http://api/api/documents')
-      .flush([doc('a', 'bob', 'mine.md'), doc('b', 'alice', 'theirs.md')]);
+    http.expectOne('http://api/api/documents').flush(docs);
     await fixture.whenStable();
     return fixture.nativeElement as HTMLElement;
   }
@@ -77,6 +80,24 @@ describe('Documents', () => {
 
     expect(page.querySelector('input[type=file]')).not.toBeNull();
     expect(deleteButtons(page)).toEqual(['Edit labels of mine.md', 'Delete mine.md']);
+  });
+
+  it('shows the job state and polls until the job has ended', async () => {
+    const working = { ...doc('a', 'bob', 'mine.md'), status: 'embedding' };
+    const page = await render(['editor', 'viewer'], [working]);
+    const badge = () => page.querySelector('tbody td:nth-child(3) .badge')?.textContent?.trim();
+    const labels = page.querySelector<HTMLButtonElement>('[aria-label="Edit labels of mine.md"]')!;
+
+    expect(badge()).toBe('embedding');
+    expect(page.querySelector('tbody .spinner-border')).not.toBeNull();
+    expect(labels.disabled).toBe(true);
+    const poll = await vi.waitFor(() => http.expectOne('http://api/api/documents'), {
+      timeout: 3000,
+    });
+    poll.flush([doc('a', 'bob', 'mine.md')]);
+    await fixture.whenStable();
+
+    expect(badge()).toBe('ready');
   });
 
   it('offers the sub-topics of the picked domains and relabels without re-uploading', async () => {

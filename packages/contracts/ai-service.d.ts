@@ -64,7 +64,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1/ingest": {
+    "/v1/documents": {
         parameters: {
             query?: never;
             header?: never;
@@ -74,10 +74,11 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Ingest
-         * @description Parse, chunk, embed and upsert one document; re-ingesting a `doc_id` replaces its chunks.
+         * Submit
+         * @description Store the original and queue its ingest (D52); poll `GET /v1/jobs/{job_id}`. The same
+         *     bytes again keep their version; parse errors end the job `failed`.
          */
-        post: operations["ingest_v1_ingest_post"];
+        post: operations["submit_v1_documents_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -134,7 +135,10 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        /** Delete Document */
+        /**
+         * Delete Document
+         * @description Cancels a queued ingest; removes the vectors from every collection and the originals.
+         */
         delete: operations["delete_document_v1_documents__doc_id__delete"];
         options?: never;
         head?: never;
@@ -223,6 +227,67 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/v1/jobs/{job_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Job */
+        get: operations["get_job_v1_jobs__job_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reindex": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reindex Status
+         * @description Where the alias points, and the latest runs with their reports.
+         */
+        get: operations["reindex_status_v1_reindex_get"];
+        put?: never;
+        /**
+         * Start Reindex
+         * @description Build a collection from the stored originals, gate it on the golden set, swap (D55).
+         */
+        post: operations["start_reindex_v1_reindex_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/v1/reindex/rollback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reindex Rollback
+         * @description Point the alias back at the collection the last swap replaced.
+         */
+        post: operations["reindex_rollback_v1_reindex_rollback_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/": {
         parameters: {
             query?: never;
@@ -275,8 +340,15 @@ export interface components {
             domains?: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[] | null;
             resume?: components["schemas"]["Resume"] | null;
         };
-        /** Body_ingest_v1_ingest_post */
-        Body_ingest_v1_ingest_post: {
+        /** Alias */
+        Alias: {
+            /** Alias */
+            alias: string;
+            /** Collection */
+            collection: string;
+        };
+        /** Body_submit_v1_documents_post */
+        Body_submit_v1_documents_post: {
             /** File */
             file: string;
             /**
@@ -361,6 +433,20 @@ export interface components {
             /** Embedding Model */
             embedding_model: string;
         };
+        /** JobStatus */
+        JobStatus: {
+            /** Id */
+            id: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "parsing" | "embedding" | "building" | "evaluating" | "ready" | "failed" | "cancelled";
+            /** Error */
+            error?: string | null;
+            /** Result */
+            result?: components["schemas"]["IngestResult"] | components["schemas"]["ReindexReport"] | null;
+        };
         /** Labels */
         Labels: {
             /** Domains */
@@ -389,6 +475,88 @@ export interface components {
              * @enum {string}
              */
             min_role: "viewer" | "editor" | "admin";
+        };
+        /** Queued */
+        Queued: {
+            /** Job Id */
+            job_id: number;
+        };
+        /** ReindexReport */
+        ReindexReport: {
+            /** Reason */
+            reason: string;
+            /** Force */
+            force: boolean;
+            /** Requested By */
+            requested_by: string;
+            /** Collection */
+            collection: string;
+            /** Previous */
+            previous: string;
+            /** Documents */
+            documents: number;
+            /** Chunks */
+            chunks: number;
+            /** Skipped */
+            skipped: components["schemas"]["Skipped"][];
+            /** Metrics */
+            metrics: {
+                [key: string]: {
+                    [key: string]: {
+                        [key: string]: number;
+                    };
+                };
+            };
+            /** Blockers */
+            blockers: string[];
+            /**
+             * Decision
+             * @enum {string}
+             */
+            decision: "swapped" | "kept" | "forced";
+            /** Build S */
+            build_s: number;
+        };
+        /** ReindexRequest */
+        ReindexRequest: {
+            /**
+             * Reason
+             * @default
+             */
+            reason?: string;
+            /**
+             * Force
+             * @default false
+             */
+            force?: boolean;
+        };
+        /** ReindexRun */
+        ReindexRun: {
+            /** Id */
+            id: number;
+            /**
+             * State
+             * @enum {string}
+             */
+            state: "queued" | "parsing" | "embedding" | "building" | "evaluating" | "ready" | "failed" | "cancelled";
+            /** Error */
+            error?: string | null;
+            /** Reason */
+            reason: string;
+            /** Force */
+            force: boolean;
+            /** Requested By */
+            requested_by: string;
+            report?: components["schemas"]["ReindexReport"] | null;
+        };
+        /** ReindexStatus */
+        ReindexStatus: {
+            /** Alias */
+            alias: string;
+            /** Collection */
+            collection: string;
+            /** Runs */
+            runs: components["schemas"]["ReindexRun"][];
         };
         /**
          * Resume
@@ -453,6 +621,25 @@ export interface components {
              * @enum {string}
              */
             qdrant: "ok" | "down";
+        };
+        /** Skipped */
+        Skipped: {
+            /**
+             * Doc Id
+             * Format: uuid
+             */
+            doc_id: string;
+            /** Filename */
+            filename: string;
+            /** Reason */
+            reason: string;
+        };
+        /** Submitted */
+        Submitted: {
+            /** Job Id */
+            job_id: number;
+            /** Version */
+            version: number;
         };
         /** TextPart */
         TextPart: {
@@ -763,7 +950,7 @@ export interface operations {
             };
         };
     };
-    ingest_v1_ingest_post: {
+    submit_v1_documents_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -772,17 +959,17 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "multipart/form-data": components["schemas"]["Body_ingest_v1_ingest_post"];
+                "multipart/form-data": components["schemas"]["Body_submit_v1_documents_post"];
             };
         };
         responses: {
             /** @description Successful Response */
-            200: {
+            202: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["IngestResult"];
+                    "application/json": components["schemas"]["Submitted"];
                 };
             };
             /** @description Validation Error */
@@ -993,6 +1180,110 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ToolInfo"][];
+                };
+            };
+        };
+    };
+    get_job_v1_jobs__job_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                job_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobStatus"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reindex_status_v1_reindex_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ReindexStatus"];
+                };
+            };
+        };
+    };
+    start_reindex_v1_reindex_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReindexRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Queued"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reindex_rollback_v1_reindex_rollback_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Alias"];
                 };
             };
         };

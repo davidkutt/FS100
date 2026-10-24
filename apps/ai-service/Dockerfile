@@ -16,9 +16,11 @@ RUN useradd --create-home --uid 10001 app && mkdir -p /app/.cache/fastembed \
 WORKDIR /app
 COPY --from=build /app/.venv .venv
 COPY config/models.yaml config/taxonomy.yaml config/mcp_servers.yaml config/
+# The re-index gate's golden set (D55).
+COPY evals/datasets/retrieval_v1.jsonl evals/
 ENV PATH=/app/.venv/bin:$PATH EMBEDDING_CACHE_DIR=/app/.cache/fastembed \
   MODELS_CONFIG=/app/config/models.yaml TAXONOMY_CONFIG=/app/config/taxonomy.yaml \
-  MCP_SERVERS_CONFIG=/app/config/mcp_servers.yaml
+  MCP_SERVERS_CONFIG=/app/config/mcp_servers.yaml GOLDEN_DATASET=/app/evals/retrieval_v1.jsonl
 USER app
 EXPOSE 8000
 # uvicorn listens only after startup loaded the model (first start downloads ≈ 2.3 GB for bge-m3).

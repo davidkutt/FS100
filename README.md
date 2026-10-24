@@ -176,6 +176,8 @@ steps 3–4 also need `GITHUB_REPO`, `GITHUB_SANDBOX_REPO` in `.env` and two fin
 | `pnpm eval:agent` | Agent tasks against the corpus and fixture MCP servers; uses the LLM in `.env` (3 repeats, 2 USD cap) |
 | `pnpm eval:redteam` | Red-team seed set (injections, exfiltration, goal hijack), same setup as `eval:agent` |
 | `pnpm eval:routing` | Router accuracy on `routing_v1`: embedding vs LLM classifier |
+| `pnpm kb:backfill-originals` | Store the originals of documents indexed before Phase 3 (from `data/sample-docs/`, matched by SHA-256); lists the rest for re-upload |
+| `pnpm kb:reindex [--force --reason "…"]` | Rebuild the collection from the stored originals, gate it on the golden `dev`/`test` sets, swap `kb_current`; `--rollback` points it back (needs `pnpm dev ai` running) |
 | `pnpm contracts:generate` | Regenerate `packages/contracts` (OpenAPI of both services incl. SSE event schemas, TS types); commit the result |
 
 ## Repository layout

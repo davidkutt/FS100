@@ -19,6 +19,7 @@ export class App {
       ? [
           { path: '/admin/audit', label: 'Audit log' },
           { path: '/admin/usage', label: 'Usage' },
+          { path: '/admin/reindex', label: 'Re-index' },
         ]
       : []),
   ];

@@ -48,7 +48,9 @@ export class Documents {
   protected readonly dragging = signal(false);
   protected readonly badge: Record<Document['status'], string> = {
     pending: 'text-bg-secondary',
-    processing: 'text-bg-info',
+    queued: 'text-bg-secondary',
+    parsing: 'text-bg-info',
+    embedding: 'text-bg-info',
     ready: 'text-bg-success',
     failed: 'text-bg-danger',
   };
@@ -56,10 +58,10 @@ export class Documents {
   private readonly labels = viewChild.required<ElementRef<HTMLDialogElement>>('labels');
 
   constructor() {
-    // Ingestion runs in the background: poll until every row is ready or failed (plan.md §5).
+    // Ingestion runs as a job: poll until every row is ready or failed (D52).
     effect((onCleanup) => {
       const docs = this.docs.hasValue() ? this.docs.value() : [];
-      if (!docs.some((d) => d.status === 'pending' || d.status === 'processing')) return;
+      if (!docs.some((d) => this.working(d))) return;
       const timer = setTimeout(() => this.docs.reload(), 2000);
       onCleanup(() => clearTimeout(timer));
     });
@@ -122,6 +124,10 @@ export class Documents {
     } catch (error) {
       this.editError.set(problemDetail(error));
     }
+  }
+
+  protected working(doc: Document): boolean {
+    return doc.status !== 'ready' && doc.status !== 'failed';
   }
 
   protected canDelete(doc: Document): boolean {

@@ -76,31 +76,31 @@
         ]
       }
     },
-    "/v1/ingest": {
+    "/v1/documents": {
       "post": {
         "tags": [
           "documents"
         ],
-        "summary": "Ingest",
-        "description": "Parse, chunk, embed and upsert one document; re-ingesting a `doc_id` replaces its chunks.",
-        "operationId": "ingest_v1_ingest_post",
+        "summary": "Submit",
+        "description": "Store the original and queue its ingest (D52); poll `GET /v1/jobs/{job_id}`. The same\nbytes again keep their version; parse errors end the job `failed`.",
+        "operationId": "submit_v1_documents_post",
         "requestBody": {
           "content": {
             "multipart/form-data": {
               "schema": {
-                "$ref": "#/components/schemas/Body_ingest_v1_ingest_post"
+                "$ref": "#/components/schemas/Body_submit_v1_documents_post"
               }
             }
           },
           "required": true
         },
         "responses": {
-          "200": {
+          "202": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/IngestResult"
+                  "$ref": "#/components/schemas/Submitted"
                 }
               }
             }
@@ -228,6 +228,7 @@
           "documents"
         ],
         "summary": "Delete Document",
+        "description": "Cancels a queued ingest; removes the vectors from every collection and the originals.",
         "operationId": "delete_document_v1_documents__doc_id__delete",
         "security": [
           {
@@ -449,6 +450,152 @@
         ]
       }
     },
+    "/v1/jobs/{job_id}": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Get Job",
+        "operationId": "get_job_v1_jobs__job_id__get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/JobStatus"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/reindex": {
+      "get": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Reindex Status",
+        "description": "Where the alias points, and the latest runs with their reports.",
+        "operationId": "reindex_status_v1_reindex_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReindexStatus"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Start Reindex",
+        "description": "Build a collection from the stored originals, gate it on the golden set, swap (D55).",
+        "operationId": "start_reindex_v1_reindex_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReindexRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Queued"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/v1/reindex/rollback": {
+      "post": {
+        "tags": [
+          "jobs"
+        ],
+        "summary": "Reindex Rollback",
+        "description": "Point the alias back at the collection the last swap replaced.",
+        "operationId": "reindex_rollback_v1_reindex_rollback_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Alias"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/": {
       "get": {
         "tags": [
@@ -577,7 +724,25 @@
         ],
         "title": "AgentRequest"
       },
-      "Body_ingest_v1_ingest_post": {
+      "Alias": {
+        "properties": {
+          "alias": {
+            "type": "string",
+            "title": "Alias"
+          },
+          "collection": {
+            "type": "string",
+            "title": "Collection"
+          }
+        },
+        "type": "object",
+        "required": [
+          "alias",
+          "collection"
+        ],
+        "title": "Alias"
+      },
+      "Body_submit_v1_documents_post": {
         "properties": {
           "file": {
             "type": "string",
@@ -644,7 +809,7 @@
           "owner_id",
           "domains"
         ],
-        "title": "Body_ingest_v1_ingest_post"
+        "title": "Body_submit_v1_documents_post"
       },
       "ChatRequest": {
         "properties": {
@@ -857,6 +1022,59 @@
         ],
         "title": "IngestResult"
       },
+      "JobStatus": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "parsing",
+              "embedding",
+              "building",
+              "evaluating",
+              "ready",
+              "failed",
+              "cancelled"
+            ],
+            "title": "State"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/IngestResult"
+              },
+              {
+                "$ref": "#/components/schemas/ReindexReport"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Result"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "state"
+        ],
+        "title": "JobStatus"
+      },
       "Labels": {
         "properties": {
           "domains": {
@@ -946,6 +1164,213 @@
         ],
         "title": "ModelInfo",
         "description": "One `config/models.yaml` entry (D40); `id` is the model id at LLM_BASE_URL."
+      },
+      "Queued": {
+        "properties": {
+          "job_id": {
+            "type": "integer",
+            "title": "Job Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id"
+        ],
+        "title": "Queued"
+      },
+      "ReindexReport": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force"
+          },
+          "requested_by": {
+            "type": "string",
+            "title": "Requested By"
+          },
+          "collection": {
+            "type": "string",
+            "title": "Collection"
+          },
+          "previous": {
+            "type": "string",
+            "title": "Previous"
+          },
+          "documents": {
+            "type": "integer",
+            "title": "Documents"
+          },
+          "chunks": {
+            "type": "integer",
+            "title": "Chunks"
+          },
+          "skipped": {
+            "items": {
+              "$ref": "#/components/schemas/Skipped"
+            },
+            "type": "array",
+            "title": "Skipped"
+          },
+          "metrics": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Metrics"
+          },
+          "blockers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Blockers"
+          },
+          "decision": {
+            "type": "string",
+            "enum": [
+              "swapped",
+              "kept",
+              "forced"
+            ],
+            "title": "Decision"
+          },
+          "build_s": {
+            "type": "number",
+            "title": "Build S"
+          }
+        },
+        "type": "object",
+        "required": [
+          "reason",
+          "force",
+          "requested_by",
+          "collection",
+          "previous",
+          "documents",
+          "chunks",
+          "skipped",
+          "metrics",
+          "blockers",
+          "decision",
+          "build_s"
+        ],
+        "title": "ReindexReport"
+      },
+      "ReindexRequest": {
+        "properties": {
+          "reason": {
+            "type": "string",
+            "title": "Reason",
+            "default": ""
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force",
+            "default": false
+          }
+        },
+        "type": "object",
+        "title": "ReindexRequest"
+      },
+      "ReindexRun": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "parsing",
+              "embedding",
+              "building",
+              "evaluating",
+              "ready",
+              "failed",
+              "cancelled"
+            ],
+            "title": "State"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          },
+          "force": {
+            "type": "boolean",
+            "title": "Force"
+          },
+          "requested_by": {
+            "type": "string",
+            "title": "Requested By"
+          },
+          "report": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ReindexReport"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "state",
+          "reason",
+          "force",
+          "requested_by"
+        ],
+        "title": "ReindexRun"
+      },
+      "ReindexStatus": {
+        "properties": {
+          "alias": {
+            "type": "string",
+            "title": "Alias"
+          },
+          "collection": {
+            "type": "string",
+            "title": "Collection"
+          },
+          "runs": {
+            "items": {
+              "$ref": "#/components/schemas/ReindexRun"
+            },
+            "type": "array",
+            "title": "Runs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "alias",
+          "collection",
+          "runs"
+        ],
+        "title": "ReindexStatus"
       },
       "Resume": {
         "properties": {
@@ -1126,6 +1551,48 @@
           "qdrant"
         ],
         "title": "ServiceStatus"
+      },
+      "Skipped": {
+        "properties": {
+          "doc_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Doc Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "reason": {
+            "type": "string",
+            "title": "Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "doc_id",
+          "filename",
+          "reason"
+        ],
+        "title": "Skipped"
+      },
+      "Submitted": {
+        "properties": {
+          "job_id": {
+            "type": "integer",
+            "title": "Job Id"
+          },
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "job_id",
+          "version"
+        ],
+        "title": "Submitted"
       },
       "TextPart": {
         "properties": {

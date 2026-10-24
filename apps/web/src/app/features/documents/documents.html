@@ -72,7 +72,7 @@
             </td>
             <td>
               <span class="badge" [class]="badge[doc.status]">
-                @if (doc.status === 'processing') {
+                @if (doc.status === 'parsing' || doc.status === 'embedding') {
                   <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                 }
                 {{ doc.status }}
@@ -87,7 +87,7 @@
                   type="button"
                   class="btn btn-sm btn-outline-secondary me-1"
                   [attr.aria-label]="'Edit labels of ' + doc.filename"
-                  [disabled]="doc.status === 'pending' || doc.status === 'processing'"
+                  [disabled]="working(doc)"
                   (click)="edit(doc)"
                 >
                   Labels

@@ -11,10 +11,6 @@ _FENCE = ("```", "~~~")
 _SEPARATORS = ("\n\n", "\n", ". ", " ", "")
 
 
-class UnsupportedDocumentError(ValueError):
-    pass
-
-
 @dataclass(frozen=True)
 class Section:
     """A piece of a document with its location: PDF page (1-based) or Markdown heading path."""
@@ -22,6 +18,10 @@ class Section:
     text: str
     page: int | None = None
     heading: str | None = None
+
+
+def supported(filename: str) -> bool:
+    return PurePath(filename).suffix.lower() in (".pdf", ".md", ".markdown", ".txt")
 
 
 def parse(filename: str, data: bytes) -> list[Section]:
@@ -34,7 +34,7 @@ def parse(filename: str, data: bytes) -> list[Section]:
         return _parse_markdown(data.decode("utf-8-sig"))
     if suffix == ".txt":
         return [Section(data.decode("utf-8-sig"))]
-    raise UnsupportedDocumentError(f"Unsupported file type {suffix!r}; expected PDF, MD or TXT")
+    raise ValueError(f"Unsupported file type {suffix!r}; expected PDF, MD or TXT")
 
 
 def _parse_markdown(text: str) -> list[Section]:

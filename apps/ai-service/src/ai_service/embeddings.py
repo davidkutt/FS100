@@ -3,6 +3,7 @@ from fastembed.common.model_description import ModelSource, PoolingType
 from opentelemetry import trace
 
 tracer = trace.get_tracer(__name__)
+BATCH = 16  # ingest peak 2.5 GB vs. 3.8 GB at 256, same speed (M3a.1, D50)
 
 # Benchmark candidates missing from fastembed's built-in list (D9); their HF repos ship ONNX files.
 for _name, _dim, _pooling, _extra in (
@@ -37,4 +38,4 @@ class Embedder:
             "embedding.model_name": self.model_name,
         }
         with tracer.start_as_current_span("embed", attributes=attributes):
-            return [vector.tolist() for vector in self._model.embed(texts)]
+            return [vector.tolist() for vector in self._model.embed(texts, batch_size=BATCH)]
