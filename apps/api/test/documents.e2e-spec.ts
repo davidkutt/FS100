@@ -1,25 +1,34 @@
 import { randomUUID } from 'node:crypto';
-import { type INestApplication, UnprocessableEntityException } from '@nestjs/common';
+import { BadGatewayException, type INestApplication } from '@nestjs/common';
 import { eq } from 'drizzle-orm';
 import request from 'supertest';
 import type { App } from 'supertest/types.js';
+import type { JobStatus } from '../src/ai-client/ai-client.service.js';
 import { DB, type Db } from '../src/db/db.module.js';
-import { auditLog } from '../src/db/schema.js';
+import { auditLog, type DocumentStatus } from '../src/db/schema.js';
 import { DocumentDto } from '../src/documents/documents.controller.js';
 import { DocumentsService } from '../src/documents/documents.service.js';
 import { ADMIN, EDITOR, createApp, token } from './support.js';
 
 describe('Documents (e2e)', () => {
   let app: INestApplication<App>;
+  // The AI service's job per id; unset = ready.
+  const jobs = new Map<string, Partial<JobStatus>>();
+  let lastJob = 0;
+  const STATUS = { alias: 'kb_current', collection: 'kb__v2__new', runs: [] };
   const ai = {
-    ingest: vi.fn(async (form: FormData) => ({
-      doc_id: form.get('doc_id'),
-      chunk_count: 3,
-      page_count: null,
-      embedding_model: 'test-model',
+    submit: vi.fn(async (_form: FormData) => ({ job_id: ++lastJob, version: 1 })),
+    job: vi.fn(async (id: string) => ({
+      id: Number(id),
+      state: 'ready',
+      result: { doc_id: '', chunk_count: 3, page_count: null, embedding_model: 'test-model' },
+      ...jobs.get(id),
     })),
     deleteDocument: vi.fn(async () => undefined),
     updateLabels: vi.fn(async () => undefined),
+    reindex: vi.fn(async () => 7),
+    reindexStatus: vi.fn(async () => STATUS),
+    rollback: vi.fn(async () => ({ alias: 'kb_current', collection: 'kb__v2__old' })),
   };
 
   beforeAll(async () => {
@@ -52,7 +61,7 @@ describe('Documents (e2e)', () => {
     return DocumentDto.array().parse(res.body);
   };
 
-  const settled = (id: string, status: 'ready' | 'failed' | 'processing') =>
+  const settled = (id: string, status: DocumentStatus) =>
     vi.waitFor(async () => {
       const doc = (await list()).find((d) => d.id === id);
       expect(doc?.status).toBe(status);
@@ -78,7 +87,7 @@ describe('Documents (e2e)', () => {
       .auth(await token(roles, { sub }), { type: 'bearer' })
       .expect(status);
 
-  it('editor upload → 202, ingested in the background → ready', async () => {
+  it('editor upload → 202, queued in the AI service → ready', async () => {
     const res = await upload('Übersicht.md', '# Rollback\nkubectl rollout undo', 202, {
       domains: ['devops', 'sre'],
     });
@@ -91,8 +100,10 @@ describe('Documents (e2e)', () => {
       domains: ['devops', 'sre'],
       chunkCount: 3,
       embeddingModel: 'test-model',
+      jobId: String(lastJob),
+      version: 1,
     });
-    const form = ai.ingest.mock.calls.at(-1)![0];
+    const form = ai.submit.mock.calls.at(-1)![0];
     expect(form.get('doc_id')).toBe(doc.id);
     expect(form.getAll('domains')).toEqual(['devops', 'sre']);
     expect((form.get('file') as File).name).toBe('Übersicht.md');
@@ -104,7 +115,7 @@ describe('Documents (e2e)', () => {
     });
 
     expect((await settled(res.body.id, 'ready')).topics).toEqual(['devops/ci-cd']);
-    expect(ai.ingest.mock.calls.at(-1)![0].getAll('topics')).toEqual(['devops/ci-cd']);
+    expect(ai.submit.mock.calls.at(-1)![0].getAll('topics')).toEqual(['devops/ci-cd']);
     const bad = await upload('bad.md', `# B ${randomUUID()}`, 400, { topics: ['devops/nope'] });
     expect(bad.body.detail).toBe('Unknown topics: devops/nope');
   });
@@ -112,14 +123,14 @@ describe('Documents (e2e)', () => {
   it('owners relabel without re-ingesting; others, viewers and bad labels are refused', async () => {
     const { body } = await upload('labels.md', `# L ${randomUUID()}`, 202, { sub: 'user-4' });
     await settled(body.id, 'ready');
-    const ingests = ai.ingest.mock.calls.length;
+    const ingests = ai.submit.mock.calls.length;
     const labels = { domains: ['devops', 'sre'], topics: ['devops/deployment'] };
 
     const res = await relabel(body.id, labels, 200, EDITOR, 'user-4');
 
     expect(DocumentDto.parse(res.body)).toMatchObject(labels);
     expect(ai.updateLabels).toHaveBeenLastCalledWith(body.id, labels, expect.any(String));
-    expect(ai.ingest.mock.calls.length).toBe(ingests);
+    expect(ai.submit.mock.calls.length).toBe(ingests);
     await relabel(body.id, { topics: [] }, 200, ADMIN);
     await relabel(body.id, { topics: [] }, 403);
     await relabel(body.id, { topics: [] }, 403, ['viewer'], 'user-4');
@@ -168,14 +179,16 @@ describe('Documents (e2e)', () => {
     await upload('big.txt', Buffer.alloc(1024 * 1024 + 1, 'a'), 413);
   });
 
-  it('a failed ingest → failed with the AI service detail', async () => {
-    ai.ingest.mockRejectedValueOnce(
-      new UnprocessableEntityException('No extractable text (scanned PDF?)'),
-    );
-    const res = await upload('scan.pdf', '%PDF-1.7 scanned', 202);
+  it('a failed job or an unreachable AI service → failed with the detail', async () => {
+    jobs.set(String(lastJob + 1), { state: 'failed', error: 'No extractable text (scanned PDF?)' });
+    const scan = await upload('scan.pdf', '%PDF-1.7 scanned', 202);
+    ai.submit.mockRejectedValueOnce(new BadGatewayException('AI service unreachable'));
+    const down = await upload('down.txt', `down ${randomUUID()}`, 202);
 
-    const doc = await settled(res.body.id, 'failed');
-    expect(doc.error).toBe('No extractable text (scanned PDF?)');
+    expect((await settled(scan.body.id, 'failed')).error).toBe(
+      'No extractable text (scanned PDF?)',
+    );
+    expect((await settled(down.body.id, 'failed')).error).toBe('AI service unreachable');
   });
 
   it('editors delete only their own documents, admins any; vectors go first', async () => {
@@ -197,16 +210,69 @@ describe('Documents (e2e)', () => {
     await remove('not-a-uuid', ADMIN, 400);
   });
 
-  it('delete during ingest → 409; boot recovery fails interrupted uploads', async () => {
-    ai.ingest.mockImplementationOnce(() => new Promise(() => {}));
-    const { body } = await upload('slow.txt', 'slow', 202);
-    await settled(body.id, 'processing');
+  it('a running ingest blocks delete and relabel; a queued one is deleted (cancelled)', async () => {
+    jobs.set(String(lastJob + 1), { state: 'parsing' });
+    jobs.set(String(lastJob + 2), { state: 'queued' });
+    const { body: running } = await upload('running.txt', 'running', 202);
+    const { body: queued } = await upload('queued.txt', 'queued', 202);
+    await settled(running.id, 'parsing');
+    await settled(queued.id, 'queued');
 
-    await remove(body.id, EDITOR, 409);
-    await relabel(body.id, { topics: [] }, 409);
+    await remove(running.id, EDITOR, 409);
+    await relabel(running.id, { topics: [] }, 409);
+    await relabel(queued.id, { topics: [] }, 409);
+    await remove(queued.id, EDITOR, 204);
+
+    expect(ai.deleteDocument).toHaveBeenLastCalledWith(queued.id, expect.any(String));
+    jobs.delete(String(lastJob - 1));
+    expect((await settled(running.id, 'ready')).chunkCount).toBe(3);
+  });
+
+  it('boot recovery fails uploads the AI service never got; queued jobs resume', async () => {
+    jobs.set(String(lastJob + 1), { state: 'embedding' });
+    const { body: working } = await upload('working.txt', 'working', 202);
+    await settled(working.id, 'embedding');
+    ai.submit.mockImplementationOnce(() => new Promise(() => {}));
+    const { body: lost } = await upload('lost.txt', 'lost', 202);
+    await settled(lost.id, 'pending');
 
     await app.get(DocumentsService).onApplicationBootstrap();
-    const doc = await settled(body.id, 'failed');
-    expect(doc.error).toMatch(/Interrupted by an API restart/);
+
+    expect((await settled(lost.id, 'failed')).error).toMatch(/Interrupted by an API restart/);
+    expect((await list()).find((d) => d.id === working.id)?.status).toBe('embedding');
+  });
+
+  it('admins re-index and roll back through the AI service; both are audited', async () => {
+    const admin = await token(ADMIN, { sub: 'alice' });
+    const call = (method: 'get' | 'post', path: string, bearer = admin) =>
+      request(app.getHttpServer())[method](`/api/admin/reindex${path}`).auth(bearer, {
+        type: 'bearer',
+      });
+
+    const started = await call('post', '').send({ reason: 'new chunker' }).expect(202);
+    const status = await call('get', '').expect(200);
+    const rolledBack = await call('post', '/rollback').expect(200);
+    await call('post', '', await token(EDITOR))
+      .send({})
+      .expect(403);
+    await call('post', '').send({ force: true }).expect(400);
+
+    expect(started.body).toEqual({ jobId: 7 });
+    expect(ai.reindex).toHaveBeenCalledWith(
+      { reason: 'new chunker', force: false },
+      expect.any(String),
+      admin,
+    );
+    expect(status.body).toEqual(STATUS);
+    expect(rolledBack.body).toEqual({ alias: 'kb_current', collection: 'kb__v2__old' });
+    const audited = await app
+      .get<Db>(DB)
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.actorId, 'alice'));
+    expect(audited.map((row) => [row.tool, row.argsRedacted])).toEqual([
+      ['kb.reindex', { jobId: 7, reason: 'new chunker', force: false }],
+      ['kb.rollback', { alias: 'kb_current', collection: 'kb__v2__old' }],
+    ]);
   });
 });

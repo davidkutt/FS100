@@ -1,4 +1,4 @@
-"""Ingest → search → delete through the HTTP API, against an in-process Qdrant (`:memory:`)."""
+"""Upload → job → search → delete through the HTTP API; Qdrant and the database in-process."""
 
 from collections.abc import Iterator
 from pathlib import Path
@@ -14,7 +14,7 @@ from ai_service import embeddings
 from ai_service.core.settings import Settings
 from ai_service.knowledge_base import KnowledgeBase
 from ai_service.main import create_app
-from support import FakeTextEmbedding, fetch_jwks, token
+from support import OFFLINE, FakeTextEmbedding, drain, fetch_jwks, submit, token
 
 PDF = (Path(__file__).parent / "fixtures/two-pages.pdf").read_bytes()
 MARKDOWN = b"# Runbook\n\n## Rollback\nUndo the release with kubectl rollout undo.\n"
@@ -24,7 +24,7 @@ MARKDOWN = b"# Runbook\n\n## Rollback\nUndo the release with kubectl rollout und
 def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     monkeypatch.setattr(jwt.PyJWKClient, "fetch_data", fetch_jwks)
     monkeypatch.setattr(embeddings, "TextEmbedding", FakeTextEmbedding)
-    app = create_app(Settings(qdrant_url=":memory:"))
+    app = create_app(Settings(**OFFLINE))
     with TestClient(app, headers={"Authorization": f"Bearer {token()}"}) as client:
         yield client
 
@@ -37,16 +37,12 @@ def ingest(
     doc_id: str | None = None,
     topics: list[str] | None = None,
 ) -> Any:
-    return client.post(
-        "/v1/ingest",
-        files={"file": (filename, data)},
-        data={
-            "doc_id": doc_id or str(uuid4()),
-            "owner_id": "bob",
-            "domains": domains,
-            "topics": topics or [],
-        },
-    )
+    """The job when it has ended, or the refused upload."""
+    submitted = submit(client, filename, data, domains, doc_id, topics)
+    if submitted.status_code != 202:
+        return submitted
+    drain(client)
+    return client.get(f"/v1/jobs/{submitted.json()['job_id']}")
 
 
 def kb_of(client: TestClient) -> KnowledgeBase:
@@ -71,8 +67,8 @@ def test_ingest_then_search_returns_page_numbers(client: TestClient) -> None:
     ingested = ingest(client, "two-pages.pdf", PDF, ["db", "sre"], doc_id)
     hits = search(client, "nightly postgres backups pg_dump")
 
-    assert ingested.status_code == 200
-    assert ingested.json() == {
+    assert ingested.json()["state"] == "ready"
+    assert ingested.json()["result"] == {
         "doc_id": doc_id,
         "chunk_count": 2,
         "page_count": 2,
@@ -112,16 +108,28 @@ def test_search_filters_by_domain_and_threshold(client: TestClient) -> None:
     ("filename", "data", "domains", "status"),
     [
         ("slides.pptx", b"PK", ["dev"], 415),
-        ("scan.pdf", b"not a pdf", ["dev"], 422),
-        ("empty.md", b"# Title only\n", ["dev"], 422),
         ("notes.md", b"text", ["marketing"], 422),
     ],
-    ids=["unsupported type", "broken pdf", "no text", "unknown domain"],
+    ids=["unsupported type", "unknown domain"],
 )
-def test_ingest_rejects_bad_documents(
+def test_upload_rejects_what_cannot_be_ingested(
     client: TestClient, filename: str, data: bytes, domains: list[str], status: int
 ) -> None:
-    assert ingest(client, filename, data, domains).status_code == status
+    assert submit(client, filename, data, domains).status_code == status
+
+
+@pytest.mark.parametrize(
+    ("filename", "data", "error"),
+    [("scan.pdf", b"not a pdf", "Stream has ended"), ("empty.md", b"# Title\n", "No ext")],
+    ids=["broken pdf", "no text"],
+)
+def test_documents_without_text_fail_their_job(
+    client: TestClient, filename: str, data: bytes, error: str
+) -> None:
+    job = ingest(client, filename, data, ["dev"]).json()
+
+    assert job["state"] == "failed"
+    assert error in job["error"]
 
 
 def test_labels_change_without_re_embedding(
@@ -148,7 +156,7 @@ def test_only_taxonomy_topics_are_accepted(client: TestClient) -> None:
     ingested = ingest(client, "runbook.md", MARKDOWN, ["devops"], doc_id, ["devops/nope"])
     patched = client.patch(f"/v1/documents/{doc_id}/labels", json={"topics": ["sre/oncall"]})
 
-    assert (ingested.status_code, patched.status_code) == (422, 422)
+    assert (ingested.status_code, patched.status_code) == (422, 422)  # before anything is stored
     assert "devops/nope" in ingested.json()["detail"]
 
 

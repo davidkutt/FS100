@@ -24,6 +24,15 @@ def percentile(values: Sequence[float], p: float) -> float:
     return ordered[max(math.ceil(p / 100 * len(ordered)) - 1, 0)]
 
 
+def balanced_accuracy(
+    answerable: Sequence[float], unanswerable: Sequence[float], threshold: float
+) -> float:
+    """How well a top-1 score cut-off keeps answerable and rejects unanswerable questions."""
+    kept = sum(score >= threshold for score in answerable) / len(answerable)
+    rejected = sum(score < threshold for score in unanswerable) / len(unanswerable)
+    return (kept + rejected) / 2
+
+
 def calibrate_threshold(
     answerable: Sequence[float], unanswerable: Sequence[float]
 ) -> tuple[float, float]:
@@ -32,10 +41,8 @@ def calibrate_threshold(
     Returns (threshold, balanced accuracy); ties go to the lowest threshold (keeps recall).
     """
 
-    def balanced_accuracy(threshold: float) -> float:
-        kept = sum(score >= threshold for score in answerable) / len(answerable)
-        rejected = sum(score < threshold for score in unanswerable) / len(unanswerable)
-        return (kept + rejected) / 2
+    def accuracy(threshold: float) -> float:
+        return balanced_accuracy(answerable, unanswerable, threshold)
 
-    best = max(sorted({*answerable, *unanswerable}), key=balanced_accuracy)
-    return best, balanced_accuracy(best)
+    best = max(sorted({*answerable, *unanswerable}), key=accuracy)
+    return best, accuracy(best)

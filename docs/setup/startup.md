@@ -93,13 +93,13 @@ Ports are fixed and identical in Mode A and Mode B (plan.md §5). Everything bin
 | Service | URL | Login (dev only) |
 |---|---|---|
 | Web (Angular) | http://localhost:4200 | seed users below (Keycloak login, PKCE) |
-| API (NestJS) | http://localhost:3000/healthz · `/readyz` · `/api/*` needs a user token (`/api/me`, `/api/documents`, `/api/conversations`, `/api/approvals`, `/api/models`, `/api/taxonomy`, `/api/chat`, `/api/search`, `/api/me/usage`, admin: `/api/status`, `/api/admin/audit`, `/api/admin/usage`) | — |
+| API (NestJS) | http://localhost:3000/healthz · `/readyz` · `/api/*` needs a user token (`/api/me`, `/api/documents`, `/api/conversations`, `/api/approvals`, `/api/models`, `/api/taxonomy`, `/api/chat`, `/api/search`, `/api/me/usage`, admin: `/api/status`, `/api/admin/audit`, `/api/admin/usage`, `/api/admin/reindex`) | — |
 | AI service (FastAPI) | http://localhost:8000 · `/healthz`, `/readyz` · Swagger UI: http://localhost:8000/docs · `/v1/*` needs a token with `aud=kb-ai` (a user's, exchanged by the API, or the API's service token) · MCP server: http://localhost:8000/mcp (token with `aud=http://localhost:8000/mcp`, scope `kb:read`), metadata at `/.well-known/oauth-protected-resource/mcp` | — |
 | Keycloak admin console | http://localhost:8080/admin/ | `KEYCLOAK_ADMIN` / `KEYCLOAK_ADMIN_PASSWORD` from the first start (default `admin` / `dev-only-change-me`) |
 | Keycloak account console (realm `kb`) | http://localhost:8080/realms/kb/account | seed users below |
 | Qdrant dashboard | http://localhost:6333/dashboard | — |
 | Phoenix (LLM traces) | http://localhost:6006 | — |
-| Postgres | `postgresql://postgres:dev-only-change-me@localhost:5432/app` | also DB `keycloak` |
+| Postgres | `postgresql://postgres:dev-only-change-me@localhost:5432/app` | also DBs `keycloak` and `ai` (the AI service's originals and job queue, created on its first start) |
 
 **Two separate logins.** The app (http://localhost:4200) signs you in with a user of realm **`kb`** — a seed
 user below or one you registered. The `KEYCLOAK_ADMIN` account lives in realm **`master`** and only opens
@@ -160,10 +160,11 @@ USER_TOKEN=$(curl -s -d grant_type=$X -d client_id=kb-api -d client_secret=dev-o
   -d subject_token=$BOB -d subject_token_type=$AT -d audience=kb-ai \
   http://localhost:8080/realms/kb/protocol/openid-connect/token | sed -E 's/.*"access_token":"([^"]+)".*/\1/')
 
-# AI service: ingest a document, search it, delete it (spans ingest/parse/chunk/embed/upsert/search in Phoenix)
+# AI service: upload a document (stored + queued), wait for its job, search it (spans ingest/parse/chunk/embed/upsert/search)
 DOC=$(uuidgen | tr A-Z a-z)
-curl -s localhost:8000/v1/ingest -H "Authorization: Bearer $TOKEN" -F file=@data/sample-docs/slo-handbook.pdf \
-  -F doc_id=$DOC -F owner_id=dev -F domains=sre        # {"doc_id":…,"chunk_count":3,"page_count":3,…}
+curl -s localhost:8000/v1/documents -H "Authorization: Bearer $TOKEN" -F file=@data/sample-docs/slo-handbook.pdf \
+  -F doc_id=$DOC -F owner_id=dev -F domains=sre        # 202 {"job_id":1,"version":1}
+curl -s localhost:8000/v1/jobs/1 -H "Authorization: Bearer $TOKEN"   # queued → parsing → embedding → ready {"result":{"chunk_count":3,…}}
 curl -s localhost:8000/v1/search -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"query":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?","top_k":3}'   # hits with page numbers
 curl -N localhost:8000/v1/chat -H "Authorization: Bearer $USER_TOKEN" -H 'content-type: application/json' \
@@ -188,8 +189,8 @@ curl -s localhost:8000/mcp -H "Authorization: Bearer $MCP_TOKEN" -H 'content-typ
   # then the server's Settings → Custom Headers: Authorization = Bearer $MCP_TOKEN (valid 5 min — mint it right before)
 curl -s -o /dev/null -w '%{http_code}\n' -X DELETE localhost:8000/v1/documents/$DOC -H "Authorization: Bearer $TOKEN"  # 204
 
-# Postgres: both databases exist
-docker exec fs100-postgres-1 psql -U postgres -tAc "select datname from pg_database where datname in ('app','keycloak')"
+# Postgres: all three databases exist (`ai` once the AI service has started)
+docker exec fs100-postgres-1 psql -U postgres -tAc "select datname from pg_database where datname in ('app','keycloak','ai')"
 ```
 
 In the browser: log in at http://localhost:4200 as `alice` (admin: status card shows `api`, `db`,
@@ -198,7 +199,7 @@ the card's AI-service call appears in Phoenix (http://localhost:6006, project `d
 carries an `x-request-id` header; the API and the AI service log it in their JSON log lines.
 
 Then the demo path as `bob`: **Documents** → pick domains → drop files from `data/sample-docs/` → status
-goes `pending → processing → ready`. **Chat** → ask a question → the answer streams with `[1]` citations;
+goes `queued → parsing → embedding → ready`. **Chat** → ask a question → the answer streams with `[1]` citations;
 select one to read the passage, **Trace in Phoenix** opens the request's trace. **Inspector** shows the
 raw hits with scores and a dashed line at the score threshold. As `carol` (viewer) there are no upload
 or delete controls. Chat calls the real LLM unless `LLM_PROVIDER=fake`.
@@ -292,6 +293,13 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`fe
 | `pnpm mem` | Memory of the apps started by `pnpm dev` (RSS incl. child processes) and of each container |
 | `pnpm stack:down` | Stop and remove containers; **keeps** data volumes |
 | `pnpm stack:reset` | Stop and **delete all local data** (Postgres incl. Keycloak, Qdrant, Phoenix, model cache of Mode B) |
+| `pnpm kb:backfill-originals` | Store the originals of documents indexed before M3a.1 (matched in `data/sample-docs/` by SHA-256); lists the rest — upload those again |
+| `pnpm kb:reindex [--force --reason "…"]` · `pnpm kb:reindex --rollback` | Rebuild `kb_current` from the stored originals behind the golden-set gate, or point it back; the job runs in the AI service (`pnpm dev ai`). Also on the admin page **Re-index** |
+
+**After pulling M3a.1** (existing data): start the AI service once (it creates the database `ai`), run
+`pnpm kb:backfill-originals`, then `pnpm kb:reindex` — documents without an original block the swap
+until they are uploaded again. The first swap moves `kb_current` from `kb__<model>__<dim>` to a
+`kb__v2__…` collection; the old one stays for `--rollback`.
 
 `scripts/stack.mjs` forwards any extra arguments to `docker compose`, e.g.
 `node scripts/stack.mjs restart keycloak`.
@@ -354,6 +362,9 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | `pnpm dev`: `[ai] … uv: not found` | Install uv ([installation guide](installation.md#24-uv-and-python-313)), then `uv sync --directory apps/ai-service` |
 | `pnpm dev`: port 4200/3000/8000 in use | An old dev server is still running: `lsof -nP -iTCP:4200 -sTCP:LISTEN` and kill it |
 | `[api]` exits on startup: `password authentication failed for user "postgres"` | `API_DATABASE_URL` in `.env` must repeat `POSTGRES_USER` / `POSTGRES_PASSWORD` (the API migrates on boot, so it fails fast) |
+| `[ai]` exits on startup: `password authentication failed` or `connection … 5432 refused` | `AI_DATABASE_URL` must repeat `POSTGRES_USER` / `POSTGRES_PASSWORD` too, and Postgres must run (`pnpm stack:up`) |
+| Documents stay `queued` | The AI service's worker runs them one at a time; a re-index blocks uploads until it ends. With `JOBS_INPROCESS_WORKER=false` nothing runs them |
+| `pnpm kb:reindex` prints `kept` | The gate refused the build: a `test` metric dropped by more than 0.02, or a document has no stored original (listed) — `pnpm kb:backfill-originals`, upload it again, or `--force --reason "…"` |
 | `POST /api/documents` → 409 for a file that failed | Dedupe is by content (SHA-256), failed rows included: delete the failed document, then upload again |
 | `pnpm dev`: `[ai]` exits on startup with a Qdrant connection error | The AI service needs Qdrant at startup: `pnpm stack:up` first |
 | `[ai]` exits: `LLM_PROVIDER=openai_compat needs LLM_API_KEY and LLM_MODEL` | Set both in `.env` (OpenRouter key with a credit limit, model from [ADR-0005](../adr/0005-llm-access-and-model.md)), or `LLM_PROVIDER=fake` |
@@ -363,7 +374,7 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | `kb.ingest_url` fails with `Host … is not allowed` | Only hosts in `INGEST_URL_ALLOWED_HOSTS` are fetched, and only PDF, Markdown or text files (HTML pages get 415) |
 | `web.fetch` missing for the agent, or `… is not an allowed host` | Editors and admins only; it reads only hosts in `WEB_FETCH_ALLOWED_HOSTS` (empty = unavailable), on every redirect too. Restart the AI service after changing it |
 | Chat ends with `event: error`, `LLM request failed` | `detail` carries the provider's answer: 401 wrong key, 402 credits used up, 429 rate limit after retries — see `data/sample-docs/runbook-llm-provider-outage.md` |
-| `[ai]` takes minutes to start, `/readyz` returns 503 | First start downloads the embedding model; watch the `[ai]` progress output. Changing `EMBEDDING_MODEL` downloads another one and starts with an empty collection (re-ingest) |
+| `[ai]` takes minutes to start, `/readyz` returns 503 | First start downloads the embedding model; watch the `[ai]` progress output. Changing `EMBEDDING_MODEL` downloads another one; then `pnpm kb:reindex --force --reason "new model"` rebuilds the collection with it (searches fail until then) |
 | `pnpm stack:up:full`: `port is already allocated` on 3000/4200/8000 | `pnpm dev` (or one native app) still runs — stop it; both modes use the same ports |
 | `pnpm stack:up:full` waits for minutes on `ai-service` | First start downloads the embedding model into the volume: `pnpm stack:logs ai-service` |
 | Angular shows stale output | `rm -rf apps/web/.angular` and restart |

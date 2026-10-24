@@ -17,7 +17,7 @@ from ai_service import mcp_server
 from ai_service.core.settings import Settings
 from ai_service.mcp_client import PROTOCOL
 from ai_service.tokens import Tokens
-from support import token
+from support import ingest, token
 
 MCP = Settings().mcp_resource_url
 METADATA = "http://localhost:8000/.well-known/oauth-protected-resource/mcp"
@@ -102,15 +102,7 @@ def test_mcp_admits_only_tokens_for_its_audience_and_scope(
 
 
 def test_read_tools_and_the_document_resource(client: TestClient) -> None:
-    client.post(
-        "/v1/ingest",
-        files={"file": ("guide.md", GUIDE)},
-        data={
-            "doc_id": "00000000-0000-0000-0000-00000000000a",
-            "owner_id": "bob",
-            "domains": ["dev"],
-        },
-    )
+    ingest(client, "guide.md", GUIDE, ["dev"], doc_id="00000000-0000-0000-0000-00000000000a")
     bearer = mcp_token()
 
     hits = call(

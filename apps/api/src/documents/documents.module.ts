@@ -6,6 +6,7 @@ import { CONFIG, type Config } from '../config.js';
 import { DocumentsController } from './documents.controller.js';
 import { DocumentsService } from './documents.service.js';
 import { InternalDocumentsController } from './internal.controller.js';
+import { ReindexController } from './reindex.controller.js';
 
 @Module({
   imports: [
@@ -20,7 +21,7 @@ import { InternalDocumentsController } from './internal.controller.js';
       }),
     }),
   ],
-  controllers: [DocumentsController, InternalDocumentsController],
+  controllers: [DocumentsController, InternalDocumentsController, ReindexController],
   providers: [DocumentsService],
 })
 export class DocumentsModule {}

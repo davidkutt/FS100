@@ -342,6 +342,74 @@
         ]
       }
     },
+    "/api/admin/reindex": {
+      "get": {
+        "operationId": "ReindexController_status",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reindex"
+        ]
+      },
+      "post": {
+        "operationId": "ReindexController_start",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReindexBody"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "jobId": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "jobId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Reindex"
+        ]
+      }
+    },
+    "/api/admin/reindex/rollback": {
+      "post": {
+        "operationId": "ReindexController_rollback",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "tags": [
+          "Reindex"
+        ]
+      }
+    },
     "/api/models": {
       "get": {
         "operationId": "CatalogController_models",
@@ -949,10 +1017,21 @@
             "type": "string",
             "enum": [
               "pending",
-              "processing",
+              "queued",
+              "parsing",
+              "embedding",
               "ready",
               "failed"
             ]
+          },
+          "version": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "jobId": {
+            "nullable": true,
+            "type": "string"
           },
           "error": {
             "nullable": true,
@@ -996,6 +1075,8 @@
           "domains",
           "topics",
           "status",
+          "version",
+          "jobId",
           "error",
           "chunkCount",
           "pageCount",
@@ -1082,6 +1163,20 @@
           "domains",
           "onBehalfOf"
         ]
+      },
+      "ReindexBody": {
+        "type": "object",
+        "properties": {
+          "reason": {
+            "default": "",
+            "type": "string",
+            "maxLength": 500
+          },
+          "force": {
+            "default": false,
+            "type": "boolean"
+          }
+        }
       },
       "Taxonomy": {
         "type": "object",

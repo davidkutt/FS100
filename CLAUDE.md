@@ -65,7 +65,9 @@ daily cost caps in `apps/api/src/usage/`, admin usage page, system card, e2e app
 is open); M2.8 (Claude Code / VS Code log in to `/mcp` via Keycloak CIMD, ADR-0014) is code-complete, the hand check
 in Claude Code is open. **Phase 3 (retrieval quality, skills; then eval, safety, cost) has started** — M3a.0
 (golden set split into `dev`/`test` via a `split` field, baselines in `evals/baselines/p2-dense/`, `pnpm mem`,
-spikes, ADR-0015…0018 drafts) is done. Phase 3 ADRs start at 0015, not 0014. Check the milestone in
+spikes, ADR-0015…0018 drafts) and M3a.1 (originals in Postgres `ai`, Procrastinate queue with in-process worker,
+collection v2 with versioned IDs, `kb-admin reindex` behind the golden-set gate + rollback, admin re-index page) are
+done. Phase 3 ADRs start at 0015, not 0014. Check the milestone in
 [plan.md §8](plan.md#8-milestones-and-tasks), [plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks) or
 [plan-phase-3.md §8](plan-phase-3.md#8-milestones-and-tasks) before building something: many features are
 deliberately scheduled for later milestones.
@@ -114,6 +116,8 @@ pnpm test            # all tests
 pnpm build           # web + api
 pnpm format          # prettier + ruff fix
 pnpm contracts:generate                   # after changing any route or SSE model; commit packages/contracts (CI checks drift)
+pnpm kb:backfill-originals                # store originals of pre-M3a.1 documents (data/sample-docs/, by SHA-256)
+pnpm kb:reindex [--force --reason "…"]    # rebuild kb_current from originals behind the eval gate; --rollback; needs `pnpm dev ai`
 pnpm e2e                                  # Playwright smoke; needs a running stack, LLM_PROVIDER=fake
 pnpm --filter @fs100/api db:generate      # Drizzle migration after editing apps/api/src/db/schema.ts
 ```
@@ -167,7 +171,8 @@ Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
   service; their types live in `@fs100/contracts/ai-service`. `contracts:generate` boots the API from the repo
   root with logging off, so a cwd-relative file path in API config makes it exit 1 without a message.
 - **AI service tests** never download models or need Docker: they fake fastembed (`tests/support.py`) and
-  use `QDRANT_URL=:memory:`. The golden set's labels are checked against `data/sample-docs/` by
+  use `support.OFFLINE` (Qdrant and the `ai` database in-process, no worker); `drain(client)` runs the queued
+  jobs, so an upload is `ingest(client, …)`, not a bare POST. The golden set's labels are checked against `data/sample-docs/` by
   `tests/test_evals.py`; `evals/datasets/retrieval_v1.jsonl` is frozen — changes go into a new version.
 - **No paid LLM calls in tests or CI** — use `LLM_PROVIDER=fake`. No agent frameworks (LangChain etc.)
   through Phase 2 (D11). No AGPL deps (repo is MIT; e.g. no PyMuPDF).

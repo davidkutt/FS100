@@ -1,5 +1,7 @@
+import asyncio
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, suppress
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -9,13 +11,14 @@ from qdrant_client import QdrantClient
 
 from ai_service import __version__
 from ai_service.agent import Agent
-from ai_service.api import agent, catalog, chat, documents, health
+from ai_service.api import agent, catalog, chat, documents, health, jobs
 from ai_service.catalog import McpServers, load_models, load_servers, load_taxonomy
 from ai_service.core.auth import Caller, ServiceAuth
 from ai_service.core.logging import request_id, setup_logging
 from ai_service.core.settings import Settings, get_settings
 from ai_service.core.tracing import setup_tracing
 from ai_service.embeddings import Embedder
+from ai_service.jobs import Deps, open_jobs, run_worker
 from ai_service.knowledge_base import Domain, KnowledgeBase
 from ai_service.llm import create_provider
 from ai_service.mcp_client import McpClient
@@ -68,8 +71,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         router = create_router(settings, kb.embedder, taxonomy, llm)
         app.state.agent = Agent(llm, settings, tools, router)
         # Starlette does not run a mounted app's lifespan.
-        async with mcp.session_manager.run():
+        async with open_jobs(settings.ai_database_url) as (queue, store), mcp.session_manager.run():
+            app.state.jobs, app.state.store = queue, store
+            golden = Path(settings.golden_dataset)
+            app.state.deps = deps = Deps(kb, store, golden, settings.retrieval_score_threshold)
+            worker = settings.jobs_inprocess_worker and asyncio.create_task(run_worker(queue, deps))
             yield
+            if worker:
+                worker.cancel()
+                with suppress(asyncio.CancelledError):
+                    await worker
 
     app = FastAPI(title="FS100 AI service", version=__version__, lifespan=lifespan)
     app.include_router(health.router)
@@ -80,6 +91,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(chat.router, dependencies=service_auth)
     app.include_router(agent.router, dependencies=service_auth)
     app.include_router(catalog.router, dependencies=service_auth)
+    app.include_router(jobs.router, dependencies=service_auth)
+    app.include_router(jobs.admin, dependencies=service_auth)
 
     @app.middleware("http")
     async def propagate_request_id(  # pyright: ignore[reportUnusedFunction]

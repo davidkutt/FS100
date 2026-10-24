@@ -47,5 +47,12 @@ export const routes: Routes = [
     data: { role: 'admin' },
     loadComponent: () => import('./features/admin/usage').then((m) => m.Usage),
   },
+  {
+    path: 'admin/reindex',
+    title: 'Re-index · FS100',
+    canActivate: [roleGuard],
+    data: { role: 'admin' },
+    loadComponent: () => import('./features/admin/reindex').then((m) => m.Reindex),
+  },
   { path: '**', redirectTo: '' },
 ];

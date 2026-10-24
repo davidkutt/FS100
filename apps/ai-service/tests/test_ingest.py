@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from ai_service.ingest import Section, UnsupportedDocumentError, chunk, parse
+from ai_service.ingest import Section, chunk, parse
 
 FIXTURES = Path(__file__).parent / "fixtures"
 CORPUS = Path(__file__).parents[3] / "data/sample-docs"
@@ -54,7 +54,7 @@ def test_txt_is_one_section() -> None:
 
 
 def test_unsupported_type_is_rejected() -> None:
-    with pytest.raises(UnsupportedDocumentError):
+    with pytest.raises(ValueError, match="Unsupported file type"):
         parse("slides.pptx", b"PK")
 
 

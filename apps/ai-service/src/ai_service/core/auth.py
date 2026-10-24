@@ -72,3 +72,9 @@ class ServiceAuth:
 def get_caller(request: Request) -> Caller:
     """The caller `ServiceAuth` admitted; every /v1 router runs it first."""
     return request.state.caller
+
+
+def require_admin(request: Request) -> None:
+    """For admin routes: the exchanged user token must carry the realm role `admin`."""
+    if "admin" not in get_caller(request).roles:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "Admins only")

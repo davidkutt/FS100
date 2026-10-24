@@ -1,0 +1,142 @@
+<h1 class="h3 mb-3">Re-index</h1>
+
+@if (status.hasValue()) {
+  <p>
+    Alias <code>{{ status.value().alias }}</code> points at
+    <code>{{ status.value().collection }}</code
+    >.
+  </p>
+} @else if (status.error(); as error) {
+  <div class="alert alert-danger" role="alert">{{ problemDetail(error) }}</div>
+}
+
+<form
+  class="card card-body shadow-sm mb-4"
+  aria-labelledby="reindex-heading"
+  (submit)="$event.preventDefault(); start()"
+>
+  <h2 id="reindex-heading" class="h5">New build</h2>
+  <p class="small text-body-secondary">
+    Builds a collection from the stored originals, runs the golden <code>dev</code> and
+    <code>test</code> sets and moves the alias only if no <code>test</code> metric drops by more
+    than 0.02. Starts and rollbacks are audited.
+  </p>
+  <label for="reindex-reason" class="form-label">Reason</label>
+  <input id="reindex-reason" name="reason" class="form-control mb-2" [(ngModel)]="reason" />
+  <div class="form-check mb-3">
+    <input
+      id="reindex-force"
+      name="force"
+      type="checkbox"
+      class="form-check-input"
+      [(ngModel)]="force"
+    />
+    <label for="reindex-force" class="form-check-label">
+      Swap even if the gate fails (needs a reason)
+    </label>
+  </div>
+  <div class="d-flex gap-2">
+    <button
+      type="submit"
+      class="btn btn-primary"
+      [disabled]="busy() || (force() && !reason().trim())"
+    >
+      Start re-index
+    </button>
+    <button
+      type="button"
+      class="btn btn-outline-secondary"
+      [disabled]="busy()"
+      (click)="rollback()"
+    >
+      Roll back
+    </button>
+  </div>
+  @if (error()) {
+    <div class="alert alert-danger mt-3 mb-0 py-2" role="alert">{{ error() }}</div>
+  }
+</form>
+
+@if (status.hasValue()) {
+  <div class="table-responsive">
+    <table class="table table-sm align-middle small">
+      <caption>
+        Latest runs; metrics are the
+        <code>test</code>
+        set, change against the live collection in brackets.
+      </caption>
+      <thead>
+        <tr>
+          <th scope="col">Job</th>
+          <th scope="col">State</th>
+          <th scope="col">Requested by</th>
+          <th scope="col">Reason</th>
+          <th scope="col">Decision</th>
+          <th scope="col">Test metrics</th>
+          <th scope="col">Report</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (run of status.value().runs; track run.id) {
+          <tr>
+            <td>{{ run.id }}</td>
+            <td>
+              {{ run.state }}
+              @if (run.error) {
+                <div class="text-danger">{{ run.error }}</div>
+              }
+            </td>
+            <td>{{ run.requested_by }}</td>
+            <td>
+              {{ run.reason }}
+              @if (run.force) {
+                <span class="badge text-bg-warning ms-1">force</span>
+              }
+            </td>
+            @if (run.report; as report) {
+              <td>
+                <span class="badge" [class]="decisionBadge[report.decision]">{{
+                  report.decision
+                }}</span>
+              </td>
+              <td>
+                @for (metric of metrics; track metric) {
+                  @let value = report.metrics['test']?.['candidate']?.[metric];
+                  @if (value !== undefined) {
+                    <div class="text-nowrap">
+                      {{ metric }} {{ value | number: '1.3-3' }}
+                      @if (delta(report, metric); as change) {
+                        ({{ change > 0 ? '+' : '' }}{{ change | number: '1.3-3' }})
+                      }
+                    </div>
+                  }
+                }
+              </td>
+              <td>
+                <details>
+                  <summary>show</summary>
+                  <div>
+                    <code>{{ report.previous }}</code> → <code>{{ report.collection }}</code>
+                  </div>
+                  <div>
+                    {{ report.documents }} documents, {{ report.chunks }} chunks,
+                    {{ report.build_s | number: '1.0-0' }} s
+                  </div>
+                  @for (blocker of report.blockers; track $index) {
+                    <div class="text-danger">{{ blocker }}</div>
+                  }
+                </details>
+              </td>
+            } @else {
+              <td colspan="3"></td>
+            }
+          </tr>
+        } @empty {
+          <tr>
+            <td colspan="7" class="text-body-secondary">No re-index yet.</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

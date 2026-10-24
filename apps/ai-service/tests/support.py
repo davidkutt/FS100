@@ -3,20 +3,31 @@ import re
 import time
 import zlib
 from collections.abc import Iterator
-from typing import Any
+from functools import partial
+from typing import Any, cast
+from uuid import uuid4
 
 import httpx2
 import jwt
 import numpy as np
 from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from jwt.algorithms import RSAAlgorithm
 from numpy.typing import NDArray
 
 from ai_service.core.settings import Settings
+from ai_service.jobs import run_worker
 from ai_service.routing import Route
 from ai_service.tokens import Tokens
 
 MARKDOWN = b"# Runbook\n\n## Rollback\nUndo the release with kubectl rollout undo.\n"
+# In-process Qdrant and database, no worker: `drain` runs the queued jobs.
+OFFLINE: dict[str, Any] = {
+    "qdrant_url": ":memory:",
+    "ai_database_url": ":memory:",
+    "jobs_inprocess_worker": False,
+}
 SIGNING_KEY = "test-only-approval-signing-key-0123456789"
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 JWKS: dict[str, Any] = {
@@ -77,7 +88,7 @@ class FakeTextEmbedding:
     def __init__(self, *_args: object, **_kwargs: object) -> None:
         self.texts: list[str] = []
 
-    def embed(self, texts: list[str]) -> Iterator[NDArray[np.float64]]:
+    def embed(self, texts: list[str], **_kwargs: object) -> Iterator[NDArray[np.float64]]:
         for text in texts:
             self.texts.append(text)
             vector = np.zeros(self.embedding_size)
@@ -94,3 +105,40 @@ def sse(response: httpx2.Response) -> list[tuple[str, Any]]:
         dict(line.split(": ", 1) for line in b.splitlines()) for b in response.text.split("\n\n")
     ]
     return [(b["event"], json.loads(b["data"])) for b in blocks if b]
+
+
+def submit(
+    client: TestClient,
+    filename: str,
+    data: bytes,
+    domains: list[str],
+    doc_id: str | None = None,
+    topics: list[str] | None = None,
+) -> httpx2.Response:
+    return client.post(
+        "/v1/documents",
+        files={"file": (filename, data)},
+        data={
+            "doc_id": doc_id or str(uuid4()),
+            "owner_id": "bob",
+            "domains": domains,
+            "topics": topics or [],
+        },
+    )
+
+
+def drain(client: TestClient) -> None:
+    """Runs the queued jobs to their end."""
+    state = cast(FastAPI, client.app).state
+    assert client.portal is not None
+    client.portal.call(partial(run_worker, state.jobs, state.deps, wait=False))
+
+
+def ingest(
+    client: TestClient, filename: str, data: bytes, domains: list[str], **kwargs: Any
+) -> Any:
+    """Submits the document and runs its job; returns the job as `GET /v1/jobs/{id}` does."""
+    submitted = submit(client, filename, data, domains, **kwargs)
+    assert submitted.status_code == 202, submitted.text
+    drain(client)
+    return client.get(f"/v1/jobs/{submitted.json()['job_id']}").json()

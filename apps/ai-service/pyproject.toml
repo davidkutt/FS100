@@ -13,6 +13,7 @@ dependencies = [
     "openinference-instrumentation-openai>=0.1.65",
     "opentelemetry-exporter-otlp-proto-grpc>=1.45.1",
     "opentelemetry-sdk>=1.45.1",
+    "procrastinate==3.10.0",
     "pydantic-settings>=2.15",
     "pyjwt[crypto]>=2.15.1",
     "pypdf>=6.20.1",
@@ -24,6 +25,7 @@ dependencies = [
 
 [project.scripts]
 kb-eval = "ai_service.evals.cli:main"
+kb-admin = "ai_service.admin:main"
 
 [build-system]
 requires = ["uv_build>=0.11.32,<0.14.0"]

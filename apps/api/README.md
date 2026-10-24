@@ -18,10 +18,10 @@ Endpoints (plan.md §7.2; OpenAPI in `packages/contracts/api.openapi.json`):
 |---|---|---|
 | `GET /healthz` · `GET /readyz` | public | readiness = Postgres reachable |
 | `GET /api/me` | any | |
-| `GET /api/documents` | viewer | all documents with status and domains |
-| `POST /api/documents` | editor | multipart `file` + `domains` + optional `topics` (`domain/topic` from `config/taxonomy.yaml`); 202, ingested in the background; 409 duplicate, 413 > `UPLOAD_MAX_MB`, 415 not PDF/MD/TXT |
-| `PATCH /api/documents/:id` | editor (own) / admin | `{domains?, topics?}` → Qdrant payload update, no re-embedding; 409 while ingesting |
-| `DELETE /api/documents/:id` | editor (own) / admin | vectors first, then the row; 409 while ingesting |
+| `GET /api/documents` | viewer | all documents with status and domains; rows in work first take their job's state from the AI service (`GET /v1/jobs/{id}`) |
+| `POST /api/documents` | editor | multipart `file` + `domains` + optional `topics` (`domain/topic` from `config/taxonomy.yaml`); 202, handed to the AI service's queue: status `pending → queued → parsing → embedding → ready \| failed`; 409 duplicate, 413 > `UPLOAD_MAX_MB`, 415 not PDF/MD/TXT |
+| `PATCH /api/documents/:id` | editor (own) / admin | `{domains?, topics?}` → Qdrant payload update, no re-embedding; 409 until the ingest has ended |
+| `DELETE /api/documents/:id` | editor (own) / admin | vectors and the stored original first (a `queued` job is cancelled), then the row; 409 while the job runs |
 | `GET · POST /api/conversations` | viewer | own conversations, newest first · `{title?, modelId?}` |
 | `GET · DELETE /api/conversations/:id` | owner (delete: also admin) | messages with `parts` (SSE v2 payloads by event name), gap signals and the caller's rating; others get 404 |
 | `POST /api/conversations/:id/messages` | owner | `{text, modelId?, mode?, domains?}`; 429 `daily_cap_exceeded` once the caller's cost today reaches the cap → SSE v2 relay of `/v1/agent` with the last 20 messages as text; events are stored as the assistant message (a stop → `stopReason: cancelled`); `approval_required` is stored as a pending approval and relayed without `signedAction` |
@@ -30,6 +30,7 @@ Endpoints (plan.md §7.2; OpenAPI in `packages/contracts/api.openapi.json`):
 | `GET /api/admin/audit` | admin | `?user&tool&outcome&from&to` (UTC days); newest 200 rows of the append-only `audit_log`: one per tool result, redacted args |
 | `POST /api/messages/:id/feedback` | owner | `{rating: up\|down, comment?}`; a second rating replaces the first |
 | `GET /api/me/usage` | any | `{capUsd, today, days}`: tokens, cost and turns per UTC day from the `usage` rows, last 30 days; the cap is the highest role's `DAILY_COST_CAP_USD_*` (D44) |
+| `GET /api/admin/reindex` · `POST /api/admin/reindex` · `POST /api/admin/reindex/rollback` | admin | relays to the AI service's re-index (D55) with the user's token: alias target + latest runs with reports · `{reason, force}` → 202 `{jobId}` (force needs a reason) · alias back to the replaced collection; start and rollback are audited as `kb.reindex` / `kb.rollback` |
 | `GET /api/admin/usage` | admin | `?user&from&to` (UTC days); cost and tokens per user and day, newest 200 rows |
 | `GET /api/models` · `GET /api/tools` | viewer | relays of `/v1/models`, `/v1/tools`, cut to the caller's role |
 | `GET /api/taxonomy` | viewer | `config/taxonomy.yaml` (`TAXONOMY_CONFIG`), validated at boot |

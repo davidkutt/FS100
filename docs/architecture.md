@@ -57,19 +57,27 @@ sequenceDiagram
   A->>A: role ≥ editor · size · MIME allow-list + magic bytes · SHA-256
   A->>P: insert row status=pending (duplicate hash → 409)
   A-->>W: 202 {id}
-  A->>P: status=processing
-  A->>AI: POST /v1/ingest (file, doc_id, owner_id, domains)
-  AI->>AI: parse (PDF pages / Markdown headings) → chunk 1000/150 → embed
-  AI->>Q: upsert points (UUIDv5 ids, payload doc_id, domains, page, heading)
-  AI-->>A: {chunk_count, page_count, embedding_model}
-  A->>P: status=ready (or failed + error)
-  loop while any row is pending/processing
+  A->>AI: POST /v1/documents (file, doc_id, owner_id, domains)
+  AI->>AI: store the original in Postgres `ai` (version per doc) · queue the ingest job
+  AI-->>A: 202 {job_id, version}
+  A->>P: status=queued, job_id
+  Note over AI,Q: worker in the AI process, one job at a time
+  AI->>AI: parsing (PDF pages / Markdown headings) → chunk 1000/150 → embedding
+  AI->>Q: upsert points (UUIDv5 of doc_id:version:chunk, payload v2), then drop older versions
+  loop while any row is in work
     W->>A: GET /api/documents
+    A->>AI: GET /v1/jobs/{job_id} for rows in work
+    A->>P: status = job state (ready + counts, or failed + error)
   end
 ```
 
-- Ingest runs in the background of the API process; an API restart marks interrupted rows `failed`.
-- Delete removes the row and all points of the document (`DELETE /v1/documents/{doc_id}`).
+- The queue (Procrastinate) lives in Postgres `ai`, so jobs survive restarts; a job whose worker died
+  runs again (idempotent per document version). An API restart fails only rows the AI service never got.
+- Delete cancels a queued job and removes the original and the points from every collection kept for a
+  rollback (`DELETE /v1/documents/{doc_id}`); a running job answers 409.
+- `pnpm kb:reindex` builds a new collection from the stored originals, runs the golden `dev` and `test`
+  sets against it and the live one, and moves the alias `kb_current` only if no `test` metric drops by
+  more than 0.02 (ADR-0015); `--rollback` points it back.
 
 ## Chat flow
 

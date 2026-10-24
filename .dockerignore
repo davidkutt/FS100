@@ -7,6 +7,7 @@
 !apps/
 !packages/
 !config/
+!evals/datasets/retrieval_v1.jsonl
 **/node_modules
 **/dist
 **/.angular

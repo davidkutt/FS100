@@ -18,14 +18,7 @@ vi.mock('../src/documents/fetch-url.js', () => ({
 describe('Internal ingest from a URL (e2e)', () => {
   let app: INestApplication<App>;
   let db: Db;
-  const ai = {
-    ingest: vi.fn(async (form: FormData) => ({
-      doc_id: form.get('doc_id'),
-      chunk_count: 1,
-      page_count: null,
-      embedding_model: 'test-model',
-    })),
-  };
+  const ai = { submit: vi.fn(async () => ({ job_id: 1, version: 1 })) };
 
   beforeAll(async () => {
     app = await createApp(ai);
@@ -62,7 +55,8 @@ describe('Internal ingest from a URL (e2e)', () => {
         ownerName: 'Bob Editor',
         filename: 'runbook.md',
         domains: ['devops'],
-        status: 'ready',
+        status: 'queued',
+        jobId: '1',
       });
     });
     const [entry] = await db.select().from(auditLog).where(eq(auditLog.tool, 'documents.from_url'));

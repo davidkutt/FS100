@@ -12,13 +12,20 @@ import {
   type OnApplicationBootstrap,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
-import { desc, eq, inArray } from 'drizzle-orm';
-import { AiClient, type Domain } from '../ai-client/ai-client.service.js';
+import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
+import {
+  AiClient,
+  type Domain,
+  type JobStatus,
+  type ReindexRequest,
+  type ReindexStatus,
+  type Alias,
+} from '../ai-client/ai-client.service.js';
 import type { AuthUser } from '../auth/auth.guard.js';
 import { TAXONOMY, type Taxonomy, unknownTopics } from '../catalog/taxonomy.js';
 import { DB, type Db } from '../db/db.module.js';
 import { CONFIG, type Config } from '../config.js';
-import { auditLog, type Document, documents } from '../db/schema.js';
+import { auditLog, type Document, type DocumentStatus, documents } from '../db/schema.js';
 import type { LabelsBody } from './documents.controller.js';
 import { fetchDocument } from './fetch-url.js';
 
@@ -27,6 +34,8 @@ export interface Upload {
   buffer: Buffer;
   size: number;
 }
+
+const IN_WORK = ['queued', 'parsing', 'embedding'] satisfies DocumentStatus[];
 
 // The AI service picks its parser by file extension, so the extension decides the type.
 const MIME_BY_EXTENSION: Record<string, string> = {
@@ -47,18 +56,19 @@ export class DocumentsService implements OnApplicationBootstrap {
     @Inject(CONFIG) private readonly config: Config,
   ) {}
 
-  /** Originals are not kept (D7), so an ingest cut off by a restart cannot resume. */
+  /** An upload not yet handed to the AI service dies with the process; queued jobs resume (D53). */
   async onApplicationBootstrap(): Promise<void> {
-    // shortcut: assumes one API instance; needs a job queue with leases (P3) before scaling out.
+    // shortcut: assumes one API instance; a second one would fail the other's uploads in flight.
     const stuck = await this.db
       .update(documents)
       .set({ status: 'failed', error: 'Interrupted by an API restart; delete and upload again' })
-      .where(inArray(documents.status, ['pending', 'processing']))
+      .where(eq(documents.status, 'pending'))
       .returning({ id: documents.id });
     if (stuck.length > 0) this.logger.warn(`Marked ${stuck.length} interrupted upload(s) failed`);
   }
 
-  list(): Promise<Document[]> {
+  async list(requestId: string): Promise<Document[]> {
+    await this.syncJobs(requestId);
     return this.db.select().from(documents).orderBy(desc(documents.createdAt));
   }
 
@@ -139,7 +149,7 @@ export class DocumentsService implements OnApplicationBootstrap {
     requestId: string,
   ): Promise<Document> {
     this.checkTopics(labels.topics ?? []);
-    await this.settled(user, id, 'change');
+    await this.settled(user, id, 'change', requestId);
     // Vectors first, like delete: if that fails, the row keeps the labels Qdrant still has.
     await this.ai.updateLabels(id, labels, requestId);
     return this.db.transaction(async (tx) => {
@@ -157,25 +167,93 @@ export class DocumentsService implements OnApplicationBootstrap {
   }
 
   async remove(user: AuthUser, id: string, requestId: string): Promise<void> {
-    await this.settled(user, id, 'delete');
-    // Vectors first: if that fails, the row stays and the delete can be retried.
+    await this.settled(user, id, 'delete', requestId);
+    // Vectors and original first (a queued job is cancelled): if that fails, the row stays.
     await this.ai.deleteDocument(id, requestId);
     await this.db.delete(documents).where(eq(documents.id, id));
   }
 
-  /** The caller's own (or, for admins, any) document whose ingest has finished. */
-  private async settled(user: AuthUser, id: string, action: string): Promise<void> {
+  /** Re-index from the stored originals behind the eval gate (D55); audited like a write. */
+  async reindex(
+    user: AuthUser,
+    body: ReindexRequest,
+    token: string,
+    requestId: string,
+  ): Promise<{ jobId: number }> {
+    const jobId = await this.ai.reindex(body, requestId, token);
+    await this.audit(user, 'kb.reindex', { jobId, ...body });
+    return { jobId };
+  }
+
+  reindexStatus(token: string, requestId: string): Promise<ReindexStatus> {
+    return this.ai.reindexStatus(requestId, token);
+  }
+
+  async rollback(user: AuthUser, token: string, requestId: string): Promise<Alias> {
+    const alias = await this.ai.rollback(requestId, token);
+    await this.audit(user, 'kb.rollback', alias);
+    return alias;
+  }
+
+  /** The caller's own (or, for admins, any) document whose ingest is not running. */
+  private async settled(
+    user: AuthUser,
+    id: string,
+    action: 'change' | 'delete',
+    requestId: string,
+  ): Promise<void> {
+    await this.syncJobs(requestId, id);
     const [doc] = await this.db.select().from(documents).where(eq(documents.id, id));
     if (!doc) throw new NotFoundException(`Document ${id} not found`);
     if (doc.ownerId !== user.sub && !user.roles.includes('admin')) {
       throw new ForbiddenException(`Editors can only ${action} their own documents`);
     }
-    // A running ingest would upsert its vectors (and old labels) afterwards.
-    if (doc.status === 'pending' || doc.status === 'processing') {
+    // An ingest upserts its vectors (and the labels it was given) when it runs; a queued one can
+    // still be cancelled.
+    const busy: DocumentStatus[] =
+      action === 'delete' ? ['pending', 'parsing', 'embedding'] : ['pending', ...IN_WORK];
+    if (busy.includes(doc.status)) {
       throw new ConflictException(
         'The document is still being ingested; try again when it is done',
       );
     }
+  }
+
+  /** Copies the AI service's job states into the rows still in work (D52). */
+  // shortcut: syncs when documents are read; add a poller if rows must change unread.
+  private async syncJobs(requestId: string, id?: string): Promise<void> {
+    const working = await this.db
+      .select()
+      .from(documents)
+      .where(
+        and(
+          inArray(documents.status, IN_WORK),
+          isNotNull(documents.jobId),
+          id ? eq(documents.id, id) : undefined,
+        ),
+      );
+    await Promise.all(
+      working.map(async (doc) => {
+        const job = await this.ai.job(doc.jobId!, requestId).catch((error: unknown) => {
+          this.logger.warn(`Job ${doc.jobId} of ${doc.id}: ${String(error)}`);
+        });
+        const update = job && fromJob(job);
+        if (update && update.status !== doc.status) {
+          await this.db.update(documents).set(update).where(eq(documents.id, doc.id));
+        }
+      }),
+    );
+  }
+
+  private async audit(user: AuthUser, tool: string, args: Record<string, unknown>): Promise<void> {
+    await this.db.insert(auditLog).values({
+      actorId: user.sub,
+      actorRoles: user.roles,
+      tool,
+      kind: 'write',
+      argsRedacted: args,
+      outcome: 'ok',
+    });
   }
 
   private checkTopics(topics: string[]): void {
@@ -183,24 +261,19 @@ export class DocumentsService implements OnApplicationBootstrap {
     if (unknown.length) throw new BadRequestException(`Unknown topics: ${unknown.join(', ')}`);
   }
 
+  /** Hands the file to the AI service, which stores it and queues the ingest (D52). */
   private async ingest(doc: Document, data: Buffer, requestId: string): Promise<void> {
     try {
-      await this.db.update(documents).set({ status: 'processing' }).where(eq(documents.id, doc.id));
       const form = new FormData();
       form.set('file', new Blob([new Uint8Array(data)], { type: doc.mime }), doc.filename);
       form.set('doc_id', doc.id);
       form.set('owner_id', doc.ownerId);
       for (const domain of doc.domains) form.append('domains', domain);
       for (const topic of doc.topics) form.append('topics', topic);
-      const result = await this.ai.ingest(form, requestId);
+      const { job_id, version } = await this.ai.submit(form, requestId);
       await this.db
         .update(documents)
-        .set({
-          status: 'ready',
-          chunkCount: result.chunk_count,
-          pageCount: result.page_count,
-          embeddingModel: result.embedding_model,
-        })
+        .set({ status: 'queued', jobId: String(job_id), version })
         .where(eq(documents.id, doc.id));
     } catch (error) {
       this.logger.warn(`Ingest of ${doc.id} failed: ${String(error)}`);
@@ -213,6 +286,28 @@ export class DocumentsService implements OnApplicationBootstrap {
           this.logger.error(`Marking ${doc.id} failed: ${String(dbError)}`),
         );
     }
+  }
+}
+
+function fromJob(job: JobStatus): Partial<Document> | undefined {
+  const result = job.result && 'chunk_count' in job.result ? job.result : undefined;
+  switch (job.state) {
+    case 'queued':
+    case 'parsing':
+    case 'embedding':
+      return { status: job.state };
+    case 'ready':
+      return {
+        status: 'ready',
+        chunkCount: result?.chunk_count ?? null,
+        pageCount: result?.page_count ?? null,
+        embeddingModel: result?.embedding_model ?? null,
+      };
+    case 'failed':
+    case 'cancelled':
+      return { status: 'failed', error: job.error ?? `Ingest ${job.state}` };
+    default:
+      return undefined;
   }
 }
 

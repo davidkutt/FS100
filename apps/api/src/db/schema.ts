@@ -15,7 +15,16 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-export const DOCUMENT_STATUSES = ['pending', 'processing', 'ready', 'failed'] as const;
+/** `pending` until the AI service accepted the upload; then its job's states (plan-phase-3 §7.1). */
+export const DOCUMENT_STATUSES = [
+  'pending',
+  'queued',
+  'parsing',
+  'embedding',
+  'ready',
+  'failed',
+] as const;
+export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
 
 /** plan.md §7.4. After a change: `pnpm --filter @fs100/api db:generate`; the API migrates on boot. */
 export const documents = pgTable(
@@ -37,6 +46,8 @@ export const documents = pgTable(
       .notNull()
       .default(sql`'{}'`),
     status: text({ enum: DOCUMENT_STATUSES }).notNull(),
+    version: integer().notNull().default(1),
+    jobId: text(), // the AI service's ingest job
     error: text(),
     chunkCount: integer(),
     pageCount: integer(),
@@ -48,7 +59,10 @@ export const documents = pgTable(
       .$onUpdate(() => new Date()),
   },
   (t) => [
-    check('documents_status_check', sql`${t.status} in ('pending','processing','ready','failed')`),
+    check(
+      'documents_status_check',
+      sql`${t.status} in ('pending','queued','parsing','embedding','ready','failed')`,
+    ),
   ],
 );
 

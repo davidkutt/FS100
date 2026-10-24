@@ -13,11 +13,13 @@ from ai_service.mcp_client import McpClient
 from ai_service.tokens import Tokens
 from support import (
     MARKDOWN,
+    OFFLINE,
     SIGNING_KEY,
     FakeTextEmbedding,
     FixedRouter,
     exchange,
     fetch_jwks,
+    ingest,
     token,
 )
 
@@ -30,18 +32,12 @@ def client(monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     monkeypatch.delenv("GITHUB_PAT_READ", raising=False)
     monkeypatch.setattr(embeddings, "TextEmbedding", FakeTextEmbedding)
     monkeypatch.setattr(Tokens, "_fetch", exchange)
-    settings = Settings(
-        qdrant_url=":memory:", llm_provider="fake", approval_signing_key=SIGNING_KEY
-    )
+    settings = Settings(**OFFLINE, llm_provider="fake", approval_signing_key=SIGNING_KEY)
     app = create_app(settings)
     monkeypatch.setattr(McpClient, "transport", httpx2.ASGITransport(app=app))
     with TestClient(app, headers={"Authorization": f"Bearer {token()}"}) as client:
         app.state.agent.router = FixedRouter()
-        client.post(
-            "/v1/ingest",
-            files={"file": ("runbook.md", MARKDOWN)},
-            data={"doc_id": str(uuid4()), "owner_id": "bob", "domains": ["devops"]},
-        )
+        ingest(client, "runbook.md", MARKDOWN, ["devops"])
         yield client
 
 

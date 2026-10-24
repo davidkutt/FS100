@@ -143,6 +143,7 @@ services:
       - AI_KEYCLOAK_CLIENT_SECRET=${AI_KEYCLOAK_CLIENT_SECRET:-dev-only-change-me}
       - MCP_RESOURCE_URL
       - QDRANT_ALIAS
+      - JOBS_INPROCESS_WORKER
       - EMBEDDING_MODEL
       - CHUNK_SIZE
       - CHUNK_OVERLAP
@@ -172,6 +173,7 @@ services:
       - OTEL_SERVICE_NAME
       - AI_KEYCLOAK_REALM_URL=http://keycloak:8080/realms/kb
       - QDRANT_URL=http://qdrant:6333
+      - AI_DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-dev-only-change-me}@postgres:5432/ai
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://phoenix:4317
       - AI_API_URL=http://api:3000
       - GITHUB_MCP_URL=http://github-mcp:8082/mcp
@@ -181,6 +183,8 @@ services:
       # The first start downloads EMBEDDING_MODEL here (≈ 2.3 GB for bge-m3); later starts reuse it.
       - fastembed-cache:/app/.cache/fastembed
     depends_on:
+      postgres:
+        condition: service_healthy
       qdrant:
         condition: service_healthy
     healthcheck:

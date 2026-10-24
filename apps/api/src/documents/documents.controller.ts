@@ -59,6 +59,8 @@ export const DocumentDto = z
     domains: z.array(DomainSchema),
     topics: z.array(z.string()),
     status: z.enum(DOCUMENT_STATUSES),
+    version: z.int(),
+    jobId: z.string().nullable(),
     error: z.string().nullable(),
     chunkCount: z.int().nullable(),
     pageCount: z.int().nullable(),
@@ -75,11 +77,11 @@ export class DocumentsController {
   @Get()
   @Roles('viewer')
   @ApiOkResponse({ standardSchema: z.array(DocumentDto) })
-  list(): Promise<Document[]> {
-    return this.documents.list();
+  list(@Req() req: AuthRequest): Promise<Document[]> {
+    return this.documents.list(req.id as string);
   }
 
-  /** 202: ingestion runs in the background; poll the list until the status is terminal (D7). */
+  /** 202: the AI service queues the ingest; poll the list until the status is terminal (D52). */
   @Post()
   @Roles('editor')
   @HttpCode(202)
