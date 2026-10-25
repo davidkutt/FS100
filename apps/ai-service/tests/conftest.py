@@ -15,6 +15,8 @@ from support import (
     MARKDOWN,
     OFFLINE,
     SIGNING_KEY,
+    FakeSparseTextEmbedding,
+    FakeTextCrossEncoder,
     FakeTextEmbedding,
     FixedRouter,
     exchange,
@@ -22,6 +24,12 @@ from support import (
     ingest,
     token,
 )
+
+
+@pytest.fixture(autouse=True)
+def offline_bm25_and_reranker(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(embeddings, "SparseTextEmbedding", FakeSparseTextEmbedding)
+    monkeypatch.setattr(embeddings, "TextCrossEncoder", FakeTextCrossEncoder)
 
 
 @pytest.fixture

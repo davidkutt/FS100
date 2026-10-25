@@ -17,7 +17,7 @@ from ai_service.core.auth import Caller, ServiceAuth
 from ai_service.core.logging import request_id, setup_logging
 from ai_service.core.settings import Settings, get_settings
 from ai_service.core.tracing import setup_tracing
-from ai_service.embeddings import Embedder
+from ai_service.embeddings import Embedder, load_reranker
 from ai_service.jobs import Deps, open_jobs, run_worker
 from ai_service.knowledge_base import Domain, KnowledgeBase
 from ai_service.llm import create_provider
@@ -59,6 +59,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings.qdrant_alias,
             settings.chunk_size,
             settings.chunk_overlap,
+            settings.sparse_model,
+            reranker=load_reranker(
+                settings.reranker_model, settings.rerank_candidates, settings.embedding_cache_dir
+            ),
         )
         kb.ensure_collection()
         llm = create_provider(settings)

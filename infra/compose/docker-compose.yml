@@ -147,6 +147,9 @@ services:
       - EMBEDDING_MODEL
       - CHUNK_SIZE
       - CHUNK_OVERLAP
+      - SPARSE_MODEL
+      - RERANKER_MODEL
+      - RERANK_CANDIDATES
       - RETRIEVAL_TOP_K
       - RETRIEVAL_SCORE_THRESHOLD
       - LLM_PROVIDER # unset = fake

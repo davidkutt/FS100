@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from ai_service import embeddings
 from ai_service.core.settings import Settings
+from ai_service.embeddings import Reranker
 from ai_service.knowledge_base import KnowledgeBase
 from ai_service.main import create_app
 from support import OFFLINE, FakeTextEmbedding, drain, fetch_jwks, submit, token
@@ -102,6 +103,48 @@ def test_search_filters_by_domain_and_threshold(client: TestClient) -> None:
 
     assert [h["heading"] for h in devops] == ["Runbook › Rollback"]  # noqa: RUF001
     assert strict == []
+
+
+def test_the_reranker_orders_the_fused_candidates_and_its_score_gates(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    ingest(client, "two-pages.pdf", PDF, ["sre"])
+    ingest(client, "runbook.md", MARKDOWN, ["devops"])
+    kb_of(client).reranker = reranker = Reranker("fake", 20)  # RERANKER_MODEL=…, faked in conftest
+
+    def reversed_order(_query: str, texts: list[str]) -> list[float]:
+        return [i / 10 for i in range(len(texts))]  # the last fused candidate scores best
+
+    monkeypatch.setattr(reranker, "scores", reversed_order)
+    query = "Undo the release with kubectl rollout undo"
+
+    response = client.post("/v1/search", json={"query": query, "top_k": 2, "explain": True})
+    hits = response.json()["hits"]
+
+    assert response.json()["reranker_model"] == "fake"
+    assert [(h["fused_rank"], h["score"]) for h in hits] == [(3, 0.2), (2, 0.1)]
+    assert len(search(client, query, score_threshold=0.2)) == 3
+    assert search(client, query, score_threshold=0.21) == []
+
+
+def test_hybrid_search_explains_its_ranks_and_keeps_cosine_scores(client: TestClient) -> None:
+    ingest(client, "two-pages.pdf", PDF, ["sre"])
+    ingest(client, "runbook.md", MARKDOWN, ["devops"])
+    query = "Undo the release with kubectl rollout undo"
+
+    hits = search(client, query, explain=True)
+    best = hits[0]["score"]
+    gated = search(client, query, score_threshold=best)
+    kb = kb_of(client)
+    dense = kb.embedder.embed_queries([query])[0]
+    cosine = kb.client.query_points(kb.alias, query=dense, using="dense", limit=1).points[0]
+
+    assert hits[0]["heading"] == "Runbook › Rollback"  # noqa: RUF001
+    assert (hits[0]["fused_rank"], hits[0]["dense_rank"], hits[0]["sparse_rank"]) == (1, 1, 1)
+    assert best == cosine.score  # the dense similarity, not the fused score
+    # The threshold decides on the best hit and keeps the weaker ones (ADR-0016).
+    assert len(gated) == len(hits) and gated[-1]["score"] < best
+    assert search(client, query, score_threshold=best + 0.001) == []
 
 
 @pytest.mark.parametrize(

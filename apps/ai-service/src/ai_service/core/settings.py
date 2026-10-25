@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from ai_service.embeddings import Sparse
+
 
 class Settings(BaseSettings):
     """Runtime configuration, read from the process environment.
@@ -36,6 +38,12 @@ class Settings(BaseSettings):
     embedding_cache_dir: str = ".cache/fastembed"
     chunk_size: int = 1000
     chunk_overlap: int = 150
+    # Sparse side of new collections (D56, ADR-0016); a change takes effect with `pnpm kb:reindex`.
+    sparse_model: Sparse = "bm25-english"
+    # Cross-encoder over the fused candidates (D57); off: it lost hit@5 on `test` (ADR-0017). Its
+    # scores replace the cosine similarity, so RETRIEVAL_SCORE_THRESHOLD changes with it.
+    reranker_model: str = "none"
+    rerank_candidates: int = 10  # jina int8: p95 1.5 s on the M1 (D57)
     retrieval_top_k: int = 5
     retrieval_score_threshold: float | None = 0.55
     llm_provider: Literal["openai_compat", "fake"] = "fake"  # unset = no paid calls (tests, CI)

@@ -2,6 +2,7 @@ import json
 import re
 import time
 import zlib
+from collections import Counter
 from collections.abc import Iterator
 from functools import partial
 from typing import Any, cast
@@ -13,6 +14,7 @@ import numpy as np
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from fastembed.sparse.sparse_embedding_base import SparseEmbedding
 from jwt.algorithms import RSAAlgorithm
 from numpy.typing import NDArray
 
@@ -95,6 +97,33 @@ class FakeTextEmbedding:
             for word in re.findall(r"\w+", text.lower()):
                 vector[zlib.crc32(word.encode()) % self.embedding_size] += 1
             yield vector
+
+
+class FakeSparseTextEmbedding:
+    """Offline stand-in for fastembed's BM25 (which downloads its stop-word lists): word counts."""
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    def embed(self, texts: list[str], **_kwargs: object) -> Iterator[SparseEmbedding]:
+        for text in texts:
+            counts = Counter(zlib.crc32(word.encode()) for word in re.findall(r"\w+", text.lower()))
+            yield SparseEmbedding(np.array(list(counts.values()), float), np.array(list(counts)))
+
+    def query_embed(self, texts: list[str], **_kwargs: object) -> Iterator[SparseEmbedding]:
+        return self.embed(texts)
+
+
+class FakeTextCrossEncoder:
+    """Offline stand-in for fastembed's cross-encoders: the logit is the number of shared words."""
+
+    def __init__(self, *_args: object, **_kwargs: object) -> None:
+        pass
+
+    def rerank(self, query: str, documents: list[str], **_kwargs: object) -> Iterator[float]:
+        words = set(re.findall(r"\w+", query.lower()))
+        for document in documents:
+            yield float(len(words & set(re.findall(r"\w+", document.lower()))))
 
 
 def sse(response: httpx2.Response) -> list[tuple[str, Any]]:

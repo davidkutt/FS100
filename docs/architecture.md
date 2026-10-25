@@ -95,8 +95,10 @@ sequenceDiagram
   W->>A: POST /api/chat {messages, domains?} — fetch stream
   A->>A: role ≥ viewer · per-user throttle
   A->>AI: POST /v1/chat + service token + user {sub, roles}
-  AI->>AI: embed query
-  AI->>Q: search top_k, score_threshold, domain filter
+  AI->>AI: embed query (dense + BM25)
+  AI->>Q: dense top 50 + sparse top 50, domain filter, weighted RRF → top_k; dense scores of those hits
+  AI->>AI: optional (RERANKER_MODEL): cross-encoder over the top 10 fused hits → top_k, its scores
+  AI->>AI: best score < threshold → no sources (abstain)
   AI-->>A: event: sources
   A-->>W: event: sources (relayed unchanged)
   AI->>L: grounded prompt (rules, numbered untrusted sources, trimmed history)

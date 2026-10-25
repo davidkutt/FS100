@@ -8,17 +8,24 @@ pnpm eval:retrieval                                    # model + chunking from .
 pnpm eval:retrieval --model intfloat/multilingual-e5-small --model BAAI/bge-m3 \
                     --chunk 1000:150 --chunk 500:75     # benchmark: every model × every chunking
 pnpm eval:retrieval --split dev                        # tuning items only; `test` at milestone ends
+pnpm eval:retrieval --split dev --sparse none --sparse bm25-english \
+                    --fusion rrf:2:0.5 --fusion dbsf    # dense vs. hybrid (ADR-0016), every combination
+pnpm eval:retrieval --split dev --rerank none \
+                    --rerank jinaai/jina-reranker-v2-base-multilingual-int8:10   # rerankers (ADR-0017)
 ```
 
 The runner (`kb-eval retrieval` in `apps/ai-service`) ingests the corpus listed in
 [`data/sample-docs/domains.json`](../data/sample-docs/domains.json) into an **in-memory Qdrant** — no
 running infra and no LLM needed — asks every golden question (top 10, no filter, no threshold) and
-writes `runs/<timestamp>__<dataset>__<model>__<chunking>.{json,md}` (git-ignored). The Markdown is
-printed too; with several runs, a comparison table follows.
+writes `runs/<timestamp>__<dataset>__<model>__<chunking>__<sparse>-<fusion>__rerank-<model>-<n>.{json,md}`
+(git-ignored). Retrieval is the service's: dense + `SPARSE_MODEL` fused unless `--sparse none`, then a
+reranker over the top `RERANK_CANDIDATES` if `RERANKER_MODEL` (default `none`) or `--rerank` names one.
+Each chunking × sparse side is ingested once; fusions and rerankers run on top of it. The Markdown is printed too; with several runs, a
+comparison table follows.
 
 ## Metrics
 
-Per answerable question; overall, per domain and per language:
+Per answerable question; overall, per domain, language and item type, and for the exact-term items:
 
 - **hit@1 / hit@5** — a relevant chunk is in the top 1 / 5.
 - **MRR@10** — 1 / rank of the first relevant chunk.
@@ -26,7 +33,10 @@ Per answerable question; overall, per domain and per language:
   three chunks of the same section do not inflate the score.
 - **latency p50 / p95** — query embedding + search, in-process.
 - **suggested `score_threshold`** — the top-1 score that best separates answerable from unanswerable
-  questions (balanced accuracy). Scores are model-specific: recalibrate for every model.
+  questions (balanced accuracy). Scores are model-specific: recalibrate for every embedding model and
+  reranker. With a reranker the score is its sigmoid score (ADR-0017); without one the dense similarity,
+  the order the fused one (ADR-0016). The threshold applies to the best hit. Calibrate on `dev`, then
+  check on `test`: each report also gives the balanced accuracy at `RETRIEVAL_SCORE_THRESHOLD`.
 
 ## Dataset `datasets/retrieval_v1.jsonl`
 
@@ -39,9 +49,11 @@ One JSON object per line (plan.md §7.6):
 
 - `relevant` labels a **document + heading** (matches any level of the chunk's heading path) or
   **document + page** (PDF) or the whole document — never chunk ids, so labels survive re-chunking.
-- Mix item types and say which in `notes`: direct lookup, paraphrase without keyword overlap,
-  cross-language (DE ↔ EN), multi-chunk (several labels), unanswerable (`answerable: false`,
-  `relevant: []`, ideally a near miss).
+- Mix item types and say which at the start of `notes` — the report slices by it: direct lookup,
+  paraphrase without keyword overlap, cross-language (DE ↔ EN), multi-chunk (several labels), PDF (page
+  label), whole document, unanswerable (`answerable: false`, `relevant: []`, ideally a near miss).
+- `exact_term: true` marks a question that names an error code or message, a command, flag or
+  identifier — where dense retrieval is weakest; the report adds an **exact terms** row (D56).
 - `split` (plan-phase-3.md D51): `dev` (36 items) is for tuning, `test` (24) only for the numbers a
   milestone reports, so they stay unseen. Assigned once (seed 42, stratified by first domain, language
   and item type); new items get theirs when they are written. Baselines: [`baselines/`](baselines/).

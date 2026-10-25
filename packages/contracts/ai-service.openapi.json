@@ -129,7 +129,7 @@
           "documents"
         ],
         "summary": "Search",
-        "description": "Dense retrieval for the inspector and evals; no threshold unless one is given.",
+        "description": "Retrieval as the chat runs it, for the inspector; no threshold unless one is given.",
         "operationId": "search_v1_search_post",
         "requestBody": {
           "content": {
@@ -877,34 +877,7 @@
         ],
         "title": "ChatTurn"
       },
-      "HTTPValidationError": {
-        "properties": {
-          "detail": {
-            "items": {
-              "$ref": "#/components/schemas/ValidationError"
-            },
-            "type": "array",
-            "title": "Detail"
-          }
-        },
-        "type": "object",
-        "title": "HTTPValidationError"
-      },
-      "HealthResponse": {
-        "properties": {
-          "status": {
-            "type": "string",
-            "const": "ok",
-            "title": "Status"
-          }
-        },
-        "type": "object",
-        "required": [
-          "status"
-        ],
-        "title": "HealthResponse"
-      },
-      "Hit": {
+      "ExplainedHit": {
         "properties": {
           "chunk_id": {
             "type": "string",
@@ -970,6 +943,39 @@
           "text": {
             "type": "string",
             "title": "Text"
+          },
+          "fused_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fused Rank"
+          },
+          "dense_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dense Rank"
+          },
+          "sparse_rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sparse Rank"
           }
         },
         "type": "object",
@@ -984,7 +990,35 @@
           "score",
           "text"
         ],
-        "title": "Hit"
+        "title": "ExplainedHit",
+        "description": "`explain` mode of `/v1/search`: the hit's rank among the fused candidates and in the dense\nand the sparse top 50 (None: not among them); its position is the reranked one."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "HealthResponse": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "const": "ok",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "HealthResponse"
       },
       "IngestResult": {
         "properties": {
@@ -1477,6 +1511,11 @@
               }
             ],
             "title": "Doc Ids"
+          },
+          "explain": {
+            "type": "boolean",
+            "title": "Explain",
+            "default": false
           }
         },
         "type": "object",
@@ -1491,9 +1530,20 @@
             "type": "string",
             "title": "Embedding Model"
           },
+          "reranker_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reranker Model"
+          },
           "hits": {
             "items": {
-              "$ref": "#/components/schemas/Hit"
+              "$ref": "#/components/schemas/ExplainedHit"
             },
             "type": "array",
             "title": "Hits"
@@ -1502,6 +1552,7 @@
         "type": "object",
         "required": [
           "embedding_model",
+          "reranker_model",
           "hits"
         ],
         "title": "SearchResponse"

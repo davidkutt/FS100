@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 
 from ai_service import embeddings
-from ai_service.embeddings import Embedder
+from ai_service.embeddings import Embedder, Reranker
 from ai_service.evals.agent import load_tasks
 from ai_service.evals.fixtures import GitHubFixture
 from ai_service.evals.metrics import (
@@ -18,9 +18,11 @@ from ai_service.evals.metrics import (
     reciprocal_rank,
 )
 from ai_service.evals.retrieval import (
+    TYPES,
     GoldenItem,
     Relevant,
     gains,
+    index_corpus,
     load_dataset,
     load_manifest,
     regressions,
@@ -113,6 +115,7 @@ def test_golden_set_is_well_formed_and_every_label_resolves() -> None:
     for item in items:
         assert item.answerable == bool(item.relevant), item.id
         assert item.split, item.id  # D51: every item is either tuning or held-out data
+        assert item.type in (*TYPES, "unanswerable"), f"{item.id}: `notes` names no item type"
         for label in item.relevant:
             assert any(
                 label.matches(label.doc, s.page, s.heading) for s in sections.get(label.doc, [])
@@ -122,23 +125,37 @@ def test_golden_set_is_well_formed_and_every_label_resolves() -> None:
 def test_runner_reports_on_the_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(embeddings, "TextEmbedding", FakeTextEmbedding)
 
-    report = run(Embedder("fake-e5"), DATASET, CORPUS, chunk_size=1000, chunk_overlap=150)
+    report = run(
+        index_corpus(Embedder("fake-e5"), CORPUS, chunk_size=1000, chunk_overlap=150), DATASET
+    )
 
     assert len(report.items) == len(load_dataset(DATASET))
     assert report.overall["n"] == sum(i.answerable for i in report.items)
     assert report.threshold is not None
     assert {"de", "en"} == set(report.by_lang)
+    assert set(report.by_type) <= set(TYPES)
+    assert report.exact_terms["n"] == sum(i.exact_term and i.answerable for i in report.items)
     assert "| **overall** |" in to_markdown(report)
+    assert "| **exact terms** |" in to_markdown(report)
 
 
-def test_runner_runs_only_the_requested_split(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_runner_runs_the_split_on_one_index_with_each_reranker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     monkeypatch.setattr(embeddings, "TextEmbedding", FakeTextEmbedding)
+    indexed = index_corpus(Embedder("fake-e5"), CORPUS, 1000, 150, "bm25-english")
 
-    report = run(Embedder("fake-e5"), DATASET, CORPUS, 1000, 150, split="test")
+    fused = run(indexed, DATASET, "test", "dbsf")
+    reranked = run(indexed, DATASET, "test", "dbsf", Reranker("fake", 20), checked_threshold=0.5)
 
     test_ids = {i.id for i in load_dataset(DATASET) if i.split == "test"}
-    assert report.dataset == "retrieval_v1-test"
-    assert {r.id for r in report.items} == test_ids
+    assert fused.dataset == "retrieval_v1-test"
+    assert "dense + bm25-english, dbsf" in to_markdown(fused)
+    assert {r.id for r in fused.items} == test_ids
+    assert "dense + bm25-english, dbsf, rerank fake:20" in to_markdown(reranked)
+    assert reranked.checked_balanced_accuracy is not None
+    assert "At `RETRIEVAL_SCORE_THRESHOLD` 0.500" in to_markdown(reranked)
+    assert fused.checked_balanced_accuracy is None
 
 
 def test_regression_gate_allows_the_tolerance_and_flags_drops() -> None:

@@ -15,12 +15,16 @@ API migration and the alias swap change their data, and `main` may not run on th
    S=<scratchpad>; uv run --directory apps/ai-service python ../../.claude/skills/reindex-check/check.py $S
    ```
    Long: start it with `run_in_background` and wait for the notification. `LLM_PROVIDER=fake`, tracing off.
+   To check a change of how collections are built against the old build (an upgrade), prefix
+   `LIVE_SPARSE_MODEL=none` (or another old value): the uploads build the live collection with it, then the
+   AI service restarts with `.env`'s settings before the re-index (+≈ 40 s).
 3. Read the output; expected on the sample corpus with bge-m3, chunks 1000/150:
    - no failed uploads, the PDF `queued → (parsing) → embedding → ready`
-   - CLI run `swapped`; `test` nDCG@10 0.780 / hit@5 0.95, `dev` nDCG@10 0.907 (= `evals/baselines/p2-dense`) with
-     `(+0.000)` against the live collection unless the change is meant to move them
+   - CLI run `swapped`; `test` nDCG@10 0.813 / MRR@10 0.788 / hit@5 0.95, `dev` nDCG@10 0.912
+     (= `evals/baselines/m3a2-hybrid`) with `(+0.000)` against the live collection unless the change is meant
+     to move them; with `LIVE_SPARSE_MODEL=none` the live side is `p2-dense` (`test` nDCG@10 +0.033)
    - admin `POST` 202, editor 403, both `kb.reindex` and `kb.rollback` in the audit list
-   - rollbacks well under a minute; peak RSS against the D50 budget (M3a.1: idle 1.7 GB, ingest 2.1–2.3 GB)
+   - rollbacks well under a minute; peak RSS against the D50 budget (M3a.2: idle 1.74 GB, ingest 2.30 GB)
 4. Logs: `$S/ai.log`, `$S/api.log`.
 
 ## Pitfalls

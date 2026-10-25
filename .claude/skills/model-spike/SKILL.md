@@ -16,14 +16,20 @@ description: Benchmarks a candidate model (reranker, Docling, Prompt Guard, spaC
 3. One model per process, nothing else CPU-heavy running (no `pnpm dev`, no second benchmark):
    - peak memory: `/usr/bin/time -l .venv/bin/python -I script.py` → `maximum resident set size` (bytes)
    - load memory: psutil RSS before/after; latency: median of 3 after a warm-up
-   - rerankers: `rerank_bench.py {minilm|jina|bge} <repo>/data/sample-docs $S/models` (in this folder)
-4. Apple GPU (MPS) memory is not in RSS (nor in `pnpm mem`): print `torch.mps.current_allocated_memory()`
+   - rerankers (fastembed ONNX, no throwaway venv needed): `apps/ai-service/.venv/bin/python -I
+     rerank_latency.py <model> <repo>/data/sample-docs $S/models` (in this folder); torch/MPS candidates:
+     `rerank_bench.py {minilm|jina|bge}` in the throwaway venv
+4. Reranker quality on the golden set, without touching the service cache: clone it (APFS, no disk cost)
+   `cp -cR apps/ai-service/.cache/fastembed $S/models`, then from `apps/ai-service`
+   `EMBEDDING_CACHE_DIR=$S/models uv run kb-eval retrieval --split dev --out $S/runs --rerank none
+   --rerank <model>:<candidates> …` — one ingest (~160 s), every reranker on top; `run_in_background`.
+5. Apple GPU (MPS) memory is not in RSS (nor in `pnpm mem`): print `torch.mps.current_allocated_memory()`
    and `driver_allocated_memory()` and add it to the D50 numbers by hand.
-5. Does the dependency fit the service? Resolve without installing:
+6. Does the dependency fit the service? Resolve without installing:
    `uv pip compile -q --python-version 3.13 apps/ai-service/pyproject.toml $S/pins.txt -o $S/pins.lock`;
    an unsatisfiable `numpy==<current>` reveals caps (Presidio 2.2.364 caps numpy < 2.5).
-6. Licence and gating: `curl -s https://huggingface.co/api/models/<id>` → `cardData.license`, `gated`.
-7. Qdrant features: a throwaway container, never the dev Qdrant:
+7. Licence and gating: `curl -s https://huggingface.co/api/models/<id>` → `cardData.license`, `gated`.
+8. Qdrant features: a throwaway container, never the dev Qdrant:
    `docker run -d --rm --name fs100-spike-qdrant -p 6343:6333 qdrant/qdrant:v1.19.2` → `docker stop` after.
 
 ## Pitfalls
@@ -33,6 +39,11 @@ description: Benchmarks a candidate model (reranker, Docling, Prompt Guard, spaC
 - onnxruntime refuses fastembed's `snapshots/…/model.onnx` ("External data path escapes model directory");
   open `.cache/fastembed/models--…/onnx_snapshots/*/onnx/model.onnx`.
 - First runs include downloads: report the warm run.
+- onnxruntime's CoreML provider is much slower for cross-encoders (23 s for 10 pairs, +9.5 GB) or fails;
+  4 threads instead of the default changes nothing on the M1.
+- fastembed's `TextCrossEncoder.rerank` returns raw logits; `psutil` is not in the service venv (use
+  `resource.getrusage`). The eval's top 10 means fewer than 10 candidates still rerank 10.
+- `dev` near its ceiling hides failures: check `test` once, per item (exact-term items, ADR-0017).
 
 ## Done when
 

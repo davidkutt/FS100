@@ -1,5 +1,6 @@
 """The ingest queue and the gated re-index (D52 to D55), on Procrastinate's in-memory connector."""
 
+import copy
 import json
 import time
 from collections.abc import Awaitable, Callable, Iterator
@@ -223,6 +224,28 @@ def test_reindex_swaps_when_the_gate_holds_and_rolls_back(client: TestClient) ->
     assert rolled_back.json() == {"alias": "kb_current", "collection": before}
     assert kb.live_collection() == before
     assert again.status_code == 409
+
+
+def test_reindex_turns_a_dense_only_collection_hybrid(client: TestClient) -> None:
+    kb = kb_of(client)
+    dense_only = copy.copy(kb)
+    dense_only.sparse = "none"
+    kb.swap(dense_only.create_collection())  # as M3a.1 built it
+    ingest(client, "runbook.md", RUNBOOK, ["devops"])
+    before = kb.live_collection()
+
+    run = reindex(client)
+    hybrid = kb.sparse_of()
+    client.post("/v1/reindex/rollback", headers=ADMIN)
+    query = {"query": "kubectl rollout undo", "explain": True}
+    hits = client.post("/v1/search", json=query).json()["hits"]
+
+    assert run["report"]["decision"] == "swapped"
+    assert run["report"]["metrics"]["test"]["live"]  # compared with the dense-only build
+    assert hybrid == Settings().sparse_model != "none"
+    assert (kb.live_collection(), kb.sparse_of()) == (before, "none")
+    assert hits[0]["heading"] == "Runbook › Rollback"  # noqa: RUF001
+    assert (hits[0]["dense_rank"], hits[0]["sparse_rank"]) == (1, None)
 
 
 def test_the_gate_keeps_the_alias_on_a_worse_build_unless_forced(

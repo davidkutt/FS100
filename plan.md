@@ -613,8 +613,14 @@ EMBEDDING_MODEL=BAAI/bge-m3                 # ADR-0004
 EMBEDDING_CACHE_DIR=./.cache/fastembed
 CHUNK_SIZE=1000
 CHUNK_OVERLAP=150
+SPARSE_MODEL=bm25-english                   # ADR-0016: none | bm25-english | bm25-neutral; then pnpm kb:reindex
+# ADR-0017: off (none). Opt-in on restart, no re-index, but set the threshold with it:
+# jinaai/jina-reranker-v2-base-multilingual-int8 (CC BY-NC 4.0, non-commercial) → 0.35,
+# cross-encoder/mmarco-mMiniLMv2-L12-H384-v1-int8 (Apache-2.0) → 0.40.
+RERANKER_MODEL=none
+RERANK_CANDIDATES=10                        # fused hits the reranker scores; jina: p95 1.5 s on the M1 (D57)
 RETRIEVAL_TOP_K=5
-RETRIEVAL_SCORE_THRESHOLD=0.55              # ADR-0004 calibration, model-specific
+RETRIEVAL_SCORE_THRESHOLD=0.55              # ADR-0004 calibration, model-specific (0.35 with jina, above)
 LLM_PROVIDER=openai_compat                  # openai_compat | fake
 LLM_BASE_URL=https://openrouter.ai/api/v1   # HF alternative: https://router.huggingface.co/v1
 LLM_API_KEY=                                # OpenRouter key WITH a credit limit; required unless fake
