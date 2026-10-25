@@ -93,6 +93,16 @@ chunks 1000/150):
 | `intfloat/multilingual-e5-large` | 0.68 | 0.94 | 0.80 | 0.83 | 71 |
 | **`BAAI/bge-m3`** (default) | **0.76** | **0.98** | **0.84** | **0.86** | 59 |
 
+Phase 3 adds one retrieval technique per milestone, tuned on the golden `dev` split and reported once on
+the held-out `test` split (20 answerable questions; plan-phase-3.md D51, baselines in
+[evals/baselines/](evals/baselines/)):
+
+| Retrieval (bge-m3, `test`) | hit@1 | hit@5 | MRR@10 | nDCG@10 | Exact-term nDCG@10 |
+|---|---|---|---|---|---|
+| Phase 2: dense | 0.65 | 0.95 | 0.77 | 0.78 | 0.48 |
+| **+ hybrid** (BM25, weighted RRF; [ADR-0016](docs/adr/0016-hybrid-search-sparse-side.md)) | **0.70** | **0.95** | **0.79** | **0.81** | **0.59** |
+| + rerank (jina-v2 int8, top 10; opt-in, off: [ADR-0017](docs/adr/0017-reranker.md)) | 0.70 | 0.85 | 0.78 | 0.81 | 0.54 |
+
 Each chat request is traced in Phoenix (http://localhost:6006): `chat → embed → search → llm` with the
 prompt, token counts and latency; the chat UI links every answer to its trace.
 
@@ -241,6 +251,9 @@ plan-phase-2.md   Phase 2 plan (agent, MCP, approvals)
 | [0012](docs/adr/0012-embedding-vs-llm-router.md) | Embedding router by default; the LLM classifier stays opt-in |
 | [0013](docs/adr/0013-prompt-versioning.md) | Prompts as versioned files, with a content hash on every record |
 | [0014](docs/adr/0014-external-mcp-clients-cimd.md) | External MCP clients via Keycloak CIMD; its experimental features always on |
+| [0015](docs/adr/0015-stored-originals-job-queue-reindex.md) | Stored originals, a Postgres job queue and an eval-gated re-index |
+| [0016](docs/adr/0016-hybrid-search-sparse-side.md) | Hybrid search: BM25 computed in the AI service, weighted RRF |
+| [0017](docs/adr/0017-reranker.md) | Reranking built and measured, off by default: no in-budget model holds hit@5 on `test` |
 
 ## Roadmap
 
@@ -248,7 +261,7 @@ plan-phase-2.md   Phase 2 plan (agent, MCP, approvals)
 |---|---|
 | 1 | Foundation + RAG slice + eval + tracing — *M1.0 – M1.6 done; M1.7 Azure spike postponed (local only for now)* |
 | **2** | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals — *M2.0 – M2.7 done; M2.8 external MCP clients code-complete* |
-| 3 | Hybrid search, reranking, code-aware RAG, guardrails, routing + semantic cache, memory |
+| 3 | Hybrid search, reranking, code-aware RAG, guardrails, routing + semantic cache, memory — *M3a.0 – M3a.3 done* |
 | 4 | Kubernetes: Helm, k3d, GitOps-ready manifests |
 | 5 | Azure: Terraform, ACR, AKS / Container Apps, Key Vault, OIDC from GitHub |
 | 6 | MLOps & local models: fine-tuning with MLflow, Ollama/MLX, system card |
@@ -271,4 +284,8 @@ secrets — `.env` is git-ignored, `.env.example` holds dev-only placeholders.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). Models are downloaded at runtime under their own licences. The opt-in reranker
+`RERANKER_MODEL=jinaai/jina-reranker-v2-base-multilingual-int8`
+([model card](https://huggingface.co/jinaai/jina-reranker-v2-base-multilingual)) is **CC BY-NC 4.0 —
+non-commercial use only**; `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1-int8` is Apache-2.0
+([ADR-0017](docs/adr/0017-reranker.md)). The default (`none`) loads no reranker.

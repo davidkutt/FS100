@@ -1,7 +1,9 @@
+import math
+
 import pytest
 
 from ai_service import embeddings
-from ai_service.embeddings import Embedder
+from ai_service.embeddings import Embedder, Reranker
 from support import FakeTextEmbedding
 
 
@@ -29,3 +31,11 @@ def test_prefixes_depend_on_the_model(
 
     assert fake.texts == expected
     assert embedder.dim == FakeTextEmbedding.embedding_size
+
+
+def test_reranker_scores_are_the_logits_through_a_sigmoid() -> None:
+    reranker = Reranker("fake", 20)  # logit = shared words (conftest)
+
+    scores = reranker.scores("rollout undo", ["kubectl rollout undo", "pg_dump"])
+
+    assert scores == [1 / (1 + math.exp(-2)), 0.5]

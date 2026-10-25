@@ -96,7 +96,7 @@ export interface paths {
         put?: never;
         /**
          * Search
-         * @description Dense retrieval for the inspector and evals; no threshold unless one is given.
+         * @description Retrieval as the chat runs it, for the inspector; no threshold unless one is given.
          */
         post: operations["search_v1_search_post"];
         delete?: never;
@@ -382,21 +382,12 @@ export interface components {
             /** Content */
             content: string;
         };
-        /** HTTPValidationError */
-        HTTPValidationError: {
-            /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
-        };
-        /** HealthResponse */
-        HealthResponse: {
-            /**
-             * Status
-             * @constant
-             */
-            status: "ok";
-        };
-        /** Hit */
-        Hit: {
+        /**
+         * ExplainedHit
+         * @description `explain` mode of `/v1/search`: the hit's rank among the fused candidates and in the dense
+         *     and the sparse top 50 (None: not among them); its position is the reranked one.
+         */
+        ExplainedHit: {
             /** Chunk Id */
             chunk_id: string;
             /**
@@ -418,6 +409,25 @@ export interface components {
             score: number;
             /** Text */
             text: string;
+            /** Fused Rank */
+            fused_rank?: number | null;
+            /** Dense Rank */
+            dense_rank?: number | null;
+            /** Sparse Rank */
+            sparse_rank?: number | null;
+        };
+        /** HTTPValidationError */
+        HTTPValidationError: {
+            /** Detail */
+            detail?: components["schemas"]["ValidationError"][];
+        };
+        /** HealthResponse */
+        HealthResponse: {
+            /**
+             * Status
+             * @constant
+             */
+            status: "ok";
         };
         /** IngestResult */
         IngestResult: {
@@ -592,13 +602,20 @@ export interface components {
             domains?: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[] | null;
             /** Doc Ids */
             doc_ids?: string[] | null;
+            /**
+             * Explain
+             * @default false
+             */
+            explain?: boolean;
         };
         /** SearchResponse */
         SearchResponse: {
             /** Embedding Model */
             embedding_model: string;
+            /** Reranker Model */
+            reranker_model: string | null;
             /** Hits */
-            hits: components["schemas"]["Hit"][];
+            hits: components["schemas"]["ExplainedHit"][];
         };
         /** ServiceInfo */
         ServiceInfo: {

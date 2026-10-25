@@ -170,12 +170,12 @@ Numbering continues from `plan-phase-2.md` (D49). Status: **N** = new · **C** =
 | A14 | **Held with open items:** Phase 2 code-complete; deviations and the hand-made leftovers in `plan-phase-2.md` §12 | Shift the schedule; don't start M3a.1 before the P2 agent eval is green |
 | A15 | **Held:** Phase 1 runs bge-m3 as a fastembed custom model over the repo's ONNX export, which also returns token embeddings → D56 (b) is cheap (ADR-0016) | Settled in M3a.0; decides whether D56 candidate (b) is cheap or dropped |
 | A16 | **Held:** the self-hosted Qdrant 1.19.2 image supports server-side BM25 inference (`qdrant/bm25`, ADR-0016) | FastEmbed `Qdrant/bm25` computes the same kind of sparse vectors client-side |
-| A17 | 16 GB holds the D50 budget with one reranker loaded — **memory yes, latency no:** no multilingual candidate meets 1.5 s at 20 pairs (ADR-0017) | Smaller reranker (MiniLM, English only) and Prompt Guard 22M |
+| A17 | 16 GB holds the D50 budget with one reranker loaded — **memory yes, latency only at 10 candidates** (jina int8, p95 ≈ 1.5 s), **and it does not pay on `test`**: reranking is off by default (ADR-0017) | Smaller reranker (MiniLM, English only) and Prompt Guard 22M |
 | A18 | ~25 USD/month OpenRouter budget during Phase 3 (one-off contextual retrieval, judge, synthetic data, curator) | Fewer judge runs, cheaper models, contextual retrieval for fewer domains |
 | A19 | Prompt Guard 2 can be downloaded (licence accepted on Hugging Face) | 22M fallback, or classifier off with the gap documented |
 | A20 | OpenRouter offers a judge model of a different family with structured outputs | Same family, different size; bias noted in ADR-0022 |
 
-**Still open (decided inside the milestones):** sparse candidate (M3a.2), reranker (M3a.3), sub-topic list v2 and boost
+**Still open (decided inside the milestones):** sub-topic list v2 and boost
 weights (M3a.6–7), judge model (M3b.0–1), injection classifier variant (M3b.5), cache threshold (M3b.6), ACL demo
 groups (M3b.4), curator host list and licences (M3b.9), 3b options (M3b.0).
 
@@ -558,19 +558,98 @@ Deviations:
 
 ### M3a.2 — Hybrid search (~5 h)
 
-- [ ] Sparse candidates per D56 built into separate collections by the re-index job; compared on `dev`; RRF vs. DBSF once
-- [ ] `explain` mode in `/v1/search`; inspector columns for dense, sparse and fused ranks
-- [ ] Winner through the gate; ADR-0016 with `test` numbers per item type
+- [x] Sparse candidates per D56 built into separate collections by the re-index job; compared on `dev`; RRF vs. DBSF once
+- [x] `explain` mode in `/v1/search`; inspector columns for dense, sparse and fused ranks
+- [x] Winner through the gate; ADR-0016 with `test` numbers per item type
 
 **Acceptance:** "hybrid" row on `test`; exact-term items (error codes, flags, identifiers) reported separately.
 
+**Done 2026-10-24.** Winner: BM25 with English stemming (`SPARSE_MODEL=bm25-english`), RRF with Qdrant's k = 2 and
+the sparse side at half weight (`rrf:2:0.5`). `dev` (tuning): every equal-weight hybrid was at or below dense
+(BM25 English 0.90 nDCG@10, language-neutral 0.87, bge-m3 sparse 0.79; RRF k = 60 0.80, DBSF 0.86 vs. dense 0.91);
+half weight reached parity (hit@1 0.80 / MRR@10 0.90 / nDCG@10 0.91 vs. 0.83 / 0.89 / 0.91). `test`, once:
+
+| Retrieval | hit@1 | hit@5 | MRR@10 | nDCG@10 | Exact terms (3) hit@5 / nDCG@10 | Threshold (balanced acc.) |
+|---|---|---|---|---|---|---|
+| dense (`p2-dense`) | 0.65 | 0.95 | 0.77 | 0.78 | 0.67 / 0.48 | 0.557 (0.95) |
+| **hybrid** (`m3a2-hybrid`) | **0.70** | **0.95** | **0.79** | **0.81** | **1.00 / 0.59** | 0.557 (0.95) |
+
+Per item type in ADR-0016: `r-033` (*HTTP 402*) rank 8 → 4; `r-035` (multi-chunk) 5 → 7 is the new top-5 miss.
+Full set (CI gate) nDCG@10 0.86 → 0.87, hit@5 0.98. Through the real gate on throwaway state (reindex-check with
+`LIVE_SPARSE_MODEL=none`: uploads into a dense-only collection, then the re-index with BM25): `swapped`, `test`
+nDCG@10 0.813 (+0.033), MRR@10 0.788 (+0.022), hit@5 and abstention unchanged — the in-memory numbers exactly;
+rollback back to the dense collection 0.04 s (API) / 1.15 s (CLI). Memory: idle 1.74 GB, ingest peak 2.30 GB (BM25
+adds nothing measurable); p50 retrieval latency 60 → 65–67 ms.
+
+Deviations:
+- BM25 vectors are computed in the AI service (fastembed `Qdrant/bm25`, D56's fallback), not by Qdrant: in-process
+  Qdrant (tests, `kb-eval`, the CI gate) computes `qdrant/bm25` with fastembed and differs from the server on
+  identifiers with `_` (*ERR_PNPM_IGNORED_BUILDS*), and rejects language-neutral options — the evals would measure
+  something else than what runs. A16 holds but is unused.
+- Candidates were compared with `kb-eval retrieval --sparse … --fusion …` on in-memory collections (the vectors are
+  the service's own), not by one re-index per candidate; the winner went through the real gate. The k and weight
+  were tuned once on `dev` (a scratch sweep: weight 0.5 / 0.3, k = 10); `--fusion rrf:K:W | dbsf` reproduces each row.
+- bge-m3 sparse (b) was measured (second ONNX pass over fastembed's session, head read without torch) and dropped,
+  code included; `SPARSE_MODEL` is `none | bm25-english | bm25-neutral`.
+- `score` stays the dense cosine similarity (one extra Qdrant call re-scores the fused hits); the threshold now
+  gates the query on the best hit instead of cutting each hit, so BM25-only hits reach the chat. The eval's
+  `top1_score` is the best score of the returned hits (same as before for dense).
+- Each collection records its sparse side in Qdrant collection metadata; ingest and search follow it, so M3a.1's
+  `kb_current` keeps working dense-only until `pnpm kb:reindex` (startup warning) and a rollback is safe.
+- `explain` returns `dense_rank` / `sparse_rank` (rank among each side's top 50); the fused rank is the position
+  until the reranker (M3a.3) adds a separate order. No sparse/fused scores in the response.
+- Exact-term items are a new `exact_term` field on six `retrieval_v1` items (questions, labels and splits unchanged);
+  item types come from the start of `notes`. Golden v2 (M3a.10) should carry both as fields and more exact-term
+  items: three per split make the exact-term row anecdotal.
+- The CI baseline stays at hit@5 0.98 / nDCG@10 0.86 (the +0.01 is below the ADR-0004 noise floor).
+
 ### M3a.3 — Reranking (~6 h)
 
-- [ ] Candidates per D57; reranking of the fused candidates; top-N tuned to the latency budget
-- [ ] Abstention threshold recalibrated on reranker scores (`dev`), checked on `test`
-- [ ] Inspector rerank column; licence noted; ADR-0017
+- [x] Candidates per D57; reranking of the fused candidates; top-N tuned to the latency budget
+- [x] Abstention threshold recalibrated on reranker scores (`dev`), checked on `test`
+- [x] Inspector rerank column; licence noted; ADR-0017
 
 **Acceptance:** "+ rerank" row; p95 latency and memory within D50; abstention accuracy not below the baseline.
+
+**Done 2026-10-25 — reranking built, off by default** (`RERANKER_MODEL=none`). On `dev`, the only reranker within
+the 1.5 s budget that gains is `jinaai/jina-reranker-v2-base-multilingual` int8 over 10 candidates (hit@1 0.80 →
+0.87, MRR@10 0.90 → 0.93, nDCG@10 0.91 → 0.94, abstention 0.87 → 0.97 at threshold 0.35; p95 1.48 s). `test`, once:
+
+| Retrieval | hit@1 | hit@5 | MRR@10 | nDCG@10 | Exact terms (3) hit@5 / nDCG@10 | Abstention at the configured threshold | p95 ms |
+|---|---|---|---|---|---|---|---|
+| **hybrid** (`m3a2-hybrid`) | **0.70** | **0.95** | **0.79** | **0.81** | **1.00 / 0.59** | 0.95 (0.55) | 79 |
+| + rerank (`m3a3-rerank`) | 0.70 | 0.85 | 0.78 | 0.81 | 0.33 / 0.54 | 0.95 (0.35) | 1481 |
+
+Both new top-5 misses are exact-term items BM25 had rescued in M3a.2 (`r-015` *no space left on device* 3 → 7,
+`r-033` *HTTP 402* 4 → 10); `dev`'s three exact-term items stay on top under every reranker, so `dev` could not show
+it. Full set (CI gate): hit@5 0.98 → 0.94, below the gate; nDCG@10 0.87 → 0.89. A `test` drop of 0.10 would not pass
+the re-index gate (D55), and the p95 sits on the budget line (1.48–1.54 s over four runs), so hybrid without a
+reranker stays the default. The other rows (ADR-0017): MiniLM-L6 (English only) loses German (nDCG@10 0.96 →
+0.60); `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1-int8` (Apache-2.0, multilingual, not in D57) is level with
+hybrid at 0.6 s; jina at 20 candidates and bge-reranker-v2-m3 score 0.94–0.96 at 2.9–8 s p95. Memory with jina int8
+loaded next to bge-m3: an eval run peaks at 3.17 GB (2.50 GB without).
+
+Deviations:
+- No reranker is enabled; the path is opt-in (`RERANKER_MODEL`, `RERANK_CANDIDATES`, a threshold per reranker in
+  `.env.example`: jina int8 0.35, mMiniLM int8 0.40, none 0.55). The CI baseline and the threshold stay.
+- Every candidate runs as ONNX on CPU via fastembed, none via sentence-transformers / PyTorch on MPS: fastembed now
+  ships `BAAI/bge-reranker-v2-m3-int8`, the int8 files of jina and mMiniLM are registered as custom models
+  (`…-int8`), and MPS would not exist in the Linux containers (Mode B, P4, P5). onnxruntime's CoreML provider was
+  tried and is far slower (mMiniLM 23 s for 10 pairs, +9.5 GB; jina fails).
+- `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1` (Apache-2.0) added as a candidate: the only small multilingual
+  cross-encoder with an int8 ONNX export.
+- No `RERANK_KEEP` and no top-8: `RETRIEVAL_TOP_K` (5) is the number kept; more sources is a prompt-size and cost
+  question for the judge (M3b). `RERANKER_MODEL=none` instead of empty (`env_ignore_empty`).
+- No re-index through the gate: reranking is query-time and leaves the collection unchanged; a re-index would
+  compare two identical builds, both reranked.
+- With a reranker, `score` is its logit through a sigmoid instead of the cosine (the order and the threshold
+  agree again); the dense re-score call is skipped. `explain` adds `fused_rank`, `/v1/search` names the
+  `reranker_model`.
+- `kb-eval retrieval` ingests once per chunking × sparse side and runs fusions and rerankers on top
+  (`--rerank MODEL:N|none`); each report adds the balanced accuracy at `RETRIEVAL_SCORE_THRESHOLD`, which is how
+  the `dev` threshold was checked on `test`.
+- Protecting exact terms (BM25's top hit, or RRF of the reranker's order with the hybrid ranks) is left for golden v2
+  (M3a.10), which should carry enough exact-term items on `dev` to tune it.
 
 ### M3a.4 — Query transformation (~5 h)
 
@@ -859,10 +938,9 @@ JOBS_INPROCESS_WORKER=true                 # false from P4 (separate worker Depl
 GOLDEN_DATASET=../../evals/datasets/retrieval_v1.jsonl   # the re-index gate (M3a.1; golden_v2 in M3a.10)
 SPARSE_MODE=bm25_server                    # bm25_server | bm25_client | bgem3 (ADR-0016)
 BM25_LANGUAGE_NEUTRAL=true
-RERANKER_MODEL=                            # ADR-0017
-RERANK_CANDIDATES=30                       # tuned to the latency budget (20–50)
-RERANK_KEEP=8
-RETRIEVAL_SCORE_THRESHOLD=                 # recalibrated on reranker scores (M3a.3)
+RERANKER_MODEL=none                        # ADR-0017: off; opt-in e.g. jinaai/jina-reranker-v2-base-multilingual-int8
+RERANK_CANDIDATES=10                       # jina int8: p95 1.5 s on the M1
+RETRIEVAL_SCORE_THRESHOLD=0.55             # cosine; 0.35 with jina int8, 0.40 with mMiniLM int8 (M3a.3)
 QUERY_STRATEGIES=plain                     # survivors of M3a.4
 DOCLING_TIMEOUT_S=300
 CHILD_CHUNK_TOKENS=450

@@ -21,7 +21,7 @@ token for system calls; `sub` and realm roles come from that token):
 | `POST /v1/documents` | multipart `file` (PDF/MD/TXT, ≤ 20 MB), `doc_id`, `owner_id`, `domains` (repeat the field), `topics?` (taxonomy ids), `title?` → original stored in Postgres `ai`, ingest queued → `202 {job_id, version}`; the same bytes keep their version, new bytes get the next one (D52) |
 | `GET /v1/jobs/{job_id}` | `{state: queued\|parsing\|embedding\|building\|evaluating\|ready\|failed\|cancelled, error?, result?}`; `result` is the ingest result or the re-index report |
 | `POST /v1/reindex` · `GET /v1/reindex` · `POST /v1/reindex/rollback` | admin only (role in the exchanged token): queue a re-index `{reason, force}` (force needs a reason) → `202 {job_id}`; alias target + latest runs with reports; point the alias back at the collection the last swap replaced (409 if none) (D55) |
-| `POST /v1/search` | `{query, top_k=5, score_threshold?, domains?, doc_ids?}` → hits with score, page, heading path |
+| `POST /v1/search` | `{query, top_k=5, score_threshold?, domains?, doc_ids?, explain=false}` → `{embedding_model, reranker_model, hits}`, hits in reranked order with the reranker's score (without a reranker: fused order, dense score), page, heading path; `explain` adds each hit's rank among the fused candidates and in the dense and the sparse top 50 (ADR-0016, ADR-0017) |
 | `POST /v1/chat` | `{messages:[{role, content}], domains?}` → SSE `sources`, `token`…, `done` \| `error` (plan.md §7.3); retrieval uses `RETRIEVAL_TOP_K` / `RETRIEVAL_SCORE_THRESHOLD` |
 | `POST /v1/agent` | `{conversation_id, messages:[{role, parts:[{type:"text", text}]}], mode="agent"\|"rag", model?, domains?, resume?:{signed_action, decision, note?, args}}` → SSE v2 `step`, `tool_call`, `tool_result`, `sources`, `token`…, `approval_required`, `done` (+ `error`) (plan-phase-2 §7.3); a write call ends the turn with an HMAC-signed action (`APPROVAL_SIGNING_KEY`, `APPROVAL_TTL_MIN`), `resume` continues it after checking signature, expiry, `sub`, conversation and args hash (else 422, ADR-0008); `mode=rag` runs the `/v1/chat` pipeline as baseline; limits `AGENT_*` (ADR-0007) |
 | `PATCH /v1/documents/{doc_id}/labels` | `{domains?, topics?}` → payload update on every chunk, no re-embedding → 204; unknown topics → 422 |
@@ -32,8 +32,8 @@ token for system calls; `sub` and realm roles come from that token):
 | `GET /.well-known/oauth-protected-resource/mcp` | RFC 9728 metadata of `/mcp` (public) |
 | `GET /` · `/docs` | service info · OpenAPI UI |
 
-On startup the service loads `EMBEDDING_MODEL` (first run downloads it into `EMBEDDING_CACHE_DIR`,
-0.5–2.3 GB), creates the Postgres database `ai` if missing and migrates it (`AI_DATABASE_URL`;
+On startup the service loads `EMBEDDING_MODEL` and, if set, `RERANKER_MODEL` (first run downloads them
+into `EMBEDDING_CACHE_DIR`, 0.5–2.3 GB and 0.1–0.3 GB), creates the Postgres database `ai` if missing and migrates it (`AI_DATABASE_URL`;
 `:memory:` = in-process, tests), starts the in-process job worker (`JOBS_INPROCESS_WORKER`, one job at a
 time) and, only if the Qdrant alias `kb_current` does not exist yet, points it at a new empty collection
 `kb__v2__<model>__<dim>__<timestamp>` (D54); after that only `pnpm kb:reindex` moves it. `/readyz` stays
@@ -42,6 +42,21 @@ time) and, only if the Qdrant alias `kb_current` does not exist yet, points it a
 or `fake` (deterministic, free — the default when unset, used by tests and CI). A different
 `EMBEDDING_MODEL` needs `pnpm kb:reindex --force --reason …` (the gate cannot compare across models; the
 service logs a warning until then). `QDRANT_URL=:memory:` runs Qdrant in-process (tests, evals).
+
+**Hybrid search (D56, ADR-0016):** every collection records its sparse side (`SPARSE_MODEL`, default
+`bm25-english`: fastembed's `Qdrant/bm25`, a few KB downloaded on first use; `none` = dense only) in its
+metadata, and ingest and search follow the collection, so a rollback to an older one keeps working. A
+new `SPARSE_MODEL` takes effect with `pnpm kb:reindex` (the service logs a warning until then). A search
+fuses the dense and the sparse top 50 under the same filter (RRF with Qdrant's k = 2, the sparse side at
+half weight); `score` is the dense cosine similarity, and `RETRIEVAL_SCORE_THRESHOLD` applies to the
+best hit — below it the search returns no hits (abstains), above it every hit stays.
+
+**Reranking (D57, ADR-0017), off by default** (`RERANKER_MODEL=none`): it lost hit@5 on the exact-term
+items of `test`. Opt-in: a fastembed cross-encoder (ONNX, CPU) scores the top `RERANK_CANDIDATES` (10;
+`top_k` if larger) fused hits and keeps the best `top_k`; `score` is then its logit through a sigmoid
+(0–1) and the threshold applies to that. It takes effect on restart, without a re-index, but needs its
+own threshold: `jinaai/jina-reranker-v2-base-multilingual-int8` (**CC BY-NC 4.0**, p95 ≈ 1.5 s on the
+M1) 0.35, `cross-encoder/mmarco-mMiniLMv2-L12-H384-v1-int8` (Apache-2.0, ≈ 0.6 s) 0.40.
 
 **Re-index (D55, ADR-0015):** `pnpm kb:backfill-originals` stores the originals of documents indexed
 before Phase 3 (found in `data/sample-docs/` by SHA-256; the rest are listed for re-upload).

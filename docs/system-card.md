@@ -19,7 +19,8 @@ can propose two writes — add a document from a URL (`kb.ingest_url`) or open a
 | Part | Choice | Record |
 |---|---|---|
 | LLM (chat, agent) | `openai/gpt-6-luna` via OpenRouter by default; per-conversation picker from `config/models.yaml` (DeepSeek V4.1 Flash, Claude Haiku 5.5 for editors) | [ADR-0005](adr/0005-llm-access-and-model.md), [ADR-0007](adr/0007-agent-harness-and-limits.md) |
-| Embeddings | `BAAI/bge-m3`, in process, chunks 1000/150, score threshold 0.55 | [ADR-0004](adr/0004-embedding-model-chunking-threshold.md) |
+| Embeddings | `BAAI/bge-m3`, in process, chunks 1000/150 | [ADR-0004](adr/0004-embedding-model-chunking-threshold.md) |
+| Retrieval | hybrid: dense + BM25, weighted RRF; abstains when the best hit's cosine similarity is below 0.55. Reranker off by default; the opt-in `jinaai/jina-reranker-v2-base-multilingual` (int8) is **CC BY-NC 4.0 (non-commercial)**, the Apache-2.0 alternative is in ADR-0017 | [ADR-0016](adr/0016-hybrid-search-sparse-side.md), [ADR-0017](adr/0017-reranker.md) |
 | Domain router | embedding similarity to the domain descriptions; LLM classifier opt-in | [ADR-0012](adr/0012-embedding-vs-llm-router.md) |
 | Agent | own loop, no framework; agentic RAG by default, plain RAG as baseline | [ADR-0007](adr/0007-agent-harness-and-limits.md), [ADR-0011](adr/0011-plain-vs-agentic-rag.md) |
 | Prompts | versioned files, `id@version` + hash on every message, trace and eval run | [ADR-0013](adr/0013-prompt-versioning.md) |

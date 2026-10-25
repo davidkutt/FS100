@@ -10,7 +10,7 @@ import { type Domain, DomainPicker } from '../../shared/domain-picker';
 type SearchRequest = components['schemas']['SearchRequest'];
 type SearchResponse = components['schemas']['SearchResponse'];
 
-/** Raw dense-retrieval hits via `POST /api/search`, without the chat's score threshold. */
+/** Reranked hybrid hits with their ranks via `POST /api/search`, without the chat's threshold. */
 @Component({
   selector: 'app-inspector',
   imports: [DecimalPipe, DomainPicker, FormsModule],
@@ -23,17 +23,18 @@ export class Inspector {
   protected readonly query = signal('');
   protected readonly domains = signal<Domain[]>([]);
   protected readonly topK = signal(10);
-  // Only draws the line; the chat uses the AI service's RETRIEVAL_SCORE_THRESHOLD (ADR-0004).
+  // Only for the notice; the chat uses the AI service's RETRIEVAL_SCORE_THRESHOLD (ADR-0004).
   protected readonly threshold = signal(0.55);
 
   protected readonly results = httpResource<SearchResponse>(() => {
     const body = this.request();
     return body && { url: `${this.api}/api/search`, method: 'POST', body };
   });
-  protected readonly firstBelow = computed(() =>
-    this.results.hasValue()
-      ? this.results.value().hits.findIndex((hit) => hit.score < this.threshold())
-      : -1,
+  // The chat abstains when even the best hit is below the threshold (ADR-0016).
+  protected readonly abstains = computed(
+    () =>
+      this.results.hasValue() &&
+      Math.max(0, ...this.results.value().hits.map((hit) => hit.score)) < this.threshold(),
   );
   protected readonly problemDetail = problemDetail;
 
@@ -41,6 +42,11 @@ export class Inspector {
     const query = this.query().trim();
     if (!query) return;
     const domains = this.domains();
-    this.request.set({ query, top_k: this.topK(), domains: domains.length ? domains : null });
+    this.request.set({
+      query,
+      top_k: this.topK(),
+      domains: domains.length ? domains : null,
+      explain: true,
+    });
   }
 }

@@ -2,6 +2,9 @@
 app_reindex_check / ai_reindex_check, Qdrant alias kb_reindex_check. Removes only what it created.
 
 uv run --directory apps/ai-service python ../../.claude/skills/reindex-check/check.py [OUT_DIR]
+
+LIVE_SPARSE_MODEL=none: the uploads build a collection with that sparse side, then the AI service
+restarts with SPARSE_MODEL from .env, so the re-index gate compares the two (an upgrade, M3a.2).
 """
 
 import json
@@ -90,17 +93,22 @@ def sample(pid: int, stop: threading.Event) -> None:
         time.sleep(0.25)
 
 
+def start_ai(extra: dict[str, str]) -> subprocess.Popen[bytes]:
+    return subprocess.Popen(
+        [str(ROOT / "apps/ai-service/.venv/bin/uvicorn"), "ai_service.main:app", "--port", "8001"],
+        cwd=ROOT / "apps/ai-service",
+        env={**env, **extra},
+        stdout=open(OUT / "ai.log", "a"),
+        stderr=subprocess.STDOUT,
+    )
+
+
+live_sparse = os.environ.get("LIVE_SPARSE_MODEL")
 sql("create database app_reindex_check")
 ai = api = None
 stop = threading.Event()
 try:
-    ai = subprocess.Popen(
-        [str(ROOT / "apps/ai-service/.venv/bin/uvicorn"), "ai_service.main:app", "--port", "8001"],
-        cwd=ROOT / "apps/ai-service",
-        env=env,
-        stdout=open(OUT / "ai.log", "w"),
-        stderr=subprocess.STDOUT,
-    )
+    ai = start_ai({"SPARSE_MODEL": live_sparse} if live_sparse else {})
     api = subprocess.Popen(
         ["node", "dist/main.js"],
         cwd=ROOT / "apps/api",
@@ -142,6 +150,14 @@ try:
     print(f"ingest of {len(docs)} docs via the queue: {time.monotonic() - started:.0f} s; failed: {failed}")
     print(f"PDF states seen: {' → '.join(pdf_states)}; chunks {sum(d['chunkCount'] or 0 for d in docs)}")
     print(f"AI peak RSS during ingest {peak['rss_kb'] / 1e6:.2f} GB")
+    if live_sparse:
+        ai.terminate()
+        ai.wait(30)
+        ai = start_ai({})
+        wait("http://localhost:8001/readyz")
+        sampler = threading.Thread(target=sample, args=(ai.pid, stop), daemon=True)
+        sampler.start()
+        print(f"AI restarted with SPARSE_MODEL={env.get('SPARSE_MODEL', 'the default')}")
 
     started = time.monotonic()
     cli = subprocess.run(

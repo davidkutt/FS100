@@ -10,12 +10,14 @@ from opentelemetry import trace
 from pydantic import BaseModel
 from qdrant_client import QdrantClient, models
 
-from ai_service.embeddings import Embedder
+from ai_service.embeddings import Embedder, Reranker, Sparse
 from ai_service.ingest import Section, chunk, parse
 
 Domain = Literal["db", "dev", "cloud", "devops", "mlops", "ai", "security", "architecture", "sre"]
 SPAN_KIND = "openinference.span.kind"
 COLLECTIONS = "kb__"  # every generation: `kb__{model}__{dim}` (P1) and `kb__v2__…` (D54)
+PREFETCH = 50  # candidates per side before fusion (D56)
+FUSION = "rrf:2:0.5"  # RRF with Qdrant's k = 2, the sparse side at half weight (ADR-0016)
 tracer = trace.get_tracer(__name__)
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,15 @@ class Hit(BaseModel):
     domains: list[Domain]
     score: float
     text: str
+
+
+class ExplainedHit(Hit):
+    """`explain` mode of `/v1/search`: the hit's rank among the fused candidates and in the dense
+    and the sparse top 50 (None: not among them); its position is the reranked one."""
+
+    fused_rank: int | None = None
+    dense_rank: int | None = None
+    sparse_rank: int | None = None
 
 
 class Chunk(BaseModel):
@@ -66,12 +77,18 @@ class KnowledgeBase:
         alias: str,
         chunk_size: int,
         chunk_overlap: int,
+        sparse: Sparse = "none",
+        fusion: str = FUSION,
+        reranker: Reranker | None = None,
     ) -> None:
         self.client = client
         self.embedder = embedder
         self.alias = alias
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.sparse: Sparse = sparse  # for new collections; each one keeps its own (`sparse_of`)
+        self.fusion = fusion  # `rrf:<k>:<sparse weight>` or `dbsf`
+        self.reranker = reranker
         slug = re.sub(r"[^a-z0-9]+", "-", embedder.model_name.lower()).strip("-")
         self.model_key = f"__{slug}__{embedder.dim}"  # part of every collection name of this model
 
@@ -88,12 +105,27 @@ class KnowledgeBase:
                 live,
                 self.embedder.model_name,
             )
+        elif (built := self.sparse_of()) != self.sparse:
+            logger.warning(
+                "%s has sparse=%s, not SPARSE_MODEL=%s: `pnpm kb:reindex` builds it",
+                self.alias,
+                built,
+                self.sparse,
+            )
 
     def create_collection(self) -> str:
-        """An empty collection v2 (D54), named by model, dimension and build time."""
+        """An empty collection v2 (D54), named by model, dimension and build time; its metadata
+        records the sparse side (D56)."""
         name = f"{COLLECTIONS}v2{self.model_key}__{datetime.now(UTC):%Y%m%dt%H%M%S%f}"
         dense = models.VectorParams(size=self.embedder.dim, distance=models.Distance.COSINE)
-        self.client.create_collection(name, vectors_config={"dense": dense})
+        # BM25 vectors hold term weights; Qdrant multiplies in the IDF of the collection.
+        bm25 = models.SparseVectorParams(modifier=models.Modifier.IDF)
+        self.client.create_collection(
+            name,
+            vectors_config={"dense": dense},
+            sparse_vectors_config={"sparse": bm25} if self.sparse != "none" else None,
+            metadata={"sparse": self.sparse},
+        )
         for field in (
             "doc_id",
             "owner_id",
@@ -114,6 +146,11 @@ class KnowledgeBase:
 
     def live_collection(self) -> str:
         return live_collection(self.client, self.alias)
+
+    def sparse_of(self) -> Sparse:
+        """The sparse side this collection was built with; before M3a.2 none."""
+        metadata = self.client.get_collection(self.alias).config.metadata or {}
+        return metadata.get("sparse", "none")
 
     def collections(self) -> list[str]:
         """The live collection and every one kept for a rollback."""
@@ -179,7 +216,15 @@ class KnowledgeBase:
         title: str | None,
     ) -> IngestResult:
         """Embed and upsert one version; running it again for the same version changes nothing."""
-        vectors = self.embedder.embed_passages([c.text for c in chunks])
+        texts = [c.text for c in chunks]
+        vectors: list[dict[str, models.Vector]] = [
+            {"dense": dense} for dense in self.embedder.embed_passages(texts)
+        ]
+        if (sparse := self.sparse_of()) != "none":
+            for named, vector in zip(
+                vectors, self.embedder.embed_sparse(texts, sparse), strict=True
+            ):
+                named["sparse"] = vector
         payload = {
             "doc_id": str(doc_id),
             "version": version,
@@ -200,7 +245,7 @@ class KnowledgeBase:
         points = [
             models.PointStruct(
                 id=str(uuid5(NAMESPACE_URL, f"{doc_id}:{version}:{index}")),
-                vector={"dense": vector},
+                vector=vector,
                 payload={
                     **payload,
                     "chunk_index": index,
@@ -236,29 +281,80 @@ class KnowledgeBase:
         score_threshold: float | None = None,
         domains: list[Domain] | None = None,
         doc_ids: list[UUID] | None = None,
+        explain: bool = False,
     ) -> list[Hit]:
+        """Hybrid if the collection has a sparse side: dense and sparse top 50 under the same
+        filter, fused (D56); the reranker orders the fused candidates (D57). `score` is the
+        reranker's, without one the cosine similarity: the threshold is calibrated on it
+        (ADR-0004, ADR-0017); below it for the best hit, the search abstains with no hits."""
         with tracer.start_as_current_span(
             "search", attributes={SPAN_KIND: "RETRIEVER", "input.value": query}
         ):
-            vector = self.embedder.embed_queries([query])[0]
+            dense = self.embedder.embed_queries([query])[0]
             must: list[models.Condition] = [
                 models.FieldCondition(key=key, match=models.MatchAny(any=[str(v) for v in values]))
                 for key, values in (("domains", domains), ("doc_id", doc_ids))
                 if values
             ]
-            response = self.client.query_points(
+            where = models.Filter(must=must)
+            sides = [models.Prefetch(query=dense, using="dense", filter=where, limit=PREFETCH)]
+            if (kind := self.sparse_of()) != "none":
+                sparse = self.embedder.embed_sparse([query], kind, query=True)[0]
+                sides.append(
+                    models.Prefetch(query=sparse, using="sparse", filter=where, limit=PREFETCH)
+                )
+            points = self.client.query_points(
                 self.alias,
-                query=vector,
-                using="dense",
-                limit=top_k,
-                score_threshold=score_threshold,
-                query_filter=models.Filter(must=must),
+                prefetch=sides,
+                query=_fusion(self.fusion, len(sides)),
+                limit=max(top_k, self.reranker.candidates) if self.reranker else top_k,
                 with_payload=True,
-            )
-        return [
-            Hit.model_validate({**(p.payload or {}), "chunk_id": str(p.id), "score": p.score})
-            for p in response.points
-        ]
+            ).points
+            fused = {str(p.id): rank for rank, p in enumerate(points, 1)}
+            if self.reranker and points:
+                texts = [(p.payload or {})["text"] for p in points]
+                scored = zip(self.reranker.scores(query, texts), points, strict=True)
+                ranked = sorted(scored, key=lambda pair: -pair[0])[:top_k]
+                points = [p.model_copy(update={"score": score}) for score, p in ranked]
+            elif points:
+                ids = models.HasIdCondition(has_id=[p.id for p in points])
+                cosine = self.client.query_points(
+                    self.alias,
+                    query=dense,
+                    using="dense",
+                    query_filter=models.Filter(must=[ids]),
+                    limit=len(points),
+                ).points
+                scores = {p.id: p.score for p in cosine}
+                points = [p.model_copy(update={"score": scores[p.id]}) for p in points]
+            hits: list[Hit] = [
+                Hit.model_validate({**(p.payload or {}), "chunk_id": str(p.id), "score": p.score})
+                for p in points
+            ]
+            if (
+                score_threshold is not None
+                and max((h.score for h in hits), default=0) < score_threshold
+            ):
+                return []
+            if explain:
+                requests = [
+                    models.QueryRequest(query=p.query, using=p.using, filter=where, limit=PREFETCH)
+                    for p in sides
+                ]
+                ranks = [
+                    {str(p.id): rank for rank, p in enumerate(side.points, 1)}
+                    for side in self.client.query_batch_points(self.alias, requests)
+                ]
+                hits = [
+                    ExplainedHit(
+                        **hit.model_dump(),
+                        fused_rank=fused[hit.chunk_id],
+                        dense_rank=ranks[0].get(hit.chunk_id),
+                        sparse_rank=ranks[1].get(hit.chunk_id) if len(ranks) > 1 else None,
+                    )
+                    for hit in hits
+                ]
+        return hits
 
     def documents(self, domains: list[Domain] | None = None) -> list[DocumentInfo]:
         """Every ingested document by title."""
@@ -351,6 +447,13 @@ def _info(payload: dict[str, Any], chunk_counts: dict[str, int]) -> DocumentInfo
     return DocumentInfo.model_validate(
         {**payload, "chunk_count": chunk_counts.get(payload["doc_id"], 0)}
     )
+
+
+def _fusion(spec: str, sides: int) -> models.FusionQuery | models.RrfQuery:
+    if spec == "dbsf":
+        return models.FusionQuery(fusion=models.Fusion.DBSF)
+    _, k, weight = spec.split(":")
+    return models.RrfQuery(rrf=models.Rrf(k=int(k), weights=[1, float(weight)][:sides]))
 
 
 def _equals(key: str, value: str | int) -> models.FieldCondition:

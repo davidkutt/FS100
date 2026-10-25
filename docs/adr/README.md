@@ -22,8 +22,8 @@ Short, numbered records of decisions that shape FS100. Each ADR references the d
 | [0013](0013-prompt-versioning.md) | Prompts as versioned files in the repo, with a content hash on every record | Accepted |
 | [0014](0014-external-mcp-clients-cimd.md) | External MCP clients via Keycloak CIMD, with the experimental features always on | Accepted |
 | [0015](0015-stored-originals-job-queue-reindex.md) | Stored originals, a Postgres job queue and an eval-gated re-index | Accepted |
-| [0016](0016-hybrid-search-sparse-side.md) | Hybrid search — the sparse side (BM25 server-side vs. bge-m3 sparse) | Proposed (draft) |
-| [0017](0017-reranker.md) | Reranker | Proposed (draft) |
+| [0016](0016-hybrid-search-sparse-side.md) | Hybrid search — BM25 computed in the AI service, weighted RRF | Accepted |
+| [0017](0017-reranker.md) | Reranking — built and measured, off by default | Accepted |
 | [0018](0018-docling-parent-child-chunking.md) | Docling parsing and parent-child chunking | Proposed (draft) |
 
 ## Writing a new ADR

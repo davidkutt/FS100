@@ -34,7 +34,7 @@ from ai_service.agent import Agent, AgentDoneEvent, ApprovalRequiredEvent, ToolC
 from ai_service.catalog import McpServers, load_servers, load_taxonomy
 from ai_service.core.auth import Caller
 from ai_service.core.settings import Settings
-from ai_service.embeddings import Embedder
+from ai_service.embeddings import Embedder, load_reranker
 from ai_service.evals.fixtures import FAKE_PAT, FIXTURES, REPO, SANDBOX, GitHubFixture
 from ai_service.evals.metrics import percentile
 from ai_service.evals.retrieval import GoldenItem, Relevant, doc_id, ingest_corpus, load_manifest
@@ -228,7 +228,15 @@ class Bench:
         fixtures: Path,
     ) -> None:
         self.kb = KnowledgeBase(
-            QdrantClient(":memory:"), embedder, "eval", settings.chunk_size, settings.chunk_overlap
+            QdrantClient(":memory:"),
+            embedder,
+            "eval",
+            settings.chunk_size,
+            settings.chunk_overlap,
+            settings.sparse_model,
+            reranker=load_reranker(
+                settings.reranker_model, settings.rerank_candidates, settings.embedding_cache_dir
+            ),
         )
         self.kb.ensure_collection()
         self.filenames: dict[UUID, str] = {}

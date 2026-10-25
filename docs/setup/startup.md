@@ -166,7 +166,7 @@ curl -s localhost:8000/v1/documents -H "Authorization: Bearer $TOKEN" -F file=@d
   -F doc_id=$DOC -F owner_id=dev -F domains=sre        # 202 {"job_id":1,"version":1}
 curl -s localhost:8000/v1/jobs/1 -H "Authorization: Bearer $TOKEN"   # queued → parsing → embedding → ready {"result":{"chunk_count":3,…}}
 curl -s localhost:8000/v1/search -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
-  -d '{"query":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?","top_k":3}'   # hits with page numbers
+  -d '{"query":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?","top_k":3,"explain":true}'   # hits, page numbers, dense/sparse ranks
 curl -N localhost:8000/v1/chat -H "Authorization: Bearer $USER_TOKEN" -H 'content-type: application/json' \
   -d '{"messages":[{"role":"user","content":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?"}]}'
   # streams event: sources → token … → done; Phoenix shows chat → search → embed and the LLM span (prompt, tokens)
@@ -201,7 +201,8 @@ carries an `x-request-id` header; the API and the AI service log it in their JSO
 Then the demo path as `bob`: **Documents** → pick domains → drop files from `data/sample-docs/` → status
 goes `queued → parsing → embedding → ready`. **Chat** → ask a question → the answer streams with `[1]` citations;
 select one to read the passage, **Trace in Phoenix** opens the request's trace. **Inspector** shows the
-raw hits with scores and a dashed line at the score threshold. As `carol` (viewer) there are no upload
+raw hits with their dense score and fused, dense and sparse ranks, and warns when the best score is below
+the threshold (the chat would abstain). As `carol` (viewer) there are no upload
 or delete controls. Chat calls the real LLM unless `LLM_PROVIDER=fake`.
 
 ### Use the knowledge base from Claude Code / VS Code
@@ -374,7 +375,9 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | `kb.ingest_url` fails with `Host … is not allowed` | Only hosts in `INGEST_URL_ALLOWED_HOSTS` are fetched, and only PDF, Markdown or text files (HTML pages get 415) |
 | `web.fetch` missing for the agent, or `… is not an allowed host` | Editors and admins only; it reads only hosts in `WEB_FETCH_ALLOWED_HOSTS` (empty = unavailable), on every redirect too. Restart the AI service after changing it |
 | Chat ends with `event: error`, `LLM request failed` | `detail` carries the provider's answer: 401 wrong key, 402 credits used up, 429 rate limit after retries — see `data/sample-docs/runbook-llm-provider-outage.md` |
-| `[ai]` takes minutes to start, `/readyz` returns 503 | First start downloads the embedding model; watch the `[ai]` progress output. Changing `EMBEDDING_MODEL` downloads another one; then `pnpm kb:reindex --force --reason "new model"` rebuilds the collection with it (searches fail until then) |
+| `[ai]` logs `kb_current has sparse=none, not SPARSE_MODEL=…`; the inspector shows no sparse ranks | The live collection predates hybrid search (M3a.2) or `SPARSE_MODEL` changed: `pnpm kb:reindex` builds a hybrid one behind the gate; search stays dense-only until then |
+| With `RERANKER_MODEL` set, the chat abstains on questions the documents answer (or never abstains) | The threshold is still the cosine value `0.55`: each reranker needs its own `RETRIEVAL_SCORE_THRESHOLD` (`.env.example`, ADR-0017). Restart `pnpm dev ai` |
+| `[ai]` takes minutes to start, `/readyz` returns 503 | First start downloads the embedding model (and `RERANKER_MODEL`, if set); watch the `[ai]` progress output. Changing `EMBEDDING_MODEL` downloads another one; then `pnpm kb:reindex --force --reason "new model"` rebuilds the collection with it (searches fail until then) |
 | `pnpm stack:up:full`: `port is already allocated` on 3000/4200/8000 | `pnpm dev` (or one native app) still runs — stop it; both modes use the same ports |
 | `pnpm stack:up:full` waits for minutes on `ai-service` | First start downloads the embedding model into the volume: `pnpm stack:logs ai-service` |
 | Angular shows stale output | `rm -rf apps/web/.angular` and restart |

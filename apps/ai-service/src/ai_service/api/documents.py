@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from ai_service.catalog import Taxonomy
 from ai_service.ingest import supported
 from ai_service.jobs import INGEST, cancel_ingest, defer
-from ai_service.knowledge_base import Domain, Hit, KnowledgeBase
+from ai_service.knowledge_base import Domain, ExplainedHit, KnowledgeBase
 from ai_service.storage import Store
 
 router = APIRouter(prefix="/v1", tags=["documents"])
@@ -51,11 +51,13 @@ class SearchRequest(BaseModel):
     score_threshold: float | None = None
     domains: list[Domain] | None = None
     doc_ids: list[UUID] | None = None
+    explain: bool = False  # the inspector's fused, dense and sparse ranks (D56, D57)
 
 
 class SearchResponse(BaseModel):
     embedding_model: str
-    hits: list[Hit]
+    reranker_model: str | None  # None: `score` is the cosine similarity
+    hits: list[ExplainedHit]
 
 
 class Submitted(BaseModel):
@@ -110,9 +112,15 @@ async def submit(
 
 @router.post("/search")
 def search(kb: KB, body: SearchRequest) -> SearchResponse:
-    """Dense retrieval for the inspector and evals; no threshold unless one is given."""
-    hits = kb.search(body.query, body.top_k, body.score_threshold, body.domains, body.doc_ids)
-    return SearchResponse(embedding_model=kb.embedder.model_name, hits=hits)
+    """Retrieval as the chat runs it, for the inspector; no threshold unless one is given."""
+    hits = kb.search(
+        body.query, body.top_k, body.score_threshold, body.domains, body.doc_ids, body.explain
+    )
+    return SearchResponse(
+        embedding_model=kb.embedder.model_name,
+        reranker_model=kb.reranker.model_name if kb.reranker else None,
+        hits=[ExplainedHit.model_validate(hit.model_dump()) for hit in hits],
+    )
 
 
 @router.patch("/documents/{doc_id}/labels", status_code=status.HTTP_204_NO_CONTENT)
