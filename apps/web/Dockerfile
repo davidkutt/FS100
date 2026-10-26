@@ -14,7 +14,7 @@ COPY packages/contracts packages/contracts
 COPY apps/web apps/web
 RUN pnpm --filter @fs100/web build
 
-FROM nginxinc/nginx-unprivileged:1.31.6-alpine
+FROM nginxinc/nginx-unprivileged:1.31.7-alpine
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf
 COPY apps/web/config.json.template /etc/nginx/templates/
 COPY --from=build /repo/apps/web/dist/web/browser /usr/share/nginx/html
