@@ -6,7 +6,7 @@ license = "MIT"
 requires-python = ">=3.13,<3.14"
 dependencies = [
     # PDF layout and tables without OCR/VLM extras (D59, ADR-0018).
-    "docling-slim[convert-core,feat-chunking,format-pdf,models-local]==2.141.0",
+    "docling-slim[convert-core,feat-chunking,format-pdf,models-local]==2.142.1",
     "docling-ibm-models[opencv-python-headless]",  # TableFormer imports cv2
     "fastapi>=0.143",
     "fastembed>=0.9.0",
@@ -23,7 +23,7 @@ dependencies = [
     "pypdf>=6.20.1",
     "python-multipart>=0.0.32",
     "pyyaml>=6.0.3",
-    "qdrant-client>=1.19,<1.20",
+    "qdrant-client>=1.19,<1.21",
     # Direct, so `tool.uv.sources` applies (uv ignores it for transitive dependencies).
     "torch>=2.14.1",
     "torchvision>=0.29.1",
