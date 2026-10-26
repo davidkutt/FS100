@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build from the repo root: docker build -f apps/web/Dockerfile .
 # One image for every environment: nginx renders /config.json from the WEB_* variables on start (D17).
-FROM --platform=$BUILDPLATFORM node:24.22.0-trixie-slim AS build
+FROM --platform=$BUILDPLATFORM node:24.22.1-trixie-slim AS build
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable pnpm
 WORKDIR /repo
