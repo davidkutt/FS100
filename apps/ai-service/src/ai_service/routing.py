@@ -11,7 +11,7 @@ from ai_service import prompts
 from ai_service.catalog import Taxonomy
 from ai_service.core.settings import Settings
 from ai_service.embeddings import Embedder
-from ai_service.knowledge_base import Domain
+from ai_service.knowledge_base import Domain, unit
 from ai_service.llm import Message, StructuredLlm, Usage
 
 RouterName = Literal["embedding", "llm", "user"]
@@ -47,13 +47,13 @@ class EmbeddingRouter:
         descriptions = [
             f"{domain}: {info.description}" for domain, info in taxonomy.domains.items()
         ]
-        self._vectors = _unit(np.array(embedder.embed_passages(descriptions)))
+        self._vectors = unit(np.array(embedder.embed_passages(descriptions)))
 
     async def route(self, question: str) -> Route:
         return await asyncio.to_thread(self._route, question)
 
     def _route(self, question: str) -> Route:
-        scores = self._vectors @ _unit(np.array(self._embedder.embed_queries([question])))[0]
+        scores = self._vectors @ unit(np.array(self._embedder.embed_queries([question])))[0]
         weights = np.exp((scores - scores.max()) / TEMPERATURE)
         best = int(scores.argmax())
         confidence = float(weights[best] / weights.sum())
@@ -90,7 +90,3 @@ def create_router(
     if settings.router == "llm":
         return LlmRouter(llm, taxonomy, settings.router_model or None)
     return EmbeddingRouter(embedder, taxonomy)
-
-
-def _unit(vectors: np.ndarray) -> np.ndarray:
-    return vectors / np.maximum(np.linalg.norm(vectors, axis=1, keepdims=True), 1e-12)

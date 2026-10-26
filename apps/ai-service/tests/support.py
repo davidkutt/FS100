@@ -12,14 +12,21 @@ import httpx2
 import jwt
 import numpy as np
 from cryptography.hazmat.primitives.asymmetric import rsa
+from docling_core.types.doc.base import BoundingBox, Size
+from docling_core.types.doc.common.reference import ProvenanceItem
+from docling_core.types.doc.document import DoclingDocument
+from docling_core.types.doc.items.table.table_data import TableCell, TableData
+from docling_core.types.doc.labels import DocItemLabel
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from fastembed.sparse.sparse_embedding_base import SparseEmbedding
 from jwt.algorithms import RSAAlgorithm
 from numpy.typing import NDArray
+from pydantic import BaseModel
 
 from ai_service.core.settings import Settings
 from ai_service.jobs import run_worker
+from ai_service.llm import Message, Usage
 from ai_service.routing import Route
 from ai_service.tokens import Tokens
 
@@ -30,6 +37,7 @@ OFFLINE: dict[str, Any] = {
     "ai_database_url": ":memory:",
     "jobs_inprocess_worker": False,
 }
+USAGE = Usage(30, 10, 1e-5, "cheap/model")
 SIGNING_KEY = "test-only-approval-signing-key-0123456789"
 KEY = rsa.generate_private_key(public_exponent=65537, key_size=2048)
 JWKS: dict[str, Any] = {
@@ -82,6 +90,52 @@ class FixedRouter:
         return self._route
 
 
+class ScriptedLlm:
+    """Answers each structured call with the next reply (or raises it); records the calls."""
+
+    def __init__(self, *replies: BaseModel | Exception) -> None:
+        self.replies = list(replies)
+        self.calls: list[tuple[list[Message], str | None]] = []
+
+    async def complete_json[T: BaseModel](
+        self,
+        messages: list[Message],
+        schema: type[T],
+        model: str | None = None,
+        session_id: str | None = None,
+    ) -> tuple[T, Usage]:
+        self.calls.append((messages, model))
+        reply = self.replies.pop(0)
+        if isinstance(reply, Exception):
+            raise reply
+        return schema.model_validate(reply.model_dump()), USAGE
+
+
+class Labeller:
+    """Contextual retrieval's model (D60): names each chunk after its heading, offers `topics`;
+    records the messages and session ids; `fail` raises instead."""
+
+    def __init__(self, topics: list[str], fail: bool = False) -> None:
+        self.topics = topics
+        self.fail = fail
+        self.calls: list[tuple[list[Message], str | None]] = []
+
+    async def complete_json[T: BaseModel](
+        self,
+        messages: list[Message],
+        schema: type[T],
+        model: str | None = None,
+        session_id: str | None = None,
+    ) -> tuple[T, Usage]:
+        self.calls.append((messages, session_id))
+        if self.fail:
+            raise RuntimeError("provider down")
+        headings = re.findall(r"^## (.+)$", str(messages[-1].get("content")), re.MULTILINE)
+        context = f"The runbook's {(headings or ['other'])[0]} section."
+        label = {"context": context, "topics": self.topics}
+        return schema.model_validate(label), USAGE
+
+
 class FakeTextEmbedding:
     """Offline stand-in for fastembed: hashed bag of words, so shared words mean similar vectors."""
 
@@ -124,6 +178,38 @@ class FakeTextCrossEncoder:
         words = set(re.findall(r"\w+", query.lower()))
         for document in documents:
             yield float(len(words & set(re.findall(r"\w+", document.lower()))))
+
+
+def docling_document(title: bool = True) -> dict[str, Any]:
+    """What Docling returns for a two-page PDF: a title, headings, text and a table on page 2."""
+    doc = DoclingDocument(name="handbook")
+    for page in (1, 2):
+        doc.add_page(page, Size(width=600, height=800))
+
+    def on(page: int) -> ProvenanceItem:
+        return ProvenanceItem(page_no=page, bbox=BoundingBox(l=0, t=0, r=1, b=1), charspan=(0, 1))
+
+    if title:
+        doc.add_title("SLO handbook", prov=on(1))
+    doc.add_heading("Targets", level=1, prov=on(1))
+    doc.add_text(DocItemLabel.TEXT, "Chat availability is 99.5 percent.", prov=on(1))
+    cells = [
+        TableCell(
+            text=text,
+            start_row_offset_idx=row,
+            end_row_offset_idx=row + 1,
+            start_col_offset_idx=col,
+            end_col_offset_idx=col + 1,
+            column_header=row == 0,
+        )
+        for row, line in enumerate([("Journey", "Target"), ("login", "99.9")])
+        for col, text in enumerate(line)
+    ]
+    doc.add_table(TableData(num_rows=2, num_cols=2, table_cells=cells), prov=on(2))
+    doc.add_heading("Alerts", level=1, prov=on(2))
+    doc.add_heading("Burn rate", level=2, prov=on(2))
+    doc.add_text(DocItemLabel.TEXT, "Page on a 14x burn rate.", prov=on(2))
+    return json.loads(doc.model_dump_json())
 
 
 def sse(response: httpx2.Response) -> list[tuple[str, Any]]:

@@ -17,7 +17,8 @@ from pydantic import AnyHttpUrl, BaseModel, Field, HttpUrl
 
 from ai_service.core.auth import Caller, Jwt
 from ai_service.core.settings import Settings
-from ai_service.knowledge_base import Chunk, DocumentInfo, Domain, Hit, KnowledgeBase
+from ai_service.knowledge_base import DocumentInfo, DocumentSection, Domain, Hit, KnowledgeBase
+from ai_service.query import STRATEGY, QueryTransformer, Strategy
 from ai_service.tokens import Tokens
 from ai_service.tools import Role, permitted
 
@@ -30,8 +31,9 @@ class SearchResult(BaseModel):
 
 
 class DocumentWindow(DocumentInfo):
-    chunks: list[Chunk]
-    next_offset: int | None  # null: the window ends with the last chunk
+    section_count: int
+    sections: list[DocumentSection]
+    next_offset: int | None  # null: the window ends with the last section
 
 
 class Sources(BaseModel):
@@ -91,8 +93,13 @@ def _detail(response: httpx2.Response) -> str:
         return f"HTTP {response.status_code}"
 
 
-def create_mcp(settings: Settings, kb: Callable[[], KnowledgeBase], tokens: Tokens) -> MCPServer:
-    """`kb` is a getter: the knowledge base only exists once the app's lifespan has started."""
+def create_mcp(
+    settings: Settings,
+    kb: Callable[[], KnowledgeBase],
+    tokens: Tokens,
+    transformer: Callable[[], QueryTransformer],
+) -> MCPServer:
+    """`kb` and `transformer` are getters: they only exist once the app's lifespan has started."""
     mcp = MCPServer(
         "fs100-kb",
         instructions="The FS100 knowledge base: runbooks, ADRs, setup guides and handbooks.",
@@ -113,29 +120,44 @@ def create_mcp(settings: Settings, kb: Callable[[], KnowledgeBase], tokens: Toke
         top_k: Annotated[int, Field(ge=1, le=10)] = settings.retrieval_top_k,
         domains: Domains = None,
         doc_ids: Annotated[list[UUID] | None, Field(description="Only these documents.")] = None,
+        strategy: Annotated[Strategy, Field(description=STRATEGY)] = "plain",
     ) -> SearchResult:
         """The chunks that match a query best, with their documents and scores."""
         _claims("viewer")
+        # shortcut: HyDE's cost (~0.0001 USD) is not in the caller's usage or cost cap; return
+        # it with the hits once callers account per tool call.
+        expanded = await transformer().expand(query, strategy)
         hits = await asyncio.to_thread(
-            kb().search, query, top_k, settings.retrieval_score_threshold, domains, doc_ids
+            kb().search,
+            expanded.text,
+            top_k,
+            settings.retrieval_score_threshold,
+            domains,
+            doc_ids,
+            passages=expanded.passages,
         )
         return SearchResult(hits=hits)
 
     @mcp.tool()
     async def get_document(  # pyright: ignore[reportUnusedFunction]
         doc_id: UUID,
-        offset: Annotated[int, Field(ge=0, description="First chunk; `next_offset` pages on.")] = 0,
+        offset: Annotated[
+            int, Field(ge=0, description="First section; `next_offset` pages on.")
+        ] = 0,
         limit: Annotated[int, Field(ge=1, le=20)] = 5,
     ) -> DocumentWindow:
-        """A document's labels and a window of its chunks in reading order."""
+        """A document's labels and a window of its sections in reading order."""
         _claims("viewer")
         info = await asyncio.to_thread(kb().document, doc_id)
         if info is None:
             raise ToolError(f"Document {doc_id} not found")
-        chunks = await asyncio.to_thread(kb().chunks, doc_id, offset, limit)
-        end = offset + len(chunks)
+        sections = await asyncio.to_thread(kb().sections, doc_id)
+        end = min(offset + limit, len(sections))
         return DocumentWindow(
-            **info.model_dump(), chunks=chunks, next_offset=end if end < info.chunk_count else None
+            **info.model_dump(),
+            section_count=len(sections),
+            sections=sections[offset:end],
+            next_offset=end if end < len(sections) else None,
         )
 
     @mcp.tool()
@@ -151,8 +173,8 @@ def create_mcp(settings: Settings, kb: Callable[[], KnowledgeBase], tokens: Toke
         info = await asyncio.to_thread(kb().document, doc_id)
         if info is None:
             raise ToolError(f"Document {doc_id} not found")
-        chunks = await asyncio.to_thread(kb().chunks, doc_id, 0, info.chunk_count)
-        headings = list(dict.fromkeys(chunk.heading for chunk in chunks if chunk.heading))
+        sections = await asyncio.to_thread(kb().sections, doc_id)
+        headings = list(dict.fromkeys(s.heading for s in sections if s.heading))
         return Outline(**info.model_dump(), headings=headings).model_dump_json()
 
     def confirmed(url: HttpUrl, domains: list[Domain]) -> Elicit[Confirmation]:

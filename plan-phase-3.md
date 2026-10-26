@@ -487,7 +487,7 @@ D50 measured (MacBook Air M1, 16 GB; `pnpm mem` with the P2 stack idle under `pn
 | AI service idle, bge-m3 loaded | bge-m3 ~2.3 GB | 1.83 GB |
 | Embedding the corpus (eval run, 218 chunks, in-memory Qdrant) | — | **4.35–4.50 GB peak** |
 | Reranker (ADR-0017) | ≤ ~2.5 GB | MiniLM +1.2 GB · jina +2.0 GB · bge fp16 +0.5 GB RSS + 1.1–2.3 GB MPS |
-| Docling, 36-page PDF, own process (ADR-0018) | only in jobs | 1.96–2.02 GB peak |
+| Docling, 36-page PDF, own process (ADR-0018) | only in jobs | 1.96–2.02 GB peak; M3a.5's child process 1.72 GB (63 pages 1.90 GB) |
 | Prompt Guard 2, spaCy `md` ×2 | ~0.35 GB + two models | not measured (M3b.5) |
 | Containers: Keycloak 0.69, Phoenix 0.44, Qdrant 0.06, Postgres 0.03, GitHub MCP 0.02 GB | VM ≤ ~4 GB | 1.25 GB (Docker Desktop's VM limit is 8.4 GB) |
 | NestJS + Angular dev | ≤ ~1.5 GB | 0.51 + 0.57 GB |
@@ -653,27 +653,164 @@ Deviations:
 
 ### M3a.4 — Query transformation (~5 h)
 
-- [ ] Standalone rewrite (`mode=rag`), multi-query, HyDE; cheap model; cache per question + history hash
-- [ ] `strategy` argument on `search_knowledge_base` (MCP schema change, contract check)
-- [ ] Each measured on `dev`; survivors on `test`; cost per query
+- [x] Standalone rewrite (`mode=rag`), multi-query, HyDE; cheap model; cache per question + history hash
+- [x] `strategy` argument on `search_knowledge_base` (MCP schema change, contract check)
+- [x] Each measured on `dev`; survivors on `test`; cost per query
 
 **Acceptance:** a row and a cost figure per strategy; only survivors stay enabled.
 
+**Done 2026-10-25 — HyDE survives, as a per-search option.** `openai/gpt-6-luna` (`LLM_MODEL`, `QUERY_MODEL`
+empty) with structured output over the M3a.2 hybrid retrieval, no reranker. Latency includes the LLM call;
+USD per query over all questions of the run (OpenRouter `usage.cost`). `dev` (tuning):
+
+| Strategy | `retrieval_v1` nDCG@10 (hit@1) | Follow-ups (7) nDCG@10 | p50 / p95 | USD per query |
+|---|---|---|---|---|
+| plain (hybrid) | 0.912 (0.80) | 0.919 | 60 / 79 ms | 0 |
+| standalone rewrite, instead of the follow-up | — | 0.760 | 2.2 / 3.5 s | 0.000062 |
+| standalone rewrite, fused with the follow-up | — | 0.876 | 2.4 / 4.0 s | 0.000064 |
+| multi-query (3 variants, RRF) | 0.924 (0.83) | 0.947 | 3.1 / 3.6 s | 0.000085 |
+| **HyDE** (one passage) | **0.958 (0.93)** | 0.912 | 4.0 / 6.3 s | 0.000114 |
+
+`test`, once (HyDE only):
+
+| Retrieval (`test`) | hit@1 | hit@5 | MRR@10 | nDCG@10 | Exact terms (3) hit@5 / nDCG@10 | Follow-ups (5) nDCG@10 | Abstention at 0.55 | p50 / p95 | USD per query |
+|---|---|---|---|---|---|---|---|---|---|
+| hybrid (`m3a2-hybrid`) | 0.70 | 0.95 | 0.79 | 0.81 | 1.00 / 0.59 | 0.69 | 0.95 | 70 / 84 ms | 0 |
+| **+ HyDE** (`m3a4-hyde`) | 0.70 | **1.00** | **0.85** | **0.87** | 1.00 / **0.75** | **0.80** | 0.95 | 3.6 / 4.8 s | 0.000101 |
+
+Per item: `r-035` (multi-chunk), M3a.2's top-5 miss, 7 → 2; `r-028` 5 → 2; `r-002` (DE → EN) 3 → 1; the exact-term
+items `r-015` 3 → 2 and `r-033` 4 → 2; `r-037` 1 → 2 is the only loss. By type: cross-language 0.79 → 0.90,
+multi-chunk 0.64 → 0.72, direct lookup 0.87 → 0.91. All runs of the milestone together cost 0.013 USD.
+
+Deviations:
+- The standalone rewrite and multi-query are removed, prompts included, and never went to `test`. The rewrite lost
+  on `dev` both instead of the follow-up (−0.16) and fused with it as a second query (−0.04): these follow-ups name
+  what they ask for (*"What do I do if it leaked?"* → *Leaked secret*), and the rewrite's history terms (*the
+  OpenRouter API key*) pulled the hits back to the earlier answer. Multi-query gained 0.012 on `retrieval_v1`, under
+  the 0.02 bar. The chat (`mode=rag`) keeps searching the last message as written.
+- The golden set has no follow-ups: they are a separate `followup_v1.jsonl` (14 self-written items, 8 `dev` / 6 `test`,
+  2 unanswerable, written before the first run) with a `history` field and the item type `follow-up`;
+  `retrieval_v1` stays frozen. Seven answerable items per split are anecdotal — golden v2 (M3a.10) should take
+  them and add follow-ups that are elliptical without their history.
+- HyDE is offered per search, not used by default: `strategy: plain | hyde` on `search_knowledge_base`, in the
+  agent's `SearchArgs` and on `/v1/search` (the inspector has no control for it yet). Making it the chat's default
+  would add 3.6 s before the first source; a faster cheap model for `QUERY_MODEL` was not compared. The survivors
+  are the `Strategy` type and the MCP enum, so there is no `QUERY_STRATEGIES`.
+- The passage joins the fusion as one more dense prefetch, embedded as a passage; the question keeps its dense and
+  sparse sides, and the reranker and `score` still compare with the question, so the threshold and abstention are
+  unchanged. One passage, not the HyDE paper's average over several.
+- Cache: in process, per prompt hash, model and question (1,024 entries, oldest out); no history in the key since
+  the rewrite is gone.
+- HyDE's cost is not in the agent turn's usage or NestJS's cost caps (MCP tool results carry no usage); the
+  OpenRouter key's credit limit bounds it. The agent eval (paid) was not re-run, so how often the agent picks
+  `hyde` is not measured.
+- No re-index through the gate: query-time only, the collection is unchanged.
+- The contract check is a test: the agent's `SearchArgs` fields and `strategy` enum match the MCP tool's schema.
+
 ### M3a.5 — Docling parsing + parent-child chunking (~8 h)
 
-- [ ] Docling parser without OCR/VLM extras; parse cached; pypdf fallback; timeouts
-- [ ] Child/parent chunking; HybridChunker vs. own chunker on `dev`
-- [ ] `get_document` and citations by section; inspector parent view; re-index; ADR-0018
+- [x] Docling parser without OCR/VLM extras; parse cached; pypdf fallback; timeouts
+- [x] Child/parent chunking; HybridChunker vs. own chunker on `dev`
+- [x] `get_document` and citations by section; inspector parent view; re-index; ADR-0018
 
 **Acceptance:** "+ Docling / parent-child" row; tables survive parsing in 5 spot-checked PDFs; peak memory within D50.
 
+**Done 2026-10-26 — Docling for PDFs, parents of ≤ 2000 characters around the unchanged 1000/150 chunks.**
+On `dev` every parent size and chunk size was level within the 0.02 bar (ADR-0018): 158 of the corpus's 160
+sections are under 2000 characters, so parents change what the LLM reads (whole sections, each once:
+2,625 → 3,601 characters per top 5), not what is found. Docling's HybridChunker lost (nDCG@10 0.88 vs.
+0.92). `test`, once:
+
+| Retrieval (`test`) | hit@1 | hit@5 | MRR@10 | nDCG@10 | Exact terms (3) hit@5 / nDCG@10 | Abstention at 0.55 | Top-5 chars |
+|---|---|---|---|---|---|---|---|
+| hybrid, pypdf (`m3a2-hybrid`) | 0.70 | 0.95 | 0.79 | 0.81 | 1.00 / 0.59 | 0.95 | — |
+| + Docling | 0.70 | 0.95 | 0.78 | 0.81 | 1.00 / 0.57 | 0.95 | 2,500 |
+| **+ parents ≤ 2000** (`m3a5-parents`) | 0.70 | 0.95 | 0.78 | 0.81 | 1.00 / 0.57 | 0.95 | 3,373 |
+
+Neutral within the gate's 0.02 (`r-015` 3 → 4, `r-035` 7 → 8; nothing leaves the top 5); full set (CI gate)
+hit@5 0.98, nDCG@10 0.88. The benefit — the LLM reads whole sections, each once — is for the judge
+(M3b.1) to measure; `PARENT_SIZE=0` and a re-index revert it. Tables survive in five public NIST PDFs (87
+tables: rows, columns, repeated merged cells, captions; ADR-0018); Docling's cell padding (36–58 % of
+the table characters) and dot leaders are compacted before chunking. Memory (D50): the Docling child
+peaks at 1.72 GB RSS for 36 pages and 1.90 GB for 63 (28–30 s), then exits; the AI service never loads
+torch. Through the real gate on throwaway state (reindex-check, uploads built with `LIVE_PARENT_SIZE=0`):
+`swapped`, `test` nDCG@10 0.807 (−0.001), hit@5 and abstention unchanged; rollback 0.05 s (API) / 2.5 s
+(CLI); the AI process idles at 1.84 GB, peaks at 2.05 GB ingesting and 2.42 GB evaluating.
+
+Deviations:
+- Children stay `CHUNK_SIZE`/`CHUNK_OVERLAP` 1000/150 characters, parents `PARENT_SIZE` 2000 characters, not
+  ~450 / ≤ 2000 tokens: 500/75 and 1800/200 did not gain on `dev`, and five 2000-token parents would
+  overflow the agent's 3,000-token search result. No `CHILD_CHUNK_TOKENS` / `PARENT_MAX_TOKENS`;
+  `DOCLING_TIMEOUT_S` is a constant (300 s).
+- Docling parses PDFs only. Markdown keeps its own parser (Docling's Markdown backend would serve only the
+  losing HybridChunker); HTML is not accepted yet — it comes with the curator (M3b.9).
+- The stored parse is the DoclingDocument in `parsed` with one `parser` column (`docling 2.141.0`), no
+  `parser_version`; fallbacks to pypdf are not stored, so the next ingest or re-index tries Docling again.
+- Search keeps the best chunk per parent before cutting to `top_k` (it now fetches the fused top 50), and a
+  hit's `text` is the whole section; `chunk_text` is in `explain` only. The payload carries `parent_id`
+  and `parent_text` on every chunk instead of a separate parent store. `heading` stays the section path
+  (no `section_path` / `sectionPath` field).
+- `get_document` returns `sections` + `section_count` instead of `chunks` (MCP schema change); the
+  outline resource reads the sections.
+- torch and torchvision are direct dependencies from PyTorch's CPU index (PyPI's Linux wheels bring CUDA).
+  The AI service image grows from 0.63 to 2.4 GB; Docling converts in it (checked: CSF 2.0, 32 pages, 45 s
+  in the Docker VM).
+- Fix outside the milestone: the image had no libpq since M3a.1, so the AI service crashed on start in
+  Mode B and the e2e workflow on `main` has been red since PR #21; `psycopg[binary]` bundles it.
+
 ### M3a.6 — Contextual retrieval + chunk sub-topics (~6 h)
 
-- [ ] Contextualizer step (D60) with cached document prefix, cost cap, per-domain switch
-- [ ] Chunk `topics` from the same call; fallback by embedding similarity; sub-topic list v2 in `taxonomy.yaml`
-- [ ] Re-index; cost report per document; ADR-0019
+- [x] Contextualizer step (D60) with cached document prefix, cost cap, per-domain switch
+- [x] Chunk `topics` from the same call; fallback by embedding similarity; sub-topic list v2 in `taxonomy.yaml`
+- [x] Re-index; cost report per document; ADR-0019
 
 **Acceptance:** "+ contextual" row with its one-off cost; ≥ 90 % of 50 spot-checked chunks carry a correct sub-topic.
+
+**Done 2026-10-26 — contextual retrieval on for all nine domains, threshold kept at 0.55.** One
+`openai/gpt-6-luna` call per chunk returns `{context, topics}`; the context is embedded with the chunk
+(dense and BM25), never cited. Plain and contextual from one index each (`m3a6-contextual`):
+
+| Retrieval | hit@1 | hit@5 | MRR@10 | nDCG@10 | Exact terms (3) nDCG@10 | Abstention at 0.55 | One-off USD |
+|---|---|---|---|---|---|---|---|
+| `dev` plain → + contextual | 0.83 → 0.83 | 1.00 → 1.00 | 0.92 → 0.91 | 0.924 → 0.934 | 0.96 → 1.00 | 0.82 → 0.73 | 0.034 |
+| `test` plain (`m3a5-parents`) | 0.70 | 0.95 | 0.78 | 0.81 | 0.57 | 0.95 | — |
+| **`test` + contextual** (`m3a6-contextual`) | 0.70 | **1.00** | **0.83** | **0.85** | **0.69** | 0.93 | 0.034 |
+
+`r-035` (multi-chunk) 8 → 3, the exact-term items `r-015` and `r-033` 4 → 2, German questions 0.76 →
+0.89 nDCG@10; full set (CI gate) hit@5 0.98 → 1.00, nDCG@10 0.88 → 0.90. A first contextual run gave the
+same retrieval gain (`test` 0.857) but abstention 0.80. Abstention at 0.55 drops on every split (contexts
+lift off-topic questions about a document's subject too); a dev-calibrated ~0.60 restores 0.90 but keeps
+only 80 % of the answerable questions, so the threshold stays and the swap is forced with that reason
+(4–6 unanswerable items per split can't resolve the gate's 0.02; recalibrate with golden v2, M3a.10).
+Cost: 0.034 USD for the corpus (fs100-plan.md 0.020, runbooks ~0.001 each), 91–98 % of the input from the
+prompt cache; ingest 182 → 353 s. Through the real gate (reindex-check, three runs): `kept` on `test`
+abstention (0.80–0.925 vs 0.95) with nDCG@10 +0.06 and MRR@10 +0.07…+0.10, swapped with `--force`; a
+second build reusing the stored labels makes no LLM call and swaps level; rollback 0.04 s (API) / 2.3 s
+(CLI); the AI process peaks at 2.60 GB. Sub-topics: on a fresh sample of 50 chunks **47 carry a correct one**
+(43 as the first); the embedding fallback alone gets 31 (ADR-0019).
+
+Deviations:
+- The document goes into the **system message**, the chunk into the user message: with the document as a
+  user-message prefix (D60's "document first") OpenRouter's `gpt-6-luna` cached nothing (0 of 85,766
+  tokens), in the system message 91–98 %. Each section is rendered under its heading path, because the
+  parser drops heading-only blocks such as a title. The first call runs alone, then 8 in parallel.
+- Chunk sub-topics are a new payload field **`chunk_topics`** (prefix index), not `topics`, which stays the
+  document's user-set labels (relabels and reconciles overwrite it). Only sub-topics of the document's
+  domains are offered and kept; a relabel to other domains keeps the old ones until a re-index.
+- `CONTEXTUAL_MODEL` (empty = `LLM_MODEL`) like `QUERY_MODEL`; the `models.yaml` task map stays D70
+  (M3b.6). Context ≤ 50 words by the prompt, not a token limit.
+- Contexts are **stored** (`ai.chunk_contexts`, keyed by the hash of model and messages) — not in D60, but
+  found necessary at the gate: two contextual builds without it differed by 0.04 nDCG@10 on `test` and
+  the second was refused. Re-indexes reuse them, free and deterministic. The cost of new calls is in the
+  job result (`context_cost_usd`) and per filename in the re-index report, not in NestJS.
+- Default all nine domains instead of Appendix A's four: measured that way, and the cut line keeps two
+  only if the budget fails. The code default is off (tests, CI, `kb-eval` without `.env` make no calls).
+- Taxonomy v2: sub-topics for `db`, `dev`, `mlops`, `ai`, `sre` and `architecture/roadmap` +
+  `dev/documentation` (added after the first spot-check; the 47/50 come from a second, fresh sample).
+- The CI gate and `kb-eval agent` index without contexts; the inspector shows neither context nor
+  chunk topics yet.
+- Fix outside the milestone: the chunker dropped no empty chunks — 6 of 224 points were a bare `---`;
+  without them plain retrieval is unchanged (`dev` 0.924, `test` 0.809).
 
 ### M3a.7 — Lifecycle & priorities (~5 h)
 
@@ -941,11 +1078,10 @@ BM25_LANGUAGE_NEUTRAL=true
 RERANKER_MODEL=none                        # ADR-0017: off; opt-in e.g. jinaai/jina-reranker-v2-base-multilingual-int8
 RERANK_CANDIDATES=10                       # jina int8: p95 1.5 s on the M1
 RETRIEVAL_SCORE_THRESHOLD=0.55             # cosine; 0.35 with jina int8, 0.40 with mMiniLM int8 (M3a.3)
-QUERY_STRATEGIES=plain                     # survivors of M3a.4
-DOCLING_TIMEOUT_S=300
-CHILD_CHUNK_TOKENS=450
-PARENT_MAX_TOKENS=2000
-CONTEXTUAL_DOMAINS=devops,cloud,security,architecture
+QUERY_MODEL=                               # HyDE, the survivor of M3a.4 (per search); empty = LLM_MODEL
+PARENT_SIZE=2000                           # M3a.5: characters; chunks stay CHUNK_SIZE/CHUNK_OVERLAP (1000/150); 0 = off
+CONTEXTUAL_DOMAINS=db,dev,cloud,devops,mlops,ai,security,architecture,sre   # M3a.6: all nine (ADR-0019); empty = off
+CONTEXTUAL_MODEL=                          # empty = LLM_MODEL
 CONTEXTUAL_MAX_COST_USD_PER_DOC=0.05
 CODE_REPO_PATH=../..                       # local checkout, read-only
 SKILLS_DIR=../../skills

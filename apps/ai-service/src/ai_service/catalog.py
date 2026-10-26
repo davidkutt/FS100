@@ -46,11 +46,16 @@ class Taxonomy(BaseModel):
             raise ValueError(f"missing domains: {sorted(missing)}")
         return self
 
-    def unknown_topics(self, topics: list[str]) -> list[str]:
-        known = {
-            f"{domain}/{topic}" for domain, info in self.domains.items() for topic in info.topics
+    def topics(self) -> dict[str, str]:
+        """`domain/topic` → description."""
+        return {
+            f"{domain}/{topic}": description
+            for domain, info in self.domains.items()
+            for topic, description in info.topics.items()
         }
-        return [topic for topic in topics if topic not in known]
+
+    def unknown_topics(self, topics: list[str]) -> list[str]:
+        return [topic for topic in topics if topic not in self.topics()]
 
 
 class ServerConfig(BaseModel):

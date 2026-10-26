@@ -1,0 +1,201 @@
+{
+  "dataset": "followup_v1-test",
+  "model": "BAAI/bge-m3",
+  "dim": 1024,
+  "chunk_size": 1000,
+  "chunk_overlap": 150,
+  "sparse": "bm25-english",
+  "fusion": "rrf:2:0.5",
+  "rerank": "none",
+  "strategy": "hyde",
+  "documents": 17,
+  "chunks": 218,
+  "ingest_s": 166.7936222080025,
+  "created_at": "2026-10-25T17:54:03+00:00",
+  "overall": {
+    "n": 5.0,
+    "hit@1": 0.8,
+    "hit@5": 0.8,
+    "mrr@10": 0.8,
+    "ndcg@10": 0.8,
+    "p50_ms": 4069.282458978705,
+    "p95_ms": 4492.472541984171,
+    "usd_per_query": 0.00011838333333333333
+  },
+  "by_domain": {
+    "cloud": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "devops": {
+      "n": 2.0,
+      "hit@1": 0.5,
+      "hit@5": 0.5,
+      "mrr@10": 0.5,
+      "ndcg@10": 0.5
+    },
+    "security": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "sre": {
+      "n": 2.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    }
+  },
+  "by_lang": {
+    "de": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "en": {
+      "n": 4.0,
+      "hit@1": 0.75,
+      "hit@5": 0.75,
+      "mrr@10": 0.75,
+      "ndcg@10": 0.75
+    }
+  },
+  "by_type": {
+    "follow-up": {
+      "n": 5.0,
+      "hit@1": 0.8,
+      "hit@5": 0.8,
+      "mrr@10": 0.8,
+      "ndcg@10": 0.8
+    }
+  },
+  "exact_terms": {},
+  "threshold": 0.5303505701333411,
+  "threshold_balanced_accuracy": 1.0,
+  "checked_threshold": 0.55,
+  "checked_balanced_accuracy": 0.8,
+  "items": [
+    {
+      "id": "f-009",
+      "question": "What are the first steps once one is declared?",
+      "lang": "en",
+      "domains": ["sre"],
+      "type": "follow-up",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5307354715358819,
+      "latency_ms": 4069.282458978705,
+      "cost_usd": 0.0001078,
+      "top_hits": [
+        "runbook-incident-response.md \u00a7 Runbook: Incident response \u203a First 15 minutes (0.484)",
+        "setup-startup.md \u00a7 Startup guide \u2014 run FS100 locally \u203a 9. What's next (0.531)",
+        "runbook-incident-response.md \u00a7 Runbook: Incident response \u203a Roles (0.404)"
+      ]
+    },
+    {
+      "id": "f-010",
+      "question": "Und wie schaffe ich schnell wieder Platz?",
+      "lang": "de",
+      "domains": ["sre", "devops"],
+      "type": "follow-up",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5303505701333411,
+      "latency_ms": 4492.472541984171,
+      "cost_usd": 0.0001292,
+      "top_hits": [
+        "runbook-speicherplatz-voll.md \u00a7 Runbook: Speicherplatz voll \u203a Schnelle Entlastung (0.503)",
+        "setup-installation.md \u00a7 Installation guide \u2014 local development toolchain \u203a 4. Windows (0.520)",
+        "runbook-embedding-model-swap.md \u00a7 Runbook: Swap the embedding model \u203a Switch (0.530)"
+      ]
+    },
+    {
+      "id": "f-011",
+      "question": "How do I check afterwards that it worked?",
+      "lang": "en",
+      "domains": ["devops"],
+      "type": "follow-up",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5949865768934806,
+      "latency_ms": 3733.875709003769,
+      "cost_usd": 0.0001282,
+      "top_hits": [
+        "setup-startup.md \u00a7 Startup guide \u2014 run FS100 locally \u203a 4. Check that everything works (0.595)",
+        "runbook-llm-provider-outage.md \u00a7 Runbook: LLM provider errors and outages \u203a Afterwards (0.524)",
+        "runbook-tls-zertifikat-erneuern.md \u00a7 Runbook: TLS-Zertifikat erneuern \u203a Ablaufdatum pr\u00fcfen (0.521)"
+      ]
+    },
+    {
+      "id": "f-012",
+      "question": "In which order do I do that so nothing breaks?",
+      "lang": "en",
+      "domains": ["security"],
+      "type": "follow-up",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5830359808070933,
+      "latency_ms": 4375.126499973703,
+      "cost_usd": 0.0001089,
+      "top_hits": [
+        "runbook-secret-rotation.md \u00a7 Runbook: Rotate secrets and API keys \u203a Zero-downtime order of operations (0.583)",
+        "runbook-secret-rotation.md \u00a7 Runbook: Rotate secrets and API keys \u203a Leaked secret (0.479)",
+        "runbook-postgres-backup-restore.md \u00a7 Runbook: Postgres backup and restore \u203a Take a manual backup (0.460)"
+      ]
+    },
+    {
+      "id": "f-013",
+      "question": "What should I check when its budget alert fires?",
+      "lang": "en",
+      "domains": ["cloud"],
+      "type": "follow-up",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.7043927430600607,
+      "latency_ms": 4438.068541989196,
+      "cost_usd": 0.0001173,
+      "top_hits": [
+        "runbook-azure-cost-guard.md \u00a7 Runbook: Azure cost guard \u203a When an alert fires (0.704)",
+        "runbook-azure-cost-guard.md \u00a7 Runbook: Azure cost guard \u203a Budget and alerts (0.679)",
+        "slo-handbook.pdf \u00a7 p3 (0.660)"
+      ]
+    },
+    {
+      "id": "f-014",
+      "question": "Und wie sichern wir die MongoDB-Instanz?",
+      "lang": "de",
+      "domains": ["db"],
+      "type": "unanswerable",
+      "exact_term": false,
+      "answerable": false,
+      "relevant_count": 0,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5205877071580424,
+      "latency_ms": 3966.519125009654,
+      "cost_usd": 0.0001189,
+      "top_hits": [
+        "runbook-postgres-backup-restore.md \u00a7 Runbook: Postgres backup and restore \u203a Take a manual backup (0.521)",
+        "setup-startup.md \u00a7 Startup guide \u2014 run FS100 locally \u203a 3. What runs where (0.493)",
+        "setup-startup.md \u00a7 Startup guide \u2014 run FS100 locally \u203a 4. Check that everything works (0.499)"
+      ]
+    }
+  ]
+}

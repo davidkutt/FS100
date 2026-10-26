@@ -7,19 +7,30 @@ judged by an eval run, not by impression.
 pnpm eval:retrieval                                    # model + chunking from .env defaults
 pnpm eval:retrieval --model intfloat/multilingual-e5-small --model BAAI/bge-m3 \
                     --chunk 1000:150 --chunk 500:75     # benchmark: every model × every chunking
+pnpm eval:retrieval --split dev --chunk 1000:150:0 \
+                    --chunk 1000:150:4000               # chunks 1000/150 alone vs. in parents ≤ 4000 (D59)
 pnpm eval:retrieval --split dev                        # tuning items only; `test` at milestone ends
 pnpm eval:retrieval --split dev --sparse none --sparse bm25-english \
                     --fusion rrf:2:0.5 --fusion dbsf    # dense vs. hybrid (ADR-0016), every combination
 pnpm eval:retrieval --split dev --rerank none \
                     --rerank jinaai/jina-reranker-v2-base-multilingual-int8:10   # rerankers (ADR-0017)
+uv run --directory apps/ai-service --env-file ../../.env kb-eval retrieval --split dev \
+                    --strategy plain --strategy hyde   # HyDE (D58): paid QUERY_MODEL calls, LLM from .env
+uv run --directory apps/ai-service --env-file ../../.env kb-eval retrieval --split dev \
+                    --contextual none --contextual all # contextual retrieval (D60): paid, ~0.04 USD per ingest
 ```
 
 The runner (`kb-eval retrieval` in `apps/ai-service`) ingests the corpus listed in
 [`data/sample-docs/domains.json`](../data/sample-docs/domains.json) into an **in-memory Qdrant** — no
 running infra and no LLM needed — asks every golden question (top 10, no filter, no threshold) and
-writes `runs/<timestamp>__<dataset>__<model>__<chunking>__<sparse>-<fusion>__rerank-<model>-<n>.{json,md}`
-(git-ignored). Retrieval is the service's: dense + `SPARSE_MODEL` fused unless `--sparse none`, then a
-reranker over the top `RERANK_CANDIDATES` if `RERANKER_MODEL` (default `none`) or `--rerank` names one.
+writes `runs/<timestamp>__<dataset>__<model>__<size>-<overlap>-<parent>__<sparse>-<fusion>__rerank-<model>-<n>.{json,md}`
+(git-ignored). Retrieval is the service's: dense + `SPARSE_MODEL` fused unless `--sparse none`, each
+parent section once through its best chunk (`--chunk SIZE:OVERLAP:PARENT`, default `PARENT_SIZE`; 0 =
+every chunk is its own parent), then a reranker over the top `RERANK_CANDIDATES` if `RERANKER_MODEL`
+(default `none`) or `--rerank` names one. `--contextual DOMAINS|all|none` (default `CONTEXTUAL_DOMAINS`)
+contextualizes the documents of those domains at ingest with `CONTEXTUAL_MODEL`; the report names the
+one-off cost per document (`context_cost_usd`). The PDF goes through Docling like an upload (ADR-0018): its
+first run downloads the layout and table models (≈ 1 GB) into the Hugging Face cache.
 Each chunking × sparse side is ingested once; fusions and rerankers run on top of it. The Markdown is printed too; with several runs, a
 comparison table follows.
 
@@ -31,7 +42,10 @@ Per answerable question; overall, per domain, language and item type, and for th
 - **MRR@10** — 1 / rank of the first relevant chunk.
 - **nDCG@10** — binary gain per *label* (a chunk only counts if it finds a label not found yet), so
   three chunks of the same section do not inflate the score.
-- **latency p50 / p95** — query embedding + search, in-process.
+- **latency p50 / p95** — query embedding + search, in-process; with `--strategy hyde` the LLM call too.
+- **USD per query** — the query transformation's cost (OpenRouter `usage.cost`), over all questions.
+- **characters in the top 5** — what the chat puts into the prompt per question (`RETRIEVAL_TOP_K`): with
+  parents (D59) whole sections instead of chunks; ÷ 4 ≈ input tokens.
 - **suggested `score_threshold`** — the top-1 score that best separates answerable from unanswerable
   questions (balanced accuracy). Scores are model-specific: recalibrate for every embedding model and
   reranker. With a reranker the score is its sigmoid score (ADR-0017); without one the dense similarity,
@@ -58,6 +72,15 @@ One JSON object per line (plan.md §7.6):
   milestone reports, so they stay unseen. Assigned once (seed 42, stratified by first domain, language
   and item type); new items get theirs when they are written. Baselines: [`baselines/`](baselines/).
 - `tests/test_evals.py` checks that every label resolves to a section of the corpus.
+
+## Dataset `datasets/followup_v1.jsonl`
+
+14 follow-up questions (M3a.4; 8 `dev`, 6 `test`, 2 of them unanswerable) in the `retrieval_v1` format plus
+`history`, the user turn and the answer before them; `question` alone leans on it (*"And if we run it with
+Docker Compose instead?"*). The runner searches `question` alone, as the chat does. Written to measure a
+standalone rewrite of follow-ups (D58), which lost on `dev`: these follow-ups name what they ask for, and
+the rewrite's history terms pulled results back to the earlier answer. Run it with
+`--dataset ../../evals/datasets/followup_v1.jsonl`; `tests/test_evals.py` resolves its labels too.
 
 ## CI gate
 

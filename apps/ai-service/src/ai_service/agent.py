@@ -146,10 +146,11 @@ class _Outcome:
 
 
 class _Sources:
-    """Numbers stay stable for the whole turn, so `[n]` stays valid across searches."""
+    """Numbers stay stable for the whole turn, so `[n]` stays valid across searches; a section
+    found through another of its chunks keeps its number (D59)."""
 
     def __init__(self) -> None:
-        self.by_chunk: dict[str, Source] = {}
+        self.by_section: dict[str, Source] = {}
         self.top_score: float | None = None
         self.searched = False
 
@@ -158,10 +159,11 @@ class _Sources:
         rendered: list[str] = []
         for hit in hits:
             self.top_score = max(hit.score, self.top_score or hit.score)
-            if hit.chunk_id not in self.by_chunk:
-                n = len(self.by_chunk) + 1
-                self.by_chunk[hit.chunk_id] = Source.model_validate({"n": n, **hit.model_dump()})
-            rendered.append(render_source(self.by_chunk[hit.chunk_id].n, hit))
+            key = hit.parent_id or hit.chunk_id
+            if key not in self.by_section:
+                n = len(self.by_section) + 1
+                self.by_section[key] = Source.model_validate({"n": n, **hit.model_dump()})
+            rendered.append(render_source(self.by_section[key].n, hit))
         return "".join(rendered) or "No matching sources."
 
 
@@ -414,7 +416,7 @@ class Agent:
                             )
                             for call in calls
                         ]
-                    known_sources = len(sources.by_chunk)
+                    known_sources = len(sources.by_section)
                     proposal: ApprovalRequiredEvent | None = None
                     for call, task in zip(calls, tasks, strict=True):
                         spec = by_name.get(call.name)
@@ -429,8 +431,8 @@ class Agent:
                             outcome = _failed("error", "One write action at a time; retry later")
                         if event := _observe(call, spec, outcome, sources, messages):
                             yield event
-                    if len(sources.by_chunk) > known_sources:
-                        yield _sse("sources", SourcesEvent(sources=[*sources.by_chunk.values()]))
+                    if len(sources.by_section) > known_sources:
+                        yield _sse("sources", SourcesEvent(sources=[*sources.by_section.values()]))
                     if proposal:
                         yield _sse("approval_required", proposal)
                         stop = "awaiting_approval"
@@ -445,8 +447,8 @@ class Agent:
                 yield _error("internal", "Agent run failed", detail)
                 stop = "error"
             reply = "".join(answer)
-            status = answer_status(reply, len(sources.by_chunk), sources.searched)
-            invalid = invalid_citations(reply, len(sources.by_chunk))
+            status = answer_status(reply, len(sources.by_section), sources.searched)
+            invalid = invalid_citations(reply, len(sources.by_section))
             span.set_attributes(
                 {
                     "output.value": reply,

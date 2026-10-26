@@ -126,12 +126,12 @@
 | ID | Decision | Why | Phase |
 |---|---|---|---|
 | RAG-1 | PDF parsing with pypdf (page-aware); plain read for Markdown/TXT; not PyMuPDF | Lightweight and keeps page numbers for citations; PyMuPDF's AGPL licence conflicts with an MIT repo | 1 |
-| RAG-2 | Layout-aware parsing (Docling) behind the same `Parser` interface | Handles tables and complex layouts once the baseline is measured | 3 |
-| RAG-3 | Recursive chunking (~1000 characters, 150 overlap), heading-aware for Markdown, behind a `Chunker` interface | Sensible default; size and strategy are decided by the benchmark | 1 |
+| RAG-2 | Layout-aware PDF parsing with Docling (no OCR) in a child process per document, pypdf as the fallback; the parse is stored with the original (ADR-0018) | Handles tables and complex layouts once the baseline is measured; the child process returns Docling's ~1–2 GB to the OS | 3 |
+| RAG-3 | Recursive chunking (~1000 characters, 150 overlap), heading-aware for Markdown, behind a `Chunker` interface; from P3 inside parent sections of ≤ 2000 characters, which search returns once each and the LLM reads whole (ADR-0018) | Sensible default; size and strategy are decided by the benchmark; chunks match precisely, sections give context | 1→3 |
 | RAG-4 | Embeddings computed in-process with fastembed (ONNX, CPU) | No token cost, identical locally and in the cloud, no external dependency for retrieval | 1 |
 | RAG-5 | Multilingual embedding model; candidates `multilingual-e5-small/base/large` and `bge-m3`; `e5-base` as default until the benchmark decides | The corpus is German and English; bge-m3 also produces sparse vectors for hybrid search | 1 |
 | RAG-6 | E5 `query:` / `passage:` prefixes enforced in code and tests | E5 models lose quality without them | 1 |
-| RAG-7 | Dense-only retrieval first; hybrid search (dense + BM25, RRF; ADR-0016), reranking (built, off by default: ADR-0017), query rewriting and contextual retrieval later | Measure a baseline before adding techniques | 1→3 |
+| RAG-7 | Dense-only retrieval first; hybrid search (dense + BM25, RRF; ADR-0016), reranking (built, off by default: ADR-0017), HyDE as a per-search option (M3a.4; multi-query and follow-up rewriting lost), contextual retrieval at ingest with chunk sub-topics from the same call (ADR-0019) | Measure a baseline before adding techniques | 1→3 |
 | RAG-8 | Similarity threshold calibrated with unanswerable eval questions; "not in the knowledge base" instead of guessing. From P3 it applies to the best hit's dense similarity, the fused list stays whole | Abstaining is better than answering confidently from irrelevant context | 1→3 |
 | RAG-9 | Grounded prompt: numbered sources delimited as untrusted data, answer only from sources, cite as `[n]`, reply in the user's language; citation validator | Traceable answers and a first defence against indirect prompt injection | 1 |
 | RAG-10 | Conversation history trimmed to a token budget | Predictable cost and latency; keeps room for sources | 1 |

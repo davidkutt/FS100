@@ -20,6 +20,8 @@ from pypdf.errors import PyPdfError
 from qdrant_client import QdrantClient
 
 from ai_service import reindex as reindexing
+from ai_service.contextual import Contextualizer
+from ai_service.ingest import parse_stored
 from ai_service.knowledge_base import SPAN_KIND, Domain, IngestResult, KnowledgeBase
 from ai_service.reindex import ReindexReport
 from ai_service.storage import (
@@ -42,7 +44,13 @@ STATES: dict[str, JobState] = {
     "cancelled": "cancelled",
     "aborted": "cancelled",
 }
-RUNNING: tuple[JobState, ...] = ("parsing", "embedding", "building", "evaluating")
+RUNNING: tuple[JobState, ...] = (
+    "parsing",
+    "contextualizing",
+    "embedding",
+    "building",
+    "evaluating",
+)
 Stage = Callable[[JobState], Awaitable[None]]
 tracer = trace.get_tracer(__name__)
 
@@ -55,6 +63,7 @@ class Deps:
     store: Store
     golden: Path
     threshold: float | None
+    contextualizer: Contextualizer
 
 
 class JobStatus(BaseModel):
@@ -95,7 +104,8 @@ async def ingest(
     title: str | None,
 ) -> None:
     """Idempotent per document version: the point IDs derive from it (D54)."""
-    kb, store = _deps(context).kb, _deps(context).store
+    deps = _deps(context)
+    kb, store = deps.kb, deps.store
 
     async def work(stage: Stage) -> IngestResult | None:
         data = await store.original(UUID(doc_id), version)
@@ -104,11 +114,18 @@ async def ingest(
         attributes = {SPAN_KIND: "CHAIN", "doc_id": doc_id, "filename": filename}
         with tracer.start_as_current_span("ingest", attributes=attributes):
             await stage("parsing")
-            chunks = await asyncio.to_thread(kb.prepare, filename, data)
+            with tracer.start_as_current_span("parse"):
+                sections = await parse_stored(store, UUID(doc_id), version, filename, data)
+            split = await asyncio.to_thread(kb.split, sections)
+            if deps.contextualizer.on(domains):
+                await stage("contextualizing")
+            split, cost = await deps.contextualizer.contextualize(
+                sections, split, doc_id=UUID(doc_id), version=version, domains=domains
+            )
             await stage("embedding")
-            return await asyncio.to_thread(
+            result = await asyncio.to_thread(
                 kb.index,
-                chunks,
+                split,
                 doc_id=UUID(doc_id),
                 version=version,
                 filename=filename,
@@ -118,6 +135,7 @@ async def ingest(
                 topics=topics,
                 title=title,
             )
+            return result.model_copy(update={"context_cost_usd": cost})
 
     await _tracked(context, work)
 
@@ -128,6 +146,7 @@ async def reindex(context: JobContext, *, reason: str, force: bool, requested_by
     async def work(stage: Stage) -> ReindexReport:
         return await reindexing.reindex(
             deps.kb,
+            deps.contextualizer,
             deps.store,
             deps.golden,
             deps.threshold,

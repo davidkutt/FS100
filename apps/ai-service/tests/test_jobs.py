@@ -4,6 +4,7 @@ import copy
 import json
 import time
 from collections.abc import Awaitable, Callable, Iterator
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
@@ -17,13 +18,27 @@ from procrastinate import App
 from procrastinate.testing import InMemoryConnector
 
 from ai_service import embeddings
+from ai_service import ingest as ingesting
 from ai_service.admin import backfill
+from ai_service.catalog import load_taxonomy
+from ai_service.contextual import Contextualizer
 from ai_service.core.settings import Settings
 from ai_service.jobs import retry_stalled_jobs
 from ai_service.knowledge_base import KnowledgeBase
 from ai_service.main import create_app
 from ai_service.storage import MemoryStore, Progress
-from support import OFFLINE, FakeTextEmbedding, drain, fetch_jwks, ingest, submit, token
+from support import (
+    OFFLINE,
+    USAGE,
+    FakeTextEmbedding,
+    Labeller,
+    docling_document,
+    drain,
+    fetch_jwks,
+    ingest,
+    submit,
+    token,
+)
 
 RUNBOOK = (
     b"# Runbook\n\n## Rollback\nUndo the release with kubectl rollout undo.\n\n"
@@ -78,6 +93,13 @@ def call[T](client: TestClient, function: Callable[..., Awaitable[T]], *args: An
 def points(client: TestClient) -> list[Any]:
     kb = kb_of(client)
     return kb.client.scroll(kb.alias, limit=100, with_payload=True)[0]
+
+
+def contexts(client: TestClient) -> dict[tuple[str, int], str | None]:
+    return {
+        (p.payload["doc_id"], p.payload["chunk_index"]): p.payload["context"]
+        for p in points(client)
+    }
 
 
 def job(client: TestClient, job_id: int) -> Any:
@@ -226,6 +248,59 @@ def test_reindex_swaps_when_the_gate_holds_and_rolls_back(client: TestClient) ->
     assert again.status_code == 409
 
 
+def test_contexts_cost_once_a_re_index_reuses_them_and_a_delete_drops_them(
+    client: TestClient,
+) -> None:
+    state, store = cast(FastAPI, client.app).state, store_of(client)
+    topics = load_taxonomy(Settings().taxonomy_config).topics()
+    llm = Labeller(["devops/deployment"])
+    contextualizer = Contextualizer(llm, "cheap/model", topics, ["devops"], 1, store)
+    state.deps = replace(state.deps, contextualizer=contextualizer)
+
+    uploaded = ingest(client, "runbook.md", RUNBOOK, ["devops"])
+    guide = ingest(client, "guide.md", GUIDE, ["dev"])  # not switched on
+    before = contexts(client)
+    run = reindex(client)
+    after = contexts(client)
+    client.delete(f"/v1/documents/{uploaded['result']['doc_id']}")
+
+    assert uploaded["result"]["context_cost_usd"] == pytest.approx(2 * (USAGE.cost_usd or 0))
+    assert (len(llm.calls), run["report"]["context_cost_usd"]) == (2, {})  # from the store
+    assert after == before
+    assert sorted(p.payload["chunk_topics"][0] for p in points(client)) == [
+        "dev/repository"  # the guide's, by the embedding fallback: "commit"
+    ]
+    assert guide["result"]["context_cost_usd"] == 0
+    assert store.labels == {}
+
+
+def test_a_pdf_is_parsed_once_until_docling_changes(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    converted: list[bytes] = []
+
+    def docling(data: bytes) -> dict[str, Any]:
+        converted.append(data)
+        return docling_document()
+
+    monkeypatch.setattr(ingesting, "convert_pdf", docling)
+    doc_id = str(uuid4())
+
+    ingest(client, "handbook.pdf", b"%PDF handbook", ["sre"], doc_id=doc_id)
+    reindexed = reindex(client)
+    monkeypatch.setattr(ingesting, "PARSER", "docling 99.0")
+    reindex(client)
+
+    assert reindexed["report"]["skipped"] == []
+    assert converted == [b"%PDF handbook"] * 2  # upload, then the new version; not the first build
+    assert store_of(client).parses[UUID(doc_id), 1][0] == "docling 99.0"
+    assert {(p.payload["page"], p.payload["heading"]) for p in points(client)} == {
+        (1, "SLO handbook › Targets"),  # noqa: RUF001
+        (2, "SLO handbook › Targets"),  # noqa: RUF001
+        (2, "SLO handbook › Alerts › Burn rate"),  # noqa: RUF001
+    }
+
+
 def test_reindex_turns_a_dense_only_collection_hybrid(client: TestClient) -> None:
     kb = kb_of(client)
     dense_only = copy.copy(kb)
@@ -315,15 +390,15 @@ def test_a_document_deleted_during_the_build_is_not_swapped_in(
 ) -> None:
     ingest(client, "runbook.md", RUNBOOK, ["devops"])
     guide = UUID(ingest(client, "guide.md", GUIDE, ["dev"])["result"]["doc_id"])
-    kb, store, real = kb_of(client), store_of(client), KnowledgeBase.ingest
+    kb, store, real = kb_of(client), store_of(client), KnowledgeBase.index
 
-    def deleted_meanwhile(self: KnowledgeBase, **kwargs: Any) -> Any:
+    def deleted_meanwhile(self: KnowledgeBase, split: Any, **kwargs: Any) -> Any:
         if kwargs["doc_id"] == guide:  # the editor's delete reaches every collection…
             kb.delete(guide)
             del store.originals[guide, 1]
-        return real(self, **kwargs)  # …but the build upserts afterwards
+        return real(self, split, **kwargs)  # …but the build upserts afterwards
 
-    monkeypatch.setattr(KnowledgeBase, "ingest", deleted_meanwhile)
+    monkeypatch.setattr(KnowledgeBase, "index", deleted_meanwhile)
     run = reindex(client)
 
     assert (run["report"]["decision"], run["report"]["documents"]) == ("swapped", 1)

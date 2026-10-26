@@ -3,11 +3,12 @@
 import asyncio
 import json
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, cast
 
 import httpx2
 import jwt
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from mcp import Client, types
 from mcp.client.context import ClientRequestContext
@@ -16,8 +17,10 @@ from mcp.client.streamable_http import streamable_http_client
 from ai_service import mcp_server
 from ai_service.core.settings import Settings
 from ai_service.mcp_client import PROTOCOL
+from ai_service.query import Passage, QueryTransformer
 from ai_service.tokens import Tokens
-from support import ingest, token
+from ai_service.tools import SearchArgs
+from support import ScriptedLlm, ingest, token
 
 MCP = Settings().mcp_resource_url
 METADATA = "http://localhost:8000/.well-known/oauth-protected-resource/mcp"
@@ -125,13 +128,34 @@ def test_read_tools_and_the_document_resource(client: TestClient) -> None:
         ("runbook.md", ["devops"], 1),
     ]
     assert call(client, bearer, "list_sources", domains=["dev"])["sources"] == sources[:1]
-    assert [c["chunk_index"] for c in first["chunks"]] == [0, 1]
+    assert ([s["index"] for s in first["sections"]], first["section_count"]) == ([0, 1], 3)
     assert (first["next_offset"], rest["next_offset"]) == (2, None)
-    assert [c["text"] for c in rest["chunks"]] == ["## Three\nThird part."]
+    assert [s["text"] for s in rest["sections"]] == ["## Three\nThird part."]
     [content] = resource.contents
     assert isinstance(content, types.TextResourceContents)
     outline = json.loads(content.text)
     assert [heading.split()[-1] for heading in outline["headings"]] == ["One", "Two", "Three"]
+
+
+def test_search_can_draft_a_passage_first(client: TestClient) -> None:
+    llm = ScriptedLlm(Passage(passage="Undo the release."))
+    cast(FastAPI, client.app).state.query = QueryTransformer(llm, None)
+
+    result = call(client, mcp_token(), "search_knowledge_base", query="undo", strategy="hyde")
+
+    assert [hit["filename"] for hit in result["hits"]] == ["runbook.md"]
+    assert [messages[1].get("content") for messages, _ in llm.calls] == ["undo"]
+
+
+def test_the_agents_search_arguments_match_the_tool_schema(client: TestClient) -> None:
+    """The agent sends `SearchArgs` to `search_knowledge_base` (D34): same names, same enum."""
+    tools = with_mcp(client, mcp_token(), lambda mcp: mcp.list_tools()).tools
+    tool = next(t for t in tools if t.name == "search_knowledge_base")
+    served: dict[str, Any] = tool.input_schema["properties"]
+    sent: dict[str, Any] = SearchArgs.model_json_schema()["properties"]
+
+    assert set(sent) <= set(served)
+    assert served["strategy"]["enum"] == sent["strategy"]["enum"] == ["plain", "hyde"]
 
 
 def test_read_tools_need_a_role(client: TestClient) -> None:

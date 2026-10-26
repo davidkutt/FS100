@@ -50,7 +50,11 @@ class Classifier:
         self.messages: list[Message] = []
 
     async def complete_json[T: BaseModel](
-        self, messages: list[Message], schema: type[T], model: str | None = None
+        self,
+        messages: list[Message],
+        schema: type[T],
+        model: str | None = None,
+        session_id: str | None = None,
     ) -> tuple[T, Usage]:
         self.messages = messages
         verdict = {"domains": ["sre"], "needs_tools": False, "confidence": 0.6}

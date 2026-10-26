@@ -35,7 +35,7 @@ export interface Upload {
   size: number;
 }
 
-const IN_WORK = ['queued', 'parsing', 'embedding'] satisfies DocumentStatus[];
+const IN_WORK = ['queued', 'parsing', 'contextualizing', 'embedding'] satisfies DocumentStatus[];
 
 // The AI service picks its parser by file extension, so the extension decides the type.
 const MIME_BY_EXTENSION: Record<string, string> = {
@@ -211,7 +211,9 @@ export class DocumentsService implements OnApplicationBootstrap {
     // An ingest upserts its vectors (and the labels it was given) when it runs; a queued one can
     // still be cancelled.
     const busy: DocumentStatus[] =
-      action === 'delete' ? ['pending', 'parsing', 'embedding'] : ['pending', ...IN_WORK];
+      action === 'delete'
+        ? ['pending', 'parsing', 'contextualizing', 'embedding']
+        : ['pending', ...IN_WORK];
     if (busy.includes(doc.status)) {
       throw new ConflictException(
         'The document is still being ingested; try again when it is done',
@@ -294,6 +296,7 @@ function fromJob(job: JobStatus): Partial<Document> | undefined {
   switch (job.state) {
     case 'queued':
     case 'parsing':
+    case 'contextualizing':
     case 'embedding':
       return { status: job.state };
     case 'ready':

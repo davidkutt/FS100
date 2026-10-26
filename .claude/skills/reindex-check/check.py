@@ -3,8 +3,10 @@ app_reindex_check / ai_reindex_check, Qdrant alias kb_reindex_check. Removes onl
 
 uv run --directory apps/ai-service python ../../.claude/skills/reindex-check/check.py [OUT_DIR]
 
-LIVE_SPARSE_MODEL=none: the uploads build a collection with that sparse side, then the AI service
-restarts with SPARSE_MODEL from .env, so the re-index gate compares the two (an upgrade, M3a.2).
+LIVE_<VAR>=value (e.g. LIVE_SPARSE_MODEL=none, LIVE_PARENT_SIZE=0): the uploads build the live
+collection with these settings, then the AI service restarts with .env's, so the re-index gate compares
+the old build with the new one (an upgrade). REAL_LLM=1 keeps .env's LLM (paid) instead of the fake one,
+e.g. for CONTEXTUAL_DOMAINS. FORCE_REASON="…" makes the CLI re-index `--force` with that reason.
 """
 
 import json
@@ -49,7 +51,7 @@ overrides = {
     "AI_SERVICE_URL": "http://localhost:8001",
     "AI_API_URL": "http://localhost:3001",
     "API_PORT": "3001",
-    "LLM_PROVIDER": "fake",
+    **({} if os.environ.get("REAL_LLM") else {"LLM_PROVIDER": "fake"}),
     "OTEL_EXPORTER_OTLP_ENDPOINT": "",
     "LOG_LEVEL": "warn",
 }
@@ -103,12 +105,12 @@ def start_ai(extra: dict[str, str]) -> subprocess.Popen[bytes]:
     )
 
 
-live_sparse = os.environ.get("LIVE_SPARSE_MODEL")
+live = {key.removeprefix("LIVE_"): value for key, value in os.environ.items() if key.startswith("LIVE_")}
 sql("create database app_reindex_check")
 ai = api = None
 stop = threading.Event()
 try:
-    ai = start_ai({"SPARSE_MODEL": live_sparse} if live_sparse else {})
+    ai = start_ai(live)
     api = subprocess.Popen(
         ["node", "dist/main.js"],
         cwd=ROOT / "apps/api",
@@ -150,18 +152,19 @@ try:
     print(f"ingest of {len(docs)} docs via the queue: {time.monotonic() - started:.0f} s; failed: {failed}")
     print(f"PDF states seen: {' → '.join(pdf_states)}; chunks {sum(d['chunkCount'] or 0 for d in docs)}")
     print(f"AI peak RSS during ingest {peak['rss_kb'] / 1e6:.2f} GB")
-    if live_sparse:
+    if live:
         ai.terminate()
         ai.wait(30)
         ai = start_ai({})
         wait("http://localhost:8001/readyz")
         sampler = threading.Thread(target=sample, args=(ai.pid, stop), daemon=True)
         sampler.start()
-        print(f"AI restarted with SPARSE_MODEL={env.get('SPARSE_MODEL', 'the default')}")
+        print("AI restarted with " + ", ".join(f"{k}={env.get(k, 'the default')}" for k in live))
 
     started = time.monotonic()
+    force = os.environ.get("FORCE_REASON")
     cli = subprocess.run(
-        ["uv", "run", "kb-admin", "reindex", "--reason", "reindex-check (CLI)"],
+        ["uv", "run", "kb-admin", "reindex", *(["--force"] if force else []), "--reason", force or "reindex-check (CLI)"],
         cwd=ROOT / "apps/ai-service",
         env=env,
         capture_output=True,
@@ -178,8 +181,12 @@ try:
     print("admin POST /api/admin/reindex:", started_api.status_code, started_api.text)
     editor = httpx2.post("http://localhost:3001/api/admin/reindex", headers=login("bob"), json={})
     print("editor POST /api/admin/reindex (expect 403):", editor.status_code)
-    while True:  # a build takes under the token's 5 minutes
-        status = httpx2.get("http://localhost:3001/api/admin/reindex", headers=alice, timeout=30).json()
+    while True:
+        response = httpx2.get("http://localhost:3001/api/admin/reindex", headers=alice, timeout=30)
+        if response.status_code == 401:  # a build with contexts outlasts the 5-minute token
+            alice = login("alice")
+            continue
+        status = response.json()
         run = status["runs"][0]
         if run["state"] in ("ready", "failed", "cancelled"):
             break

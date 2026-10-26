@@ -102,6 +102,16 @@ the held-out `test` split (20 answerable questions; plan-phase-3.md D51, baselin
 | Phase 2: dense | 0.65 | 0.95 | 0.77 | 0.78 | 0.48 |
 | **+ hybrid** (BM25, weighted RRF; [ADR-0016](docs/adr/0016-hybrid-search-sparse-side.md)) | **0.70** | **0.95** | **0.79** | **0.81** | **0.59** |
 | + rerank (jina-v2 int8, top 10; opt-in, off: [ADR-0017](docs/adr/0017-reranker.md)) | 0.70 | 0.85 | 0.78 | 0.81 | 0.54 |
+| + HyDE per search (the agent's `strategy: hyde`; +3.6 s p50, ~0.0001 USD; M3a.4) | 0.70 | 1.00 | 0.85 | 0.87 | 0.75 |
+| + Docling for PDFs, chunks in parent sections ≤ 2000 chars (without HyDE; [ADR-0018](docs/adr/0018-docling-parent-child-chunking.md)) | 0.70 | 0.95 | 0.78 | 0.81 | 0.57 |
+| **+ contextual retrieval** (a context per chunk at ingest, ~0.035 USD once for the corpus; default; [ADR-0019](docs/adr/0019-contextual-retrieval-chunk-topics.md)) | **0.70** | **1.00** | **0.83** | **0.85** | **0.69** |
+
+Multi-query and a standalone rewrite of follow-ups lost on `dev` and were dropped
+([plan-phase-3.md M3a.4](plan-phase-3.md#m3a4--query-transformation-5-h)). Parent sections are neutral for
+retrieval; they change what the LLM reads — each section whole and once (+37 % prompt text) — and
+Docling's HybridChunker lost on `dev`. Contextual retrieval sends each document whole to OpenRouter at
+ingest and lowers abstention accuracy at the 0.55 threshold (`test` 0.95 → 0.93); the same call gives
+each chunk its sub-topics (47 of 50 spot-checked right).
 
 Each chat request is traced in Phoenix (http://localhost:6006): `chat → embed → search → llm` with the
 prompt, token counts and latency; the chat UI links every answer to its trace.
@@ -254,6 +264,8 @@ plan-phase-2.md   Phase 2 plan (agent, MCP, approvals)
 | [0015](docs/adr/0015-stored-originals-job-queue-reindex.md) | Stored originals, a Postgres job queue and an eval-gated re-index |
 | [0016](docs/adr/0016-hybrid-search-sparse-side.md) | Hybrid search: BM25 computed in the AI service, weighted RRF |
 | [0017](docs/adr/0017-reranker.md) | Reranking built and measured, off by default: no in-budget model holds hit@5 on `test` |
+| [0018](docs/adr/0018-docling-parent-child-chunking.md) | Docling for PDFs in a child process, stored parses; chunks searched, their sections (≤ 2000 chars) sent |
+| [0019](docs/adr/0019-contextual-retrieval-chunk-topics.md) | Contextual retrieval at ingest (document cached in the system prompt) and chunk sub-topics from the same call |
 
 ## Roadmap
 

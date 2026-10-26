@@ -1,5 +1,5 @@
-"""The AI service's database `ai` (D52, ADR-0015): stored originals and job progress; Procrastinate
-keeps its queue there too."""
+"""The AI service's database `ai` (D52, ADR-0015): stored originals with their Docling parses (D59),
+chunk contexts (D60) and job progress; Procrastinate keeps its queue there too."""
 
 import hashlib
 from dataclasses import dataclass
@@ -14,7 +14,15 @@ from psycopg.types.json import Jsonb
 from psycopg_pool import AsyncConnectionPool
 
 JobState = Literal[
-    "queued", "parsing", "embedding", "building", "evaluating", "ready", "failed", "cancelled"
+    "queued",
+    "parsing",
+    "contextualizing",
+    "embedding",
+    "building",
+    "evaluating",
+    "ready",
+    "failed",
+    "cancelled",
 ]
 
 # Applied once each, in order. Never edit an applied one; add the next.
@@ -43,6 +51,24 @@ MIGRATIONS: list[tuple[str, LiteralString]] = [
         );
         """,
     ),
+    (
+        "0003_parsed",
+        """
+        alter table source_documents add column parsed jsonb, add column parser text;
+        """,
+    ),
+    (
+        "0004_chunk_contexts",
+        """
+        create table chunk_contexts (
+          doc_id uuid not null,
+          key char(64) not null,
+          label jsonb not null,
+          created_at timestamptz not null default now(),
+          primary key (doc_id, key)
+        );
+        """,
+    ),
 ]
 
 
@@ -59,8 +85,23 @@ class Store(Protocol):
         ...
 
     async def original(self, doc_id: UUID, version: int) -> bytes | None: ...
+    async def parsed(self, doc_id: UUID, version: int, parser: str) -> dict[str, Any] | None:
+        """The stored parse of this version if `parser` made it."""
+        ...
+
+    async def put_parsed(
+        self, doc_id: UUID, version: int, parser: str, parsed: dict[str, Any]
+    ) -> None: ...
+    async def contexts(self, doc_id: UUID) -> dict[str, dict[str, Any]]:
+        """The document's stored chunk labels by the hash of the call that made them."""
+        ...
+
+    async def put_contexts(self, doc_id: UUID, labels: dict[str, dict[str, Any]]) -> None: ...
     async def latest_versions(self) -> dict[UUID, int]: ...
-    async def delete_originals(self, doc_id: UUID) -> None: ...
+    async def delete_originals(self, doc_id: UUID) -> None:
+        """Its versions, parses and chunk contexts."""
+        ...
+
     async def set_progress(self, job_id: int, progress: Progress) -> None: ...
     async def progress(self, job_id: int) -> Progress | None: ...
 
@@ -70,6 +111,8 @@ class MemoryStore:
 
     def __init__(self) -> None:
         self.originals: dict[tuple[UUID, int], bytes] = {}
+        self.parses: dict[tuple[UUID, int], tuple[str, dict[str, Any]]] = {}
+        self.labels: dict[UUID, dict[str, dict[str, Any]]] = {}
         self.jobs: dict[int, Progress] = {}
 
     async def put_original(self, doc_id: UUID, mime: str, data: bytes) -> int:
@@ -82,6 +125,22 @@ class MemoryStore:
     async def original(self, doc_id: UUID, version: int) -> bytes | None:
         return self.originals.get((doc_id, version))
 
+    async def parsed(self, doc_id: UUID, version: int, parser: str) -> dict[str, Any] | None:
+        stored = self.parses.get((doc_id, version))
+        return stored[1] if stored and stored[0] == parser else None
+
+    async def put_parsed(
+        self, doc_id: UUID, version: int, parser: str, parsed: dict[str, Any]
+    ) -> None:
+        if (doc_id, version) in self.originals:
+            self.parses[doc_id, version] = (parser, parsed)
+
+    async def contexts(self, doc_id: UUID) -> dict[str, dict[str, Any]]:
+        return dict(self.labels.get(doc_id, {}))
+
+    async def put_contexts(self, doc_id: UUID, labels: dict[str, dict[str, Any]]) -> None:
+        self.labels.setdefault(doc_id, {}).update(labels)
+
     async def latest_versions(self) -> dict[UUID, int]:
         latest: dict[UUID, int] = {}
         for doc_id, version in self.originals:
@@ -91,6 +150,8 @@ class MemoryStore:
     async def delete_originals(self, doc_id: UUID) -> None:
         for key in [key for key in self.originals if key[0] == doc_id]:
             del self.originals[key]
+            self.parses.pop(key, None)
+        self.labels.pop(doc_id, None)
 
     async def set_progress(self, job_id: int, progress: Progress) -> None:
         self.jobs[job_id] = progress
@@ -131,6 +192,41 @@ class PgStore:
             row = await cursor.fetchone()
         return row[0] if row else None
 
+    async def parsed(self, doc_id: UUID, version: int, parser: str) -> dict[str, Any] | None:
+        async with self.pool.connection() as conn:
+            cursor = await conn.execute(
+                "select parsed from source_documents"
+                " where doc_id = %s and version = %s and parser = %s",
+                [doc_id, version, parser],
+            )
+            row = await cursor.fetchone()
+        return row[0] if row else None
+
+    async def put_parsed(
+        self, doc_id: UUID, version: int, parser: str, parsed: dict[str, Any]
+    ) -> None:
+        async with self.pool.connection() as conn:
+            await conn.execute(
+                "update source_documents set parsed = %s, parser = %s"
+                " where doc_id = %s and version = %s",
+                [Jsonb(parsed), parser, doc_id, version],
+            )
+
+    async def contexts(self, doc_id: UUID) -> dict[str, dict[str, Any]]:
+        async with self.pool.connection() as conn:
+            cursor = await conn.execute(
+                "select key, label from chunk_contexts where doc_id = %s", [doc_id]
+            )
+            return dict(await cursor.fetchall())
+
+    async def put_contexts(self, doc_id: UUID, labels: dict[str, dict[str, Any]]) -> None:
+        async with self.pool.connection() as conn, conn.cursor() as cursor:
+            await cursor.executemany(
+                "insert into chunk_contexts (doc_id, key, label) values (%s, %s, %s)"
+                " on conflict do nothing",
+                [(doc_id, key, Jsonb(label)) for key, label in labels.items()],
+            )
+
     async def latest_versions(self) -> dict[UUID, int]:
         async with self.pool.connection() as conn:
             cursor = await conn.execute(
@@ -141,6 +237,7 @@ class PgStore:
     async def delete_originals(self, doc_id: UUID) -> None:
         async with self.pool.connection() as conn:
             await conn.execute("delete from source_documents where doc_id = %s", [doc_id])
+            await conn.execute("delete from chunk_contexts where doc_id = %s", [doc_id])
 
     async def set_progress(self, job_id: int, progress: Progress) -> None:
         async with self.pool.connection() as conn:

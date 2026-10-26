@@ -147,11 +147,16 @@ services:
       - EMBEDDING_MODEL
       - CHUNK_SIZE
       - CHUNK_OVERLAP
+      - PARENT_SIZE
       - SPARSE_MODEL
       - RERANKER_MODEL
       - RERANK_CANDIDATES
       - RETRIEVAL_TOP_K
       - RETRIEVAL_SCORE_THRESHOLD
+      - QUERY_MODEL
+      - CONTEXTUAL_DOMAINS # unset = off (.env.example: all nine)
+      - CONTEXTUAL_MODEL
+      - CONTEXTUAL_MAX_COST_USD_PER_DOC
       - LLM_PROVIDER # unset = fake
       - LLM_BASE_URL
       - LLM_API_KEY
@@ -185,6 +190,8 @@ services:
     volumes:
       # The first start downloads EMBEDDING_MODEL here (≈ 2.3 GB for bge-m3); later starts reuse it.
       - fastembed-cache:/app/.cache/fastembed
+      # Docling's layout and table models (≈ 1 GB), downloaded with the first PDF (ADR-0018).
+      - huggingface-cache:/app/.cache/huggingface
     depends_on:
       postgres:
         condition: service_healthy
@@ -244,3 +251,4 @@ volumes:
   qdrant-data:
   phoenix-data:
   fastembed-cache:
+  huggingface-cache:

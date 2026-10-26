@@ -56,7 +56,11 @@ class LlmProvider(Protocol):
 
 class StructuredLlm(Protocol):
     async def complete_json[T: BaseModel](
-        self, messages: list[Message], schema: type[T], model: str | None = None
+        self,
+        messages: list[Message],
+        schema: type[T],
+        model: str | None = None,
+        session_id: str | None = None,
     ) -> tuple[T, Usage]: ...
 
 
@@ -126,16 +130,20 @@ class OpenAICompatProvider:
             yield ToolCall(call["id"] or f"call_{index}", call["name"], call["arguments"])
 
     async def complete_json[T: BaseModel](
-        self, messages: list[Message], schema: type[T], model: str | None = None
+        self,
+        messages: list[Message],
+        schema: type[T],
+        model: str | None = None,
+        session_id: str | None = None,
     ) -> tuple[T, Usage]:
         """Structured output (D41): the JSON Schema goes with the request, Pydantic checks the
         reply, and an invalid reply gets one retry with the error."""
         try:
-            completion = await self._parse(messages, schema, model)
+            completion = await self._parse(messages, schema, model, session_id)
         except ValidationError as error:
             correction = f"That reply did not match the schema: {error}\nReply with valid JSON."
             retry: list[Message] = [*messages, {"role": "user", "content": correction}]
-            completion = await self._parse(retry, schema, model)
+            completion = await self._parse(retry, schema, model, session_id)
         message = completion.choices[0].message
         if message.parsed is None:
             raise ValueError(message.refusal or "no structured reply")
@@ -144,14 +152,17 @@ class OpenAICompatProvider:
         return message.parsed, _usage(completion.usage, completion.model)
 
     async def _parse[T: BaseModel](
-        self, messages: list[Message], schema: type[T], model: str | None
+        self, messages: list[Message], schema: type[T], model: str | None, session_id: str | None
     ) -> ParsedChatCompletion[T]:
+        extra: dict[str, object] = {"provider": {"require_parameters": True}}
+        if session_id:
+            extra["session_id"] = session_id
         return await self._client.chat.completions.parse(
             model=model or self._model,
             messages=messages,
             response_format=schema,
             max_tokens=self._max_output_tokens,
-            extra_body={"provider": {"require_parameters": True}},
+            extra_body=extra,
         )
 
 
@@ -191,7 +202,11 @@ class FakeProvider:
         yield Usage(0, 0, None, "fake")
 
     async def complete_json[T: BaseModel](
-        self, messages: list[Message], schema: type[T], model: str | None = None
+        self,
+        messages: list[Message],
+        schema: type[T],
+        model: str | None = None,
+        session_id: str | None = None,
     ) -> tuple[T, Usage]:
         raise NotImplementedError("the fake provider has no structured output (ROUTER=embedding)")
 

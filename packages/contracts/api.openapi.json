@@ -1019,6 +1019,7 @@
               "pending",
               "queued",
               "parsing",
+              "contextualizing",
               "embedding",
               "ready",
               "failed"

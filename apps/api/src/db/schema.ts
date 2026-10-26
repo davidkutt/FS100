@@ -20,6 +20,7 @@ export const DOCUMENT_STATUSES = [
   'pending',
   'queued',
   'parsing',
+  'contextualizing',
   'embedding',
   'ready',
   'failed',
@@ -61,7 +62,7 @@ export const documents = pgTable(
   (t) => [
     check(
       'documents_status_check',
-      sql`${t.status} in ('pending','queued','parsing','embedding','ready','failed')`,
+      sql`${t.status} in ('pending','queued','parsing','contextualizing','embedding','ready','failed')`,
     ),
   ],
 );

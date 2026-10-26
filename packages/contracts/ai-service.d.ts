@@ -384,12 +384,15 @@ export interface components {
         };
         /**
          * ExplainedHit
-         * @description `explain` mode of `/v1/search`: the hit's rank among the fused candidates and in the dense
-         *     and the sparse top 50 (None: not among them); its position is the reranked one.
+         * @description `explain` mode of `/v1/search`: the matching chunk inside the section, and the section's
+         *     rank among the fused candidates and the chunk's in the dense and the sparse top 50 (None: not
+         *     among them); its position is the reranked one.
          */
         ExplainedHit: {
             /** Chunk Id */
             chunk_id: string;
+            /** Parent Id */
+            parent_id?: string | null;
             /**
              * Doc Id
              * Format: uuid
@@ -409,6 +412,11 @@ export interface components {
             score: number;
             /** Text */
             text: string;
+            /**
+             * Chunk Text
+             * @default
+             */
+            chunk_text?: string;
             /** Fused Rank */
             fused_rank?: number | null;
             /** Dense Rank */
@@ -442,6 +450,11 @@ export interface components {
             page_count: number | null;
             /** Embedding Model */
             embedding_model: string;
+            /**
+             * Context Cost Usd
+             * @default 0
+             */
+            context_cost_usd?: number;
         };
         /** JobStatus */
         JobStatus: {
@@ -451,7 +464,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "queued" | "parsing" | "embedding" | "building" | "evaluating" | "ready" | "failed" | "cancelled";
+            state: "queued" | "parsing" | "contextualizing" | "embedding" | "building" | "evaluating" | "ready" | "failed" | "cancelled";
             /** Error */
             error?: string | null;
             /** Result */
@@ -526,6 +539,13 @@ export interface components {
             decision: "swapped" | "kept" | "forced";
             /** Build S */
             build_s: number;
+            /**
+             * Context Cost Usd
+             * @default {}
+             */
+            context_cost_usd?: {
+                [key: string]: number;
+            };
         };
         /** ReindexRequest */
         ReindexRequest: {
@@ -548,7 +568,7 @@ export interface components {
              * State
              * @enum {string}
              */
-            state: "queued" | "parsing" | "embedding" | "building" | "evaluating" | "ready" | "failed" | "cancelled";
+            state: "queued" | "parsing" | "contextualizing" | "embedding" | "building" | "evaluating" | "ready" | "failed" | "cancelled";
             /** Error */
             error?: string | null;
             /** Reason */
@@ -607,6 +627,12 @@ export interface components {
              * @default false
              */
             explain?: boolean;
+            /**
+             * Strategy
+             * @default plain
+             * @enum {string}
+             */
+            strategy?: "plain" | "hyde";
         };
         /** SearchResponse */
         SearchResponse: {

@@ -1,12 +1,27 @@
 # Taxonomy (D48), read by the API and the AI service (TAXONOMY_CONFIG). The nine domains must match
-# the Domain enum of both apps. Sub-topic ids are `domain/topic`; they label documents only, search
-# filters stay at domain level in Phase 2. Descriptions feed the embedding router (M2.5).
-version: 1
+# the Domain enum of both apps. Sub-topic ids are `domain/topic`; users label documents with them, and
+# each chunk gets those of its document's domains at ingest (`chunk_topics`, D60). Search filters stay
+# at domain level. Descriptions feed the embedding router (M2.5) and the chunk-topic fallback (D60).
+# v2 (M3a.6): sub-topics for every domain; v1 ids unchanged.
+version: 2
 domains:
   db:
     description: Databases — PostgreSQL, schemas and migrations, backups and restores, query tuning.
+    topics:
+      backup-restore: Backups, restores, restore drills and switching over to a restored database.
+      migrations: Schema migrations, their order and rollout, and rolling them back.
+      schema: Tables, columns, constraints, indexes and data types.
+      administration: Databases, roles, connections, extensions and configuration of PostgreSQL.
+      performance: Query plans, slow queries, indexes for speed and tuning.
   dev:
     description: Software development — local setup, toolchain, frameworks, code conventions, testing.
+    topics:
+      toolchain: Language runtimes, package managers (pnpm, uv), CLIs and their installation.
+      frameworks: Angular, NestJS, FastAPI and the conventions of each app.
+      testing: Unit, integration and end-to-end tests, fixtures and test runners.
+      code-quality: Linting, formatting, type checking and code review.
+      repository: Monorepo layout, workspaces, scripts, branches and commit conventions.
+      documentation: READMEs, guides, what a document covers and where to read on, naming.
   cloud:
     description: Cloud platforms — Azure resources, managed services, networking, identity, costs.
     topics:
@@ -26,8 +41,21 @@ domains:
       local-env: Local development stack, dev containers and environment setup.
   mlops:
     description: ML operations — model lifecycle, embedding model swaps, evaluation pipelines, serving.
+    topics:
+      model-swap: Choosing, benchmarking and switching embedding or language models.
+      reindexing: Rebuilding vector collections, aliases and rolling back an index.
+      eval-pipelines: Eval runs in CI, baselines, tolerances and gates.
+      serving: Running models in-process or as services, model caches, memory and latency.
+      fine-tuning: Training data, fine-tuning, model registries and rollouts.
   ai:
     description: AI applications — RAG, agents, prompts, LLM providers, embeddings and evals.
+    topics:
+      rag: Retrieval-augmented generation — chunking, embeddings, hybrid search, citations, abstention.
+      agents: Agent loops, tool calling, MCP servers and approvals.
+      prompts: System prompts, prompt versions and structured output.
+      llm-providers: LLM providers and models, their costs, limits and errors.
+      evals: Golden sets, retrieval and answer metrics, LLM judges.
+      observability: Traces of LLM calls and agent runs, token usage and costs per request.
   security:
     description: Security — secrets, authentication and authorization, certificates, supply chain.
     topics:
@@ -44,5 +72,13 @@ domains:
       api-design: REST and streaming contracts, versioning, generated schemas.
       data: Data models, storage choices and data flow.
       ai-architecture: How the RAG pipeline, agent loop and tools fit together.
+      roadmap: Project plans, phases, milestones, schedules, scope and cut lines.
   sre:
     description: Site reliability — incidents, on-call, SLOs and error budgets, monitoring, capacity.
+    topics:
+      incidents: Incident response, severity levels, roles, on-call and communication.
+      postmortems: Postmortems, root causes and follow-up actions.
+      slos: SLOs, SLIs, error budgets and burn-rate alerts.
+      monitoring: Metrics, logs, dashboards and alerting.
+      capacity: Disk space, memory, quotas and capacity planning.
+      outages: Outages of dependencies and external providers, failover and degraded modes.

@@ -15,7 +15,8 @@ from ai_service.core.settings import Settings
 from ai_service.embeddings import Reranker
 from ai_service.knowledge_base import KnowledgeBase
 from ai_service.main import create_app
-from support import OFFLINE, FakeTextEmbedding, drain, fetch_jwks, submit, token
+from ai_service.query import Passage, QueryTransformer
+from support import OFFLINE, FakeTextEmbedding, ScriptedLlm, drain, fetch_jwks, submit, token
 
 PDF = (Path(__file__).parent / "fixtures/two-pages.pdf").read_bytes()
 MARKDOWN = b"# Runbook\n\n## Rollback\nUndo the release with kubectl rollout undo.\n"
@@ -74,6 +75,7 @@ def test_ingest_then_search_returns_page_numbers(client: TestClient) -> None:
         "chunk_count": 2,
         "page_count": 2,
         "embedding_model": Settings().embedding_model,
+        "context_cost_usd": 0,
     }
     assert hits[0]["doc_id"] == doc_id
     assert hits[0]["page"] == 2
@@ -103,6 +105,42 @@ def test_search_filters_by_domain_and_threshold(client: TestClient) -> None:
 
     assert [h["heading"] for h in devops] == ["Runbook › Rollback"]  # noqa: RUF001
     assert strict == []
+
+
+def test_search_finds_each_section_once_through_its_best_chunk(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(jwt.PyJWKClient, "fetch_data", fetch_jwks)
+    monkeypatch.setattr(embeddings, "TextEmbedding", FakeTextEmbedding)
+    settings = Settings(**OFFLINE, chunk_size=60, chunk_overlap=0, parent_size=400)
+    rollback = (
+        "## Rollback\nUndo the release with kubectl rollout undo.\n"
+        "Then watch the rollout status of the release."
+    )
+    runbook = f"# Runbook\n\n{rollback}\n\n## Backups\nNightly pg_dump.\n".encode()
+
+    with TestClient(create_app(settings), headers={"Authorization": f"Bearer {token()}"}) as client:
+        ingest(client, "runbook.md", runbook, ["devops"])
+        hits = search(client, "rollout of the release", explain=True)
+        chunks = payloads(client, hits[0]["doc_id"])
+
+    assert [h["heading"] for h in hits] == ["Runbook › Rollback", "Runbook › Backups"]  # noqa: RUF001
+    assert hits[0]["text"] == rollback
+    assert hits[0]["chunk_text"] in rollback and hits[0]["chunk_text"] != rollback
+    assert [c["parent_id"] for c in chunks].count(hits[0]["parent_id"]) == 2
+
+
+def test_hyde_drafts_a_passage_and_only_the_survivors_are_strategies(client: TestClient) -> None:
+    ingest(client, "runbook.md", MARKDOWN, ["devops"])
+    llm = ScriptedLlm(Passage(passage="Undo the release."))
+    cast(FastAPI, client.app).state.query = QueryTransformer(llm, None)
+
+    hits = search(client, "rollout undo", strategy="hyde")
+    lost = client.post("/v1/search", json={"query": "rollout undo", "strategy": "multi_query"})
+
+    assert [h["heading"] for h in hits] == ["Runbook › Rollback"]  # noqa: RUF001
+    assert [messages[1].get("content") for messages, _ in llm.calls] == ["rollout undo"]
+    assert lost.status_code == 422
 
 
 def test_the_reranker_orders_the_fused_candidates_and_its_score_gates(
