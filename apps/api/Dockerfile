@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1
 # Build from the repo root: docker build -f apps/api/Dockerfile .
 # The build stage runs on the build platform: the production dependencies are pure JS.
-FROM --platform=$BUILDPLATFORM node:24.22.0-trixie-slim AS build
+FROM --platform=$BUILDPLATFORM node:24.22.1-trixie-slim AS build
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 RUN corepack enable pnpm
 WORKDIR /repo
@@ -14,7 +14,7 @@ COPY packages/contracts packages/contracts
 COPY apps/api apps/api
 RUN pnpm --filter @fs100/api build && pnpm --filter @fs100/api deploy --prod /out
 
-FROM node:24.22.0-trixie-slim
+FROM node:24.22.1-trixie-slim
 ENV NODE_ENV=production TAXONOMY_CONFIG=/app/config/taxonomy.yaml
 WORKDIR /app
 COPY --from=build /out .
