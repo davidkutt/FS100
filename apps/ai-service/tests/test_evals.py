@@ -1,3 +1,4 @@
+import asyncio
 import math
 import re
 from pathlib import Path
@@ -7,6 +8,7 @@ from uuid import uuid4
 import pytest
 
 from ai_service import embeddings
+from ai_service.contextual import Contextualizer
 from ai_service.embeddings import Embedder, Reranker
 from ai_service.evals.agent import load_tasks
 from ai_service.evals.fixtures import GitHubFixture
@@ -21,22 +23,26 @@ from ai_service.evals.retrieval import (
     TYPES,
     GoldenItem,
     Relevant,
+    contextualizer_of,
     gains,
     index_corpus,
     load_dataset,
     load_manifest,
     regressions,
     run,
+    strategy_of,
     to_markdown,
 )
 from ai_service.evals.routing import load_items
 from ai_service.ingest import parse
 from ai_service.knowledge_base import Domain, Hit
-from support import FakeTextEmbedding
+from ai_service.query import Passage, QueryTransformer
+from support import USAGE, FakeTextEmbedding, Labeller, ScriptedLlm
 
 REPO = Path(__file__).parents[3]
 DATASETS = REPO / "evals/datasets"
 DATASET = DATASETS / "retrieval_v1.jsonl"
+FOLLOW_UPS = DATASETS / "followup_v1.jsonl"
 FIXTURES = REPO / "evals/fixtures"
 CORPUS = REPO / "data/sample-docs"
 KB_TOOLS = {
@@ -103,10 +109,17 @@ def test_each_label_counts_once() -> None:
     assert gains(item, hits) == [0, 1, 0, 1]
 
 
+def assert_labels_resolve(items: list[GoldenItem]) -> None:
+    sections = {name: parse(name, (CORPUS / name).read_bytes()) for name in load_manifest(CORPUS)}
+    for item in items:
+        for label in item.relevant:
+            assert any(
+                label.matches(label.doc, s.page, s.heading) for s in sections.get(label.doc, [])
+            ), f"{item.id}: {label} matches no section of the corpus"
+
+
 def test_golden_set_is_well_formed_and_every_label_resolves() -> None:
     items = load_dataset(DATASET)
-    manifest = load_manifest(CORPUS)
-    sections = {name: parse(name, (CORPUS / name).read_bytes()) for name in manifest}
 
     assert 40 <= len(items) <= 60
     assert len({i.id for i in items}) == len(items)
@@ -116,10 +129,19 @@ def test_golden_set_is_well_formed_and_every_label_resolves() -> None:
         assert item.answerable == bool(item.relevant), item.id
         assert item.split, item.id  # D51: every item is either tuning or held-out data
         assert item.type in (*TYPES, "unanswerable"), f"{item.id}: `notes` names no item type"
-        for label in item.relevant:
-            assert any(
-                label.matches(label.doc, s.page, s.heading) for s in sections.get(label.doc, [])
-            ), f"{item.id}: {label} matches no section of the corpus"
+    assert_labels_resolve(items)
+
+
+def test_follow_ups_carry_their_history_and_every_label_resolves() -> None:
+    items = load_dataset(FOLLOW_UPS)
+
+    assert len({i.id for i in items}) == len(items) >= 12
+    assert {i.split for i in items} == {"dev", "test"}
+    for item in items:
+        assert item.answerable == bool(item.relevant), item.id
+        assert item.history and item.history[-1].role == "assistant", item.id
+        assert item.type == ("follow-up" if item.answerable else "unanswerable"), item.id
+    assert_labels_resolve(items)
 
 
 def test_runner_reports_on_the_corpus(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,6 +178,47 @@ def test_runner_runs_the_split_on_one_index_with_each_reranker(
     assert reranked.checked_balanced_accuracy is not None
     assert "At `RETRIEVAL_SCORE_THRESHOLD` 0.500" in to_markdown(reranked)
     assert fused.checked_balanced_accuracy is None
+
+
+def test_runner_searches_with_the_strategy_and_reports_its_cost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(embeddings, "TextEmbedding", FakeTextEmbedding)
+    indexed = index_corpus(Embedder("fake-e5"), CORPUS, 1000, 150)
+    dev = [i for i in load_dataset(FOLLOW_UPS) if i.split == "dev"]
+    llm = ScriptedLlm(*[Passage(passage="Roll back with docker compose up.")] * len(dev))
+
+    with asyncio.Runner() as runner:
+        hyde = strategy_of(QueryTransformer(llm, None), "hyde", runner)
+        report = run(indexed, FOLLOW_UPS, "dev", strategy="hyde", transform=hyde)
+
+    assert [messages[1].get("content") for messages, _ in llm.calls] == [i.question for i in dev]
+    assert report.overall["usd_per_query"] == pytest.approx(USAGE.cost_usd)
+    assert ", hyde" in to_markdown(report)
+    assert strategy_of(QueryTransformer(llm, None), "plain", runner) is None
+
+
+def test_runner_contextualizes_the_switched_on_domains_and_reports_the_cost(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(embeddings, "TextEmbedding", FakeTextEmbedding)
+    llm = Labeller([])
+
+    with asyncio.Runner() as runner:
+        contextualize = contextualizer_of(Contextualizer(llm, None, {}, ["sre"], 1), runner)
+        indexed = index_corpus(
+            Embedder("fake-e5"), CORPUS, 1000, 150, "none", 0, ["sre"], contextualize
+        )
+        off = contextualizer_of(Contextualizer(llm, None, {}, [], 1), runner)
+    report = run(indexed, DATASET, "test")
+
+    sre = {name for name, domains in load_manifest(CORPUS).items() if "sre" in domains}
+    assert set(report.context_cost_usd) == sre
+    assert sum(report.context_cost_usd.values()) == pytest.approx(
+        len(llm.calls) * (USAGE.cost_usd or 0)
+    )
+    assert "dense, contextual (sre)" in to_markdown(report)
+    assert off is None
 
 
 def test_regression_gate_allows_the_tolerance_and_flags_drops() -> None:

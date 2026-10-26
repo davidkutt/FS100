@@ -883,6 +883,17 @@
             "type": "string",
             "title": "Chunk Id"
           },
+          "parent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Id"
+          },
           "doc_id": {
             "type": "string",
             "format": "uuid",
@@ -944,6 +955,11 @@
             "type": "string",
             "title": "Text"
           },
+          "chunk_text": {
+            "type": "string",
+            "title": "Chunk Text",
+            "default": ""
+          },
           "fused_rank": {
             "anyOf": [
               {
@@ -991,7 +1007,7 @@
           "text"
         ],
         "title": "ExplainedHit",
-        "description": "`explain` mode of `/v1/search`: the hit's rank among the fused candidates and in the dense\nand the sparse top 50 (None: not among them); its position is the reranked one."
+        "description": "`explain` mode of `/v1/search`: the matching chunk inside the section, and the section's\nrank among the fused candidates and the chunk's in the dense and the sparse top 50 (None: not\namong them); its position is the reranked one."
       },
       "HTTPValidationError": {
         "properties": {
@@ -1045,6 +1061,11 @@
           "embedding_model": {
             "type": "string",
             "title": "Embedding Model"
+          },
+          "context_cost_usd": {
+            "type": "number",
+            "title": "Context Cost Usd",
+            "default": 0
           }
         },
         "type": "object",
@@ -1067,6 +1088,7 @@
             "enum": [
               "queued",
               "parsing",
+              "contextualizing",
               "embedding",
               "building",
               "evaluating",
@@ -1281,6 +1303,14 @@
           "build_s": {
             "type": "number",
             "title": "Build S"
+          },
+          "context_cost_usd": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "title": "Context Cost Usd",
+            "default": {}
           }
         },
         "type": "object",
@@ -1327,6 +1357,7 @@
             "enum": [
               "queued",
               "parsing",
+              "contextualizing",
               "embedding",
               "building",
               "evaluating",
@@ -1516,6 +1547,15 @@
             "type": "boolean",
             "title": "Explain",
             "default": false
+          },
+          "strategy": {
+            "type": "string",
+            "enum": [
+              "plain",
+              "hyde"
+            ],
+            "title": "Strategy",
+            "default": "plain"
           }
         },
         "type": "object",

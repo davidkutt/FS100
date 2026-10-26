@@ -22,6 +22,7 @@ from ai_service.evals.routing import run as route_all
 from ai_service.evals.routing import to_markdown as routing_markdown
 from ai_service.llm import FakeProvider, LlmEvent, LlmProvider, Message, Token, ToolCall
 from ai_service.mcp_client import McpClient
+from ai_service.query import QueryTransformer
 from ai_service.routing import EmbeddingRouter, Route
 from support import FakeTextEmbedding, FixedRouter
 
@@ -65,7 +66,8 @@ def evaluate(
     monkeypatch.setenv(GITHUB.bearer_env, "")  # the bench sets the fake PAT itself
     # The fake embedder's scores are low: no threshold, so searches find the corpus.
     settings = eval_settings(Settings(llm_provider="fake", retrieval_score_threshold=None), None)
-    bench = Bench(settings, llm, FixedRouter(), Embedder("fake"), CORPORA, FIXTURES)
+    transformer = QueryTransformer(FakeProvider(), None)
+    bench = Bench(settings, llm, FixedRouter(), transformer, Embedder("fake"), CORPORA, FIXTURES)
     return asyncio.run(run(bench, tasks, dataset, "agent", 1, 2.0, settings))
 
 

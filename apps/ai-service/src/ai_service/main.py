@@ -13,6 +13,7 @@ from ai_service import __version__
 from ai_service.agent import Agent
 from ai_service.api import agent, catalog, chat, documents, health, jobs
 from ai_service.catalog import McpServers, load_models, load_servers, load_taxonomy
+from ai_service.contextual import Contextualizer
 from ai_service.core.auth import Caller, ServiceAuth
 from ai_service.core.logging import request_id, setup_logging
 from ai_service.core.settings import Settings, get_settings
@@ -23,6 +24,7 @@ from ai_service.knowledge_base import Domain, KnowledgeBase
 from ai_service.llm import create_provider
 from ai_service.mcp_client import McpClient
 from ai_service.mcp_server import create_mcp
+from ai_service.query import QueryTransformer
 from ai_service.rag import ChatPipeline
 from ai_service.routing import create_router
 from ai_service.tokens import Tokens
@@ -40,7 +42,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     setup_logging()
     setup_tracing(settings)
     tokens = Tokens(settings)
-    mcp = create_mcp(settings, lambda: app.state.kb, tokens)
+    mcp = create_mcp(settings, lambda: app.state.kb, tokens, lambda: app.state.query)
     mcp_app = mcp.streamable_http_app(stateless_http=True, json_response=True)
     kb_client = McpClient(settings.mcp_resource_url)
     servers = McpServers(load_servers(settings.mcp_servers_config))
@@ -52,6 +54,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
+        taxonomy = load_taxonomy(settings.taxonomy_config)
         # Blocks startup until the model is loaded (first run downloads it into the cache dir).
         kb = KnowledgeBase(
             QdrantClient(settings.qdrant_url, api_key=settings.qdrant_api_key),
@@ -60,15 +63,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             settings.chunk_size,
             settings.chunk_overlap,
             settings.sparse_model,
+            settings.parent_size,
             reranker=load_reranker(
                 settings.reranker_model, settings.rerank_candidates, settings.embedding_cache_dir
             ),
+            topics=taxonomy.topics(),
         )
         kb.ensure_collection()
         llm = create_provider(settings)
         app.state.kb = kb
+        app.state.query = QueryTransformer(llm, settings.query_model or None)
         app.state.models = load_models(settings.models_config)
-        app.state.taxonomy = taxonomy = load_taxonomy(settings.taxonomy_config)
+        app.state.taxonomy = taxonomy
         app.state.chat = ChatPipeline(
             kb, llm, settings.retrieval_top_k, settings.retrieval_score_threshold
         )
@@ -78,7 +84,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async with open_jobs(settings.ai_database_url) as (queue, store), mcp.session_manager.run():
             app.state.jobs, app.state.store = queue, store
             golden = Path(settings.golden_dataset)
-            app.state.deps = deps = Deps(kb, store, golden, settings.retrieval_score_threshold)
+            contextualizer = Contextualizer(
+                llm,
+                settings.contextual_model or settings.llm_model,  # named: it is in the stored key
+                taxonomy.topics(),
+                settings.contextual_domains,
+                settings.contextual_max_cost_usd_per_doc,
+                store,
+            )
+            threshold = settings.retrieval_score_threshold
+            app.state.deps = deps = Deps(kb, store, golden, threshold, contextualizer)
             worker = settings.jobs_inprocess_worker and asyncio.create_task(run_worker(queue, deps))
             yield
             if worker:

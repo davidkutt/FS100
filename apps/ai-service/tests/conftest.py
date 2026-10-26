@@ -7,6 +7,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from ai_service import embeddings, mcp_server
+from ai_service import ingest as ingesting
 from ai_service.core.settings import Settings
 from ai_service.main import create_app
 from ai_service.mcp_client import McpClient
@@ -27,9 +28,15 @@ from support import (
 
 
 @pytest.fixture(autouse=True)
-def offline_bm25_and_reranker(monkeypatch: pytest.MonkeyPatch) -> None:
+def offline_models(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Fakes for BM25 and the cross-encoder; PDFs go to pypdf, as when Docling fails."""
     monkeypatch.setattr(embeddings, "SparseTextEmbedding", FakeSparseTextEmbedding)
     monkeypatch.setattr(embeddings, "TextCrossEncoder", FakeTextCrossEncoder)
+
+    def no_docling(_data: bytes) -> None:
+        return None
+
+    monkeypatch.setattr(ingesting, "convert_pdf", no_docling)
 
 
 @pytest.fixture

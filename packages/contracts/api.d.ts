@@ -403,7 +403,7 @@ export interface components {
             domains: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[];
             topics: string[];
             /** @enum {string} */
-            status: "pending" | "queued" | "parsing" | "embedding" | "ready" | "failed";
+            status: "pending" | "queued" | "parsing" | "contextualizing" | "embedding" | "ready" | "failed";
             version: number;
             jobId: string | null;
             error: string | null;

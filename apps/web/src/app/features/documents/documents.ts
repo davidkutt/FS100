@@ -50,6 +50,7 @@ export class Documents {
     pending: 'text-bg-secondary',
     queued: 'text-bg-secondary',
     parsing: 'text-bg-info',
+    contextualizing: 'text-bg-info',
     embedding: 'text-bg-info',
     ready: 'text-bg-success',
     failed: 'text-bg-danger',

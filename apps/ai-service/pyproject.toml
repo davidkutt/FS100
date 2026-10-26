@@ -5,6 +5,9 @@ description = "FS100 AI service: ingestion, retrieval, grounded chat, evals and 
 license = "MIT"
 requires-python = ">=3.13,<3.14"
 dependencies = [
+    # PDF layout and tables without OCR/VLM extras (D59, ADR-0018).
+    "docling-slim[convert-core,feat-chunking,format-pdf,models-local]==2.141.0",
+    "docling-ibm-models[opencv-python-headless]",  # TableFormer imports cv2
     "fastapi>=0.143",
     "fastembed>=0.9.0",
     "httpx2>=2.13",
@@ -14,18 +17,32 @@ dependencies = [
     "opentelemetry-exporter-otlp-proto-grpc>=1.45.1",
     "opentelemetry-sdk>=1.45.1",
     "procrastinate==3.10.0",
+    "psycopg[binary]>=3.3.6",  # bundles libpq: the slim image has none (Mode B since M3a.1)
     "pydantic-settings>=2.15",
     "pyjwt[crypto]>=2.15.1",
     "pypdf>=6.20.1",
     "python-multipart>=0.0.32",
     "pyyaml>=6.0.3",
     "qdrant-client>=1.19,<1.20",
+    # Direct, so `tool.uv.sources` applies (uv ignores it for transitive dependencies).
+    "torch>=2.14.1",
+    "torchvision>=0.29.1",
     "uvicorn[standard]>=0.54",
 ]
 
 [project.scripts]
 kb-eval = "ai_service.evals.cli:main"
 kb-admin = "ai_service.admin:main"
+
+# PyPI's Linux torch brings ~3 GB of CUDA libraries; Docling runs on the CPU.
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+torchvision = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
 
 [build-system]
 requires = ["uv_build>=0.11.32,<0.14.0"]

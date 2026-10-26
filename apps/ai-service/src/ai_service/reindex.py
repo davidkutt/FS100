@@ -2,6 +2,7 @@
 one on the golden `dev` and `test` items, and move the alias only if no `test` metric drops."""
 
 import asyncio
+import hashlib
 import time
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -12,8 +13,10 @@ from pydantic import BaseModel
 from pypdf.errors import PyPdfError
 from qdrant_client import QdrantClient
 
+from ai_service.contextual import Contextualizer
 from ai_service.evals.metrics import balanced_accuracy
 from ai_service.evals.retrieval import GoldenItem, evaluate, load_dataset, regressions, summarize
+from ai_service.ingest import parse_stored
 from ai_service.knowledge_base import KnowledgeBase, first_chunks, live_collection, swap
 from ai_service.storage import JobState, Store
 
@@ -40,10 +43,12 @@ class ReindexReport(BaseModel):
     blockers: list[str]
     decision: Literal["swapped", "kept", "forced"]
     build_s: float
+    context_cost_usd: dict[str, float] = {}  # per filename: contextual retrieval (D60)
 
 
 async def reindex(
     kb: KnowledgeBase,
+    contextualizer: Contextualizer,
     store: Store,
     golden: Path,
     threshold: float | None,
@@ -59,6 +64,7 @@ async def reindex(
     live = await asyncio.to_thread(first_chunks, kb.client, kb.alias)
     stored = await store.latest_versions()
     skipped: list[Skipped] = []
+    costs: dict[str, float] = {}
     for doc_id, payload in live.items():
         data = await store.original(doc_id, stored[doc_id]) if doc_id in stored else None
         if data is None:
@@ -66,14 +72,21 @@ async def reindex(
             skipped.append(Skipped(doc_id=doc_id, filename=payload["filename"], reason=why))
             continue
         try:
+            filename, version, domains = payload["filename"], stored[doc_id], payload["domains"]
+            sections = await parse_stored(store, doc_id, version, filename, data)
+            split = await asyncio.to_thread(target.split, sections)
+            split, costs[filename] = await contextualizer.contextualize(
+                sections, split, doc_id=doc_id, version=version, domains=domains
+            )
             await asyncio.to_thread(
-                target.ingest,
+                target.index,
+                split,
                 doc_id=doc_id,
-                version=stored[doc_id],
-                filename=payload["filename"],
-                data=data,
+                version=version,
+                filename=filename,
+                sha256=hashlib.sha256(data).hexdigest(),
                 owner_id=payload["owner_id"],
-                domains=payload["domains"],
+                domains=domains,
                 topics=payload.get("topics", []),
                 title=payload["title"],
             )
@@ -123,6 +136,7 @@ async def reindex(
         blockers=blockers,
         decision=decision,
         build_s=time.perf_counter() - started,
+        context_cost_usd={name: cost for name, cost in costs.items() if cost},
     )
 
 
@@ -152,7 +166,8 @@ def rollback(client: QdrantClient, alias: str, reports: list[ReindexReport]) -> 
 def summary(report: ReindexReport) -> str:
     lines = [
         f"{report.decision}: {report.collection} ({report.documents} documents, "
-        f"{report.chunks} chunks, {report.build_s:.0f} s); live was {report.previous}"
+        f"{report.chunks} chunks, {report.build_s:.0f} s, contexts "
+        f"{sum(report.context_cost_usd.values()):.4f} USD); live was {report.previous}"
     ]
     for split, sides in report.metrics.items():
         candidate, live = sides["candidate"], sides.get("live", {})

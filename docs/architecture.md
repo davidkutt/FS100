@@ -62,7 +62,7 @@ sequenceDiagram
   AI-->>A: 202 {job_id, version}
   A->>P: status=queued, job_id
   Note over AI,Q: worker in the AI process, one job at a time
-  AI->>AI: parsing (PDF pages / Markdown headings) → chunk 1000/150 → embedding
+  AI->>AI: parsing (Docling / Markdown headings) → chunk 1000/150 in sections → contextualizing (CONTEXTUAL_DOMAINS) → embedding
   AI->>Q: upsert points (UUIDv5 of doc_id:version:chunk, payload v2), then drop older versions
   loop while any row is in work
     W->>A: GET /api/documents

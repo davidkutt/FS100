@@ -20,6 +20,7 @@ from ai_service.core.auth import Caller
 from ai_service.core.settings import Settings
 from ai_service.knowledge_base import Domain, Hit
 from ai_service.mcp_client import McpClient
+from ai_service.query import STRATEGY, Strategy
 from ai_service.tokens import Tokens
 
 ToolKind = Literal["read", "write"]
@@ -136,11 +137,12 @@ class SearchArgs(BaseModel):
     domains: list[Domain] | None = Field(
         None, description="Only search these domains; null searches all."
     )
+    strategy: Strategy = Field("plain", description=STRATEGY)
 
 
 class DocumentArgs(BaseModel):
     doc_id: UUID
-    offset: int = Field(0, ge=0, description="First chunk; use `next_offset` to read on.")
+    offset: int = Field(0, ge=0, description="First section; use `next_offset` to read on.")
 
 
 class SourcesArgs(BaseModel):
@@ -223,7 +225,7 @@ def kb_tools(
         return result.structured_content or {}
 
     async def search(args: SearchArgs) -> ToolOutput:
-        filtered = SearchArgs(query=args.query, domains=args.domains or domains)
+        filtered = args.model_copy(update={"domains": args.domains or domains})
         hits = [
             Hit.model_validate(hit)
             for hit in (await call("search_knowledge_base", filtered))["hits"]
@@ -233,7 +235,7 @@ def kb_tools(
 
     async def get_document(args: DocumentArgs) -> ToolOutput:
         doc = await call("get_document", args)
-        summary = f"{len(doc['chunks'])} of {doc['chunk_count']} chunks"
+        summary = f"{len(doc['sections'])} of {doc['section_count']} sections"
         return ToolOutput(json.dumps(doc, ensure_ascii=False), summary)
 
     async def list_sources(args: SourcesArgs) -> ToolOutput:
@@ -257,7 +259,7 @@ def kb_tools(
         ToolSpec(
             name="kb.get_document",
             server="kb",
-            description="Read a document from the knowledge base, a few chunks at a time.",
+            description="Read a document from the knowledge base, a few sections at a time.",
             args=DocumentArgs,
             run=get_document,
             result_budget_tokens=3000,

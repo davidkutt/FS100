@@ -72,7 +72,7 @@
             </td>
             <td>
               <span class="badge" [class]="badge[doc.status]">
-                @if (doc.status === 'parsing' || doc.status === 'embedding') {
+                @if (['parsing', 'contextualizing', 'embedding'].includes(doc.status)) {
                   <span class="spinner-border spinner-border-sm me-1" aria-hidden="true"></span>
                 }
                 {{ doc.status }}

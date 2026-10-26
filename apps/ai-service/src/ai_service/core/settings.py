@@ -1,9 +1,11 @@
 from functools import lru_cache
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 from ai_service.embeddings import Sparse
+from ai_service.knowledge_base import Domain
 
 
 class Settings(BaseSettings):
@@ -38,6 +40,9 @@ class Settings(BaseSettings):
     embedding_cache_dir: str = ".cache/fastembed"
     chunk_size: int = 1000
     chunk_overlap: int = 150
+    # Parent sections (D59, ADR-0018): search returns each once, with its whole text (≤ this many
+    # characters); 0 = each chunk is its own parent. A change takes effect with `pnpm kb:reindex`.
+    parent_size: int = 2000
     # Sparse side of new collections (D56, ADR-0016); a change takes effect with `pnpm kb:reindex`.
     sparse_model: Sparse = "bm25-english"
     # Cross-encoder over the fused candidates (D57); off: it lost hit@5 on `test` (ADR-0017). Its
@@ -46,6 +51,13 @@ class Settings(BaseSettings):
     rerank_candidates: int = 10  # jina int8: p95 1.5 s on the M1 (D57)
     retrieval_top_k: int = 5
     retrieval_score_threshold: float | None = 0.55
+    query_model: str = ""  # query transformation (D58); empty = LLM_MODEL
+    # Contextual retrieval (D60, ADR-0019): documents of these domains (comma-separated) get a
+    # context per chunk at ingest, which sends each whole document to LLM_BASE_URL. Empty = off.
+    # A change applies to new uploads; `pnpm kb:reindex` applies it to the stored documents.
+    contextual_domains: Annotated[list[Domain], NoDecode] = []
+    contextual_model: str = ""  # empty = LLM_MODEL
+    contextual_max_cost_usd_per_doc: float = 0.05  # then the rest of its chunks go without context
     llm_provider: Literal["openai_compat", "fake"] = "fake"  # unset = no paid calls (tests, CI)
     llm_base_url: str = "https://openrouter.ai/api/v1"
     llm_api_key: str = ""
@@ -75,6 +87,15 @@ class Settings(BaseSettings):
     approval_ttl_min: float = 15
     otel_exporter_otlp_endpoint: str = ""  # empty = tracing off (tests, CI)
     otel_service_name: str = "ai-service"
+
+    @field_validator("contextual_domains", mode="before")
+    @classmethod
+    def _comma_separated(cls, value: object) -> object:
+        return (
+            [part.strip() for part in value.split(",") if part.strip()]
+            if isinstance(value, str)
+            else value
+        )
 
 
 @lru_cache

@@ -38,7 +38,9 @@ with `Ctrl+C`.
 On its **first** start the AI service downloads the embedding model (`EMBEDDING_MODEL`, ≈ 2.3 GB for the
 default `BAAI/bge-m3`, [ADR-0004](../adr/0004-embedding-model-chunking-threshold.md)) into
 `apps/ai-service/.cache/fastembed/`; it answers requests only after
-that (`/readyz` turns 200). Later starts load the model from the cache in a few seconds.
+that (`/readyz` turns 200). Later starts load the model from the cache in a few seconds. The first
+uploaded PDF downloads Docling's layout and table models (≈ 1 GB, into `~/.cache/huggingface/`,
+[ADR-0018](../adr/0018-docling-parent-child-chunking.md)); that one ingest takes a minute longer.
 
 ## 2. Daily routine
 
@@ -164,7 +166,7 @@ USER_TOKEN=$(curl -s -d grant_type=$X -d client_id=kb-api -d client_secret=dev-o
 DOC=$(uuidgen | tr A-Z a-z)
 curl -s localhost:8000/v1/documents -H "Authorization: Bearer $TOKEN" -F file=@data/sample-docs/slo-handbook.pdf \
   -F doc_id=$DOC -F owner_id=dev -F domains=sre        # 202 {"job_id":1,"version":1}
-curl -s localhost:8000/v1/jobs/1 -H "Authorization: Bearer $TOKEN"   # queued → parsing → embedding → ready {"result":{"chunk_count":3,…}}
+curl -s localhost:8000/v1/jobs/1 -H "Authorization: Bearer $TOKEN"   # queued → parsing → (contextualizing →) embedding → ready {"result":{"chunk_count":6,…}}
 curl -s localhost:8000/v1/search -H "Authorization: Bearer $TOKEN" -H 'content-type: application/json' \
   -d '{"query":"Was passiert, wenn das Fehlerbudget aufgebraucht ist?","top_k":3,"explain":true}'   # hits, page numbers, dense/sparse ranks
 curl -N localhost:8000/v1/chat -H "Authorization: Bearer $USER_TOKEN" -H 'content-type: application/json' \
@@ -377,6 +379,9 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | Chat ends with `event: error`, `LLM request failed` | `detail` carries the provider's answer: 401 wrong key, 402 credits used up, 429 rate limit after retries — see `data/sample-docs/runbook-llm-provider-outage.md` |
 | `[ai]` logs `kb_current has sparse=none, not SPARSE_MODEL=…`; the inspector shows no sparse ranks | The live collection predates hybrid search (M3a.2) or `SPARSE_MODEL` changed: `pnpm kb:reindex` builds a hybrid one behind the gate; search stays dense-only until then |
 | With `RERANKER_MODEL` set, the chat abstains on questions the documents answer (or never abstains) | The threshold is still the cosine value `0.55`: each reranker needs its own `RETRIEVAL_SCORE_THRESHOLD` (`.env.example`, ADR-0017). Restart `pnpm dev ai` |
+| `[ai]` logs `Docling failed, pypdf instead` or `Docling took over 300 s` | The PDF was indexed from pypdf's page text (no headings, tables as loose text). The first PDF after installing downloads Docling's models (≈ 1 GB into `~/.cache/huggingface`; in Mode B the `huggingface-cache` volume) inside that limit, so a slow line falls back once. Upload the file again, or run `pnpm kb:reindex`: both try Docling again for every PDF without a stored parse (ADR-0018) |
+| `[ai]` logs `Contextual retrieval failed for … no context` or `… reached the cost cap` | A document of `CONTEXTUAL_DOMAINS` was indexed without contexts (all chunks, or the rest after `CONTEXTUAL_MAX_COST_USD_PER_DOC`): its first call to `CONTEXTUAL_MODEL` (or `LLM_MODEL`) failed — `LLM_PROVIDER=fake` has no structured output. It is searchable as without contextual retrieval and its chunks get sub-topics by embedding similarity; upload it again or run `pnpm kb:reindex` once the provider answers (ADR-0019) |
+| `[ai]` logs `HyDE failed, searching the question alone` | A search asked for `strategy: hyde`, but `QUERY_MODEL` (or `LLM_MODEL`) gave no structured reply: `LLM_PROVIDER=fake` has none; with a real provider see *LLM request failed* above. The search still returns hits, without the drafted passage |
 | `[ai]` takes minutes to start, `/readyz` returns 503 | First start downloads the embedding model (and `RERANKER_MODEL`, if set); watch the `[ai]` progress output. Changing `EMBEDDING_MODEL` downloads another one; then `pnpm kb:reindex --force --reason "new model"` rebuilds the collection with it (searches fail until then) |
 | `pnpm stack:up:full`: `port is already allocated` on 3000/4200/8000 | `pnpm dev` (or one native app) still runs — stop it; both modes use the same ports |
 | `pnpm stack:up:full` waits for minutes on `ai-service` | First start downloads the embedding model into the volume: `pnpm stack:logs ai-service` |

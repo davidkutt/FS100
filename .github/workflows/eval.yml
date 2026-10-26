@@ -67,6 +67,11 @@ jobs:
         with:
           path: apps/ai-service/.cache/fastembed
           key: fastembed-bge-m3
+      # Docling's layout and table models (≈ 1 GB) for the corpus PDF (ADR-0018).
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface
+          key: docling-2.141.0
       - run: uv sync --locked
       # Baseline: ADR-0004 (bge-m3, 1000/150). Raise it when a change improves retrieval.
       - run: uv run kb-eval retrieval --baseline hit@5=0.98 --baseline ndcg@10=0.86 --tolerance 0.02
@@ -104,6 +109,11 @@ jobs:
         with:
           path: apps/ai-service/.cache/fastembed
           key: fastembed-bge-m3
+      # Docling's layout and table models (≈ 1 GB) for the corpus PDF (ADR-0018).
+      - uses: actions/cache@v6
+        with:
+          path: ~/.cache/huggingface
+          key: docling-2.141.0
       - run: uv sync --locked
       - run: |
           if [ "$SUITE" = routing ]; then

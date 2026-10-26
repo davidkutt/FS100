@@ -6,12 +6,13 @@ from datetime import UTC, datetime
 from typing import Any, Literal
 from uuid import NAMESPACE_URL, UUID, uuid5
 
+import numpy as np
 from opentelemetry import trace
 from pydantic import BaseModel
 from qdrant_client import QdrantClient, models
 
 from ai_service.embeddings import Embedder, Reranker, Sparse
-from ai_service.ingest import Section, chunk, parse
+from ai_service.ingest import Section, parents, parse
 
 Domain = Literal["db", "dev", "cloud", "devops", "mlops", "ai", "security", "architecture", "sre"]
 SPAN_KIND = "openinference.span.kind"
@@ -23,7 +24,10 @@ logger = logging.getLogger(__name__)
 
 
 class Hit(BaseModel):
+    """The best-matching chunk of a parent section; `text` is the section's (D59)."""
+
     chunk_id: str
+    parent_id: str | None = None  # None: indexed before M3a.5, the chunk is its own parent
     doc_id: UUID
     title: str
     filename: str
@@ -35,16 +39,20 @@ class Hit(BaseModel):
 
 
 class ExplainedHit(Hit):
-    """`explain` mode of `/v1/search`: the hit's rank among the fused candidates and in the dense
-    and the sparse top 50 (None: not among them); its position is the reranked one."""
+    """`explain` mode of `/v1/search`: the matching chunk inside the section, and the section's
+    rank among the fused candidates and the chunk's in the dense and the sparse top 50 (None: not
+    among them); its position is the reranked one."""
 
+    chunk_text: str = ""
     fused_rank: int | None = None
     dense_rank: int | None = None
     sparse_rank: int | None = None
 
 
-class Chunk(BaseModel):
-    chunk_index: int
+class DocumentSection(BaseModel):
+    """A parent section (D59) in reading order."""
+
+    index: int
     page: int | None
     heading: str | None
     text: str
@@ -64,6 +72,7 @@ class IngestResult(BaseModel):
     chunk_count: int
     page_count: int | None
     embedding_model: str
+    context_cost_usd: float = 0  # contextual retrieval (D60)
 
 
 class KnowledgeBase:
@@ -78,17 +87,22 @@ class KnowledgeBase:
         chunk_size: int,
         chunk_overlap: int,
         sparse: Sparse = "none",
+        parent_size: int = 0,
         fusion: str = FUSION,
         reranker: Reranker | None = None,
+        topics: dict[str, str] | None = None,
     ) -> None:
         self.client = client
         self.embedder = embedder
         self.alias = alias
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.parent_size = parent_size  # D59; 0: each chunk is its own parent
         self.sparse: Sparse = sparse  # for new collections; each one keeps its own (`sparse_of`)
         self.fusion = fusion  # `rrf:<k>:<sparse weight>` or `dbsf`
         self.reranker = reranker
+        self.topics = topics or {}  # `domain/topic` → description, for the chunk-topic fallback
+        self._topic_vectors: dict[str, list[float]] | None = None
         slug = re.sub(r"[^a-z0-9]+", "-", embedder.model_name.lower()).strip("-")
         self.model_key = f"__{slug}__{embedder.dim}"  # part of every collection name of this model
 
@@ -141,7 +155,8 @@ class KnowledgeBase:
             self.client.create_payload_index(name, field, models.PayloadSchemaType.INTEGER)
         # Prefix matching: `devops/` selects a whole domain (D48).
         topics = models.KeywordIndexParams(type=models.KeywordIndexType.KEYWORD, prefix=True)
-        self.client.create_payload_index(name, "topics", topics)
+        for field in ("topics", "chunk_topics"):
+            self.client.create_payload_index(name, field, topics)
         return name
 
     def live_collection(self) -> str:
@@ -180,8 +195,10 @@ class KnowledgeBase:
     ) -> IngestResult:
         attributes = {SPAN_KIND: "CHAIN", "doc_id": str(doc_id), "filename": filename}
         with tracer.start_as_current_span("ingest", attributes=attributes):
+            with tracer.start_as_current_span("parse"):
+                sections = parse(filename, data)
             return self.index(
-                self.prepare(filename, data),
+                self.split(sections),
                 doc_id=doc_id,
                 version=version,
                 filename=filename,
@@ -192,19 +209,17 @@ class KnowledgeBase:
                 title=title,
             )
 
-    def prepare(self, filename: str, data: bytes) -> list[Section]:
-        """Parse and chunk; a document without usable text raises ValueError or a pypdf error."""
-        with tracer.start_as_current_span("parse"):
-            sections = parse(filename, data)
+    def split(self, sections: list[Section]) -> list[tuple[Section, list[Section]]]:
+        """Parents with their chunks; a document without usable text raises ValueError."""
         with tracer.start_as_current_span("chunk"):
-            chunks = chunk(sections, self.chunk_size, self.chunk_overlap)
-        if not chunks:
+            split = parents(sections, self.chunk_size, self.chunk_overlap, self.parent_size)
+        if not split:
             raise ValueError("No extractable text (scanned PDF?)")
-        return chunks
+        return split
 
     def index(
         self,
-        chunks: list[Section],
+        split: list[tuple[Section, list[Section]]],
         *,
         doc_id: UUID,
         version: int,
@@ -215,11 +230,14 @@ class KnowledgeBase:
         topics: list[str],
         title: str | None,
     ) -> IngestResult:
-        """Embed and upsert one version; running it again for the same version changes nothing."""
-        texts = [c.text for c in chunks]
-        vectors: list[dict[str, models.Vector]] = [
-            {"dense": dense} for dense in self.embedder.embed_passages(texts)
-        ]
+        """Embed and upsert one version; running it again for the same version changes nothing. A
+        chunk's context is embedded with it (D60); a chunk without sub-topics gets the most similar
+        one of the document's domains."""
+        chunks = [(n, parent, c) for n, (parent, children) in enumerate(split) for c in children]
+        texts = [f"{c.context}\n\n{c.text}" if c.context else c.text for _, _, c in chunks]
+        dense = self.embedder.embed_passages(texts)
+        nearest = self._nearest_topics(dense, domains)
+        vectors: list[dict[str, models.Vector]] = [{"dense": vector} for vector in dense]
         if (sparse := self.sparse_of()) != "none":
             for named, vector in zip(
                 vectors, self.embedder.embed_sparse(texts, sparse), strict=True
@@ -252,9 +270,15 @@ class KnowledgeBase:
                     "text": c.text,
                     "page": c.page,
                     "heading": c.heading,
+                    "parent_id": f"{doc_id}:{version}:{n}",
+                    "parent_text": parent.text,
+                    "context": c.context,
+                    "chunk_topics": list(c.topics) or fallback,
                 },
             )
-            for index, (c, vector) in enumerate(zip(chunks, vectors, strict=True))
+            for index, ((n, parent, c), vector, fallback) in enumerate(
+                zip(chunks, vectors, nearest, strict=True)
+            )
         ]
         with tracer.start_as_current_span("upsert"):
             self.client.upsert(self.alias, points, wait=True)
@@ -270,9 +294,22 @@ class KnowledgeBase:
         return IngestResult(
             doc_id=doc_id,
             chunk_count=len(points),
-            page_count=max((c.page or 0 for c in chunks), default=0) or None,
+            page_count=max((c.page or 0 for _, _, c in chunks), default=0) or None,
             embedding_model=self.embedder.model_name,
         )
+
+    def _nearest_topics(self, vectors: list[list[float]], domains: list[Domain]) -> list[list[str]]:
+        """Per vector the sub-topic of `domains` with the most similar description (D60)."""
+        ids = [topic for topic in self.topics if topic.split("/")[0] in domains]
+        if not ids:
+            return [[] for _ in vectors]
+        if self._topic_vectors is None:
+            described = [f"{topic}: {text}" for topic, text in self.topics.items()]
+            embedded = self.embedder.embed_passages(described)
+            self._topic_vectors = dict(zip(self.topics, embedded, strict=True))
+        topics = unit(np.array([self._topic_vectors[topic] for topic in ids]))
+        best = (unit(np.array(vectors)) @ topics.T).argmax(axis=1)
+        return [[ids[i]] for i in best]
 
     def search(
         self,
@@ -282,11 +319,14 @@ class KnowledgeBase:
         domains: list[Domain] | None = None,
         doc_ids: list[UUID] | None = None,
         explain: bool = False,
+        passages: list[str] | None = None,
     ) -> list[Hit]:
         """Hybrid if the collection has a sparse side: dense and sparse top 50 under the same
-        filter, fused (D56); the reranker orders the fused candidates (D57). `score` is the
-        reranker's, without one the cosine similarity: the threshold is calibrated on it
-        (ADR-0004, ADR-0017); below it for the best hit, the search abstains with no hits."""
+        filter, fused (D56); the best chunk of each parent stands for it (D59), and the reranker
+        orders these candidates (D57). `score` is the reranker's, without one the cosine
+        similarity: the threshold is calibrated on it (ADR-0004, ADR-0017); below it for the best
+        hit, the search abstains with no hits. `passages` (HyDE, D58) add dense candidates to the
+        fusion; the reranker and the score still compare with `query`."""
         with tracer.start_as_current_span(
             "search", attributes={SPAN_KIND: "RETRIEVER", "input.value": query}
         ):
@@ -303,16 +343,28 @@ class KnowledgeBase:
                 sides.append(
                     models.Prefetch(query=sparse, using="sparse", filter=where, limit=PREFETCH)
                 )
-            points = self.client.query_points(
+            own = list(sides)  # the question's, which `explain` ranks
+            if passages:  # HyDE: a passage is compared with passages, on the dense side
+                sides += [
+                    models.Prefetch(query=vector, using="dense", filter=where, limit=PREFETCH)
+                    for vector in self.embedder.embed_passages(passages)
+                ]
+            fused_points = self.client.query_points(
                 self.alias,
                 prefetch=sides,
-                query=_fusion(self.fusion, len(sides)),
-                limit=max(top_k, self.reranker.candidates) if self.reranker else top_k,
+                query=_fusion(self.fusion, [side.using == "sparse" for side in sides]),
+                limit=PREFETCH,  # enough for top_k parents of several chunks each
                 with_payload=True,
             ).points
+            best: dict[str, models.ScoredPoint] = {}
+            for p in fused_points:
+                best.setdefault((p.payload or {}).get("parent_id") or str(p.id), p)
+            points = list(best.values())
+            points = points[: max(top_k, self.reranker.candidates) if self.reranker else top_k]
             fused = {str(p.id): rank for rank, p in enumerate(points, 1)}
+            chunk_texts = {str(p.id): (p.payload or {})["text"] for p in points}
             if self.reranker and points:
-                texts = [(p.payload or {})["text"] for p in points]
+                texts = list(chunk_texts.values())
                 scored = zip(self.reranker.scores(query, texts), points, strict=True)
                 ranked = sorted(scored, key=lambda pair: -pair[0])[:top_k]
                 points = [p.model_copy(update={"score": score}) for score, p in ranked]
@@ -327,10 +379,7 @@ class KnowledgeBase:
                 ).points
                 scores = {p.id: p.score for p in cosine}
                 points = [p.model_copy(update={"score": scores[p.id]}) for p in points]
-            hits: list[Hit] = [
-                Hit.model_validate({**(p.payload or {}), "chunk_id": str(p.id), "score": p.score})
-                for p in points
-            ]
+            hits: list[Hit] = [_hit(p) for p in points]
             if (
                 score_threshold is not None
                 and max((h.score for h in hits), default=0) < score_threshold
@@ -339,7 +388,7 @@ class KnowledgeBase:
             if explain:
                 requests = [
                     models.QueryRequest(query=p.query, using=p.using, filter=where, limit=PREFETCH)
-                    for p in sides
+                    for p in own
                 ]
                 ranks = [
                     {str(p.id): rank for rank, p in enumerate(side.points, 1)}
@@ -348,6 +397,7 @@ class KnowledgeBase:
                 hits = [
                     ExplainedHit(
                         **hit.model_dump(),
+                        chunk_text=chunk_texts[hit.chunk_id],
                         fused_rank=fused[hit.chunk_id],
                         dense_rank=ranks[0].get(hit.chunk_id),
                         sparse_rank=ranks[1].get(hit.chunk_id) if len(ranks) > 1 else None,
@@ -378,25 +428,26 @@ class KnowledgeBase:
         count = self.client.count(self.alias, _of(doc_id).filter, exact=True).count
         return _info(first[0].payload or {}, {str(doc_id): count})
 
-    def chunks(self, doc_id: UUID, offset: int, limit: int) -> list[Chunk]:
-        """Chunks `offset` … `offset + limit - 1` of a document, in reading order."""
-        window = models.FieldCondition(
-            key="chunk_index", range=models.Range(gte=offset, lt=offset + limit)
-        )
-        points, _ = self.client.scroll(
-            self.alias,
-            models.Filter(must=[_equals("doc_id", str(doc_id)), window]),
-            limit=limit,
-            with_payload=True,
-        )
-        chunks = [Chunk.model_validate(p.payload) for p in points]
-        return sorted(chunks, key=lambda c: c.chunk_index)
+    def sections(self, doc_id: UUID) -> list[DocumentSection]:
+        """A document's parent sections (D59) in reading order."""
+        # shortcut: one page of 10 000 chunks; page with `next_page_offset` beyond that
+        points, _ = self.client.scroll(self.alias, _of(doc_id).filter, limit=10_000)
+        first: dict[str, Hit] = {}
+        for p in sorted(points, key=lambda p: (p.payload or {})["chunk_index"]):
+            hit = _hit(p)
+            first.setdefault(hit.parent_id or hit.chunk_id, hit)
+        return [
+            DocumentSection(index=index, page=hit.page, heading=hit.heading, text=hit.text)
+            for index, hit in enumerate(first.values())
+        ]
 
     def update_labels(
         self, doc_id: UUID, domains: list[Domain] | None, topics: list[str] | None
     ) -> None:
         """Payload update on every chunk of the document, no re-embedding (D48); in every
         collection, so a rollback keeps the labels."""
+        # shortcut: new domains keep the old domains' `chunk_topics` until `pnpm kb:reindex`;
+        # recompute them here once retrieval filters or boosts on them (M3a.7).
         labels = {"domains": domains, "topics": topics}
         payload = {key: value for key, value in labels.items() if value is not None}
         for name in self.collections() if payload else []:
@@ -443,17 +494,31 @@ def first_chunks(
     return {UUID(p.payload["doc_id"]): p.payload for p in points if p.payload}
 
 
+def _hit(point: models.ScoredPoint | models.Record) -> Hit:
+    payload = point.payload or {}
+    return Hit.model_validate(
+        {
+            **payload,
+            "chunk_id": str(point.id),
+            "score": getattr(point, "score", 0.0),
+            "text": payload.get("parent_text", payload["text"]),
+        }
+    )
+
+
 def _info(payload: dict[str, Any], chunk_counts: dict[str, int]) -> DocumentInfo:
     return DocumentInfo.model_validate(
         {**payload, "chunk_count": chunk_counts.get(payload["doc_id"], 0)}
     )
 
 
-def _fusion(spec: str, sides: int) -> models.FusionQuery | models.RrfQuery:
+def _fusion(spec: str, sparse: list[bool]) -> models.FusionQuery | models.RrfQuery:
+    """`sparse` flags each prefetch; RRF gives sparse sides their weight, dense ones 1."""
     if spec == "dbsf":
         return models.FusionQuery(fusion=models.Fusion.DBSF)
     _, k, weight = spec.split(":")
-    return models.RrfQuery(rrf=models.Rrf(k=int(k), weights=[1, float(weight)][:sides]))
+    weights = [float(weight) if side else 1.0 for side in sparse]
+    return models.RrfQuery(rrf=models.Rrf(k=int(k), weights=weights))
 
 
 def _equals(key: str, value: str | int) -> models.FieldCondition:
@@ -466,6 +531,10 @@ def _domains(domains: list[Domain] | None) -> list[models.Condition]:
         if domains
         else []
     )
+
+
+def unit(vectors: np.ndarray) -> np.ndarray:
+    return vectors / np.maximum(np.linalg.norm(vectors, axis=1, keepdims=True), 1e-12)
 
 
 def _of(doc_id: UUID) -> models.FilterSelector:

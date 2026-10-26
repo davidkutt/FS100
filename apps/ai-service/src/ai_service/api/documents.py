@@ -10,6 +10,7 @@ from ai_service.catalog import Taxonomy
 from ai_service.ingest import supported
 from ai_service.jobs import INGEST, cancel_ingest, defer
 from ai_service.knowledge_base import Domain, ExplainedHit, KnowledgeBase
+from ai_service.query import QueryTransformer, Strategy
 from ai_service.storage import Store
 
 router = APIRouter(prefix="/v1", tags=["documents"])
@@ -32,6 +33,10 @@ def get_store(request: Request) -> Store:
     return request.app.state.store
 
 
+def get_query(request: Request) -> QueryTransformer:
+    return request.app.state.query
+
+
 KB = Annotated[KnowledgeBase, Depends(get_kb)]
 Tax = Annotated[Taxonomy, Depends(get_taxonomy)]
 Jobs = Annotated[App, Depends(get_jobs)]
@@ -52,6 +57,7 @@ class SearchRequest(BaseModel):
     domains: list[Domain] | None = None
     doc_ids: list[UUID] | None = None
     explain: bool = False  # the inspector's fused, dense and sparse ranks (D56, D57)
+    strategy: Strategy = "plain"  # D58
 
 
 class SearchResponse(BaseModel):
@@ -111,10 +117,20 @@ async def submit(
 
 
 @router.post("/search")
-def search(kb: KB, body: SearchRequest) -> SearchResponse:
+async def search(
+    kb: KB, transformer: Annotated[QueryTransformer, Depends(get_query)], body: SearchRequest
+) -> SearchResponse:
     """Retrieval as the chat runs it, for the inspector; no threshold unless one is given."""
-    hits = kb.search(
-        body.query, body.top_k, body.score_threshold, body.domains, body.doc_ids, body.explain
+    query = await transformer.expand(body.query, body.strategy)
+    hits = await asyncio.to_thread(
+        kb.search,
+        query.text,
+        body.top_k,
+        body.score_threshold,
+        body.domains,
+        body.doc_ids,
+        body.explain,
+        query.passages,
     )
     return SearchResponse(
         embedding_model=kb.embedder.model_name,

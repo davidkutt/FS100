@@ -42,6 +42,7 @@ from ai_service.knowledge_base import Domain, KnowledgeBase
 from ai_service.llm import LlmProvider, create_provider
 from ai_service.mcp_client import McpClient
 from ai_service.mcp_server import create_mcp
+from ai_service.query import QueryTransformer
 from ai_service.rag import AnswerStatus, ChatPipeline, ChatTurn, SourcesEvent, TokenEvent
 from ai_service.routing import Router, create_router
 from ai_service.tokens import Tokens
@@ -223,6 +224,7 @@ class Bench:
         settings: Settings,
         llm: LlmProvider,
         router: Router,
+        transformer: QueryTransformer,
         embedder: Embedder,
         corpora: list[Path],
         fixtures: Path,
@@ -234,6 +236,7 @@ class Bench:
             settings.chunk_size,
             settings.chunk_overlap,
             settings.sparse_model,
+            settings.parent_size,
             reranker=load_reranker(
                 settings.reranker_model, settings.rerank_candidates, settings.embedding_cache_dir
             ),
@@ -245,7 +248,7 @@ class Bench:
             self.filenames |= {doc_id(name): name for name in load_manifest(corpus)}
         self.github = GitHubFixture(fixtures)
         tokens = EvalTokens(settings)
-        own = create_mcp(settings, lambda: self.kb, tokens)
+        own = create_mcp(settings, lambda: self.kb, tokens, lambda: transformer)
         config = load_servers(settings.mcp_servers_config)["github"]
         os.environ[config.bearer_env] = FAKE_PAT  # the fixture answers; a real PAT stays unused
         servers = McpServers({"github": config})
@@ -505,7 +508,8 @@ def _main(args: argparse.Namespace, settings: Settings, documents: list[Path]) -
     embedder = Embedder(settings.embedding_model, settings.embedding_cache_dir)
     llm = create_provider(settings)
     router = create_router(settings, embedder, load_taxonomy(settings.taxonomy_config), llm)
-    bench = Bench(settings, llm, router, embedder, corpora, args.fixtures)
+    transformer = QueryTransformer(llm, settings.query_model or None)
+    bench = Bench(settings, llm, router, transformer, embedder, corpora, args.fixtures)
     tasks = load_tasks(args.dataset)
     report = asyncio.run(
         run(bench, tasks, args.dataset.stem, args.mode, args.repeats, args.cost_cap, settings)

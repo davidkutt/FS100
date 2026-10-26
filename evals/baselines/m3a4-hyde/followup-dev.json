@@ -1,0 +1,253 @@
+{
+  "dataset": "followup_v1-dev",
+  "model": "BAAI/bge-m3",
+  "dim": 1024,
+  "chunk_size": 1000,
+  "chunk_overlap": 150,
+  "sparse": "bm25-english",
+  "fusion": "rrf:2:0.5",
+  "rerank": "none",
+  "strategy": "hyde",
+  "documents": 17,
+  "chunks": 218,
+  "ingest_s": 149.0645687500073,
+  "created_at": "2026-10-25T17:41:49+00:00",
+  "overall": {
+    "n": 7.0,
+    "hit@1": 0.8571428571428571,
+    "hit@5": 1.0,
+    "mrr@10": 0.8857142857142857,
+    "ndcg@10": 0.9124075438906488,
+    "p50_ms": 5347.582291986328,
+    "p95_ms": 10011.682500015013,
+    "usd_per_query": 0.0001434625
+  },
+  "by_domain": {
+    "ai": {
+      "n": 2.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "db": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "devops": {
+      "n": 2.0,
+      "hit@1": 0.5,
+      "hit@5": 1.0,
+      "mrr@10": 0.6,
+      "ndcg@10": 0.6934264036172708
+    },
+    "mlops": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "security": {
+      "n": 2.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "sre": {
+      "n": 2.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    }
+  },
+  "by_lang": {
+    "de": {
+      "n": 2.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "en": {
+      "n": 5.0,
+      "hit@1": 0.8,
+      "hit@5": 1.0,
+      "mrr@10": 0.84,
+      "ndcg@10": 0.8773705614469083
+    }
+  },
+  "by_type": {
+    "follow-up": {
+      "n": 7.0,
+      "hit@1": 0.8571428571428571,
+      "hit@5": 1.0,
+      "mrr@10": 0.8857142857142857,
+      "ndcg@10": 0.9124075438906488
+    }
+  },
+  "exact_terms": {},
+  "threshold": 0.5618338527914243,
+  "threshold_balanced_accuracy": 1.0,
+  "checked_threshold": 0.55,
+  "checked_balanced_accuracy": 0.5,
+  "items": [
+    {
+      "id": "f-001",
+      "question": "And if we run it with Docker Compose instead?",
+      "lang": "en",
+      "domains": ["devops"],
+      "type": "follow-up",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
+      "top1_score": 0.6405464786495815,
+      "latency_ms": 4015.130332991248,
+      "cost_usd": 0.0001188,
+      "top_hits": [
+        "setup-installation.md \u00a7 Installation guide \u2014 local development toolchain \u203a 2. macOS (Apple Silicon) \u203a 2.5 Docker (0.641)",
+        "setup-installation.md \u00a7 Installation guide \u2014 local development toolchain \u203a 1. What you need \u2014 and what you don't (0.592)",
+        "setup-startup.md \u00a7 Startup guide \u2014 run FS100 locally \u203a 7. Managing the infrastructure (0.552)"
+      ]
+    },
+    {
+      "id": "f-002",
+      "question": "What do I do if it leaked?",
+      "lang": "en",
+      "domains": ["security"],
+      "type": "follow-up",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.653818590944701,
+      "latency_ms": 5205.018708016723,
+      "cost_usd": 0.0001201,
+      "top_hits": [
+        "runbook-secret-rotation.md \u00a7 Runbook: Rotate secrets and API keys \u203a Leaked secret (0.654)",
+        "runbook-incident-response.md \u00a7 Runbook: Incident response \u203a Severity levels (0.521)",
+        "runbook-incident-response.md \u00a7 Runbook: Incident response \u203a First 15 minutes (0.559)"
+      ]
+    },
+    {
+      "id": "f-003",
+      "question": "Und wenn cert-manager es nicht automatisch erneuert hat?",
+      "lang": "de",
+      "domains": ["security", "devops"],
+      "type": "follow-up",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6708869385422376,
+      "latency_ms": 5802.246249979362,
+      "cost_usd": 0.0001649,
+      "top_hits": [
+        "runbook-tls-zertifikat-erneuern.md \u00a7 Runbook: TLS-Zertifikat erneuern \u203a Automatische Erneuerung mit cert-manager reparieren (0.671)",
+        "runbook-tls-zertifikat-erneuern.md \u00a7 Runbook: TLS-Zertifikat erneuern \u203a Wann dieses Runbook gilt (0.652)",
+        "runbook-tls-zertifikat-erneuern.md \u00a7 Runbook: TLS-Zertifikat erneuern \u203a Manuelle Erneuerung (0.624)"
+      ]
+    },
+    {
+      "id": "f-004",
+      "question": "How do we switch to another one?",
+      "lang": "en",
+      "domains": ["ai", "sre"],
+      "type": "follow-up",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6219965002235757,
+      "latency_ms": 7438.172583002597,
+      "cost_usd": 0.0001866,
+      "top_hits": [
+        "runbook-llm-provider-outage.md \u00a7 Runbook: LLM provider errors and outages \u203a Switch the provider (0.622)",
+        "runbook-embedding-model-swap.md \u00a7 Runbook: Swap the embedding model \u203a Switch (0.582)",
+        "runbook-tls-zertifikat-erneuern.md \u00a7 Runbook: TLS-Zertifikat erneuern \u203a Automatische Erneuerung mit cert-manager reparieren (0.439)"
+      ]
+    },
+    {
+      "id": "f-005",
+      "question": "How do I restore one without touching the live database?",
+      "lang": "en",
+      "domains": ["db"],
+      "type": "follow-up",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.7117916679282522,
+      "latency_ms": 10011.682500015013,
+      "cost_usd": 0.0001829,
+      "top_hits": [
+        "runbook-postgres-backup-restore.md \u00a7 Runbook: Postgres backup and restore \u203a Restore into a scratch database (0.712)",
+        "runbook-postgres-backup-restore.md \u00a7 Runbook: Postgres backup and restore \u203a Restore drill (0.606)",
+        "runbook-postgres-backup-restore.md \u00a7 Runbook: Postgres backup and restore \u203a Verify the restore (0.583)"
+      ]
+    },
+    {
+      "id": "f-006",
+      "question": "Und bis wann muss danach der Bericht fertig sein?",
+      "lang": "de",
+      "domains": ["sre"],
+      "type": "follow-up",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5618338527914243,
+      "latency_ms": 5347.582291986328,
+      "cost_usd": 0.0001248,
+      "top_hits": [
+        "runbook-incident-response.md \u00a7 Runbook: Incident response \u203a Postmortem (0.562)",
+        "runbook-incident-response.md \u00a7 Runbook: Incident response \u203a Closing an incident (0.530)",
+        "runbook-rollback.md \u00a7 Runbook: Roll back a failed deployment \u203a Follow-up (0.539)"
+      ]
+    },
+    {
+      "id": "f-007",
+      "question": "If the new model turns out worse after the switch, how do I go back?",
+      "lang": "en",
+      "domains": ["ai", "mlops"],
+      "type": "follow-up",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5988235960470301,
+      "latency_ms": 4521.610750001855,
+      "cost_usd": 9.95e-5,
+      "top_hits": [
+        "runbook-embedding-model-swap.md \u00a7 Runbook: Swap the embedding model \u203a Roll back (0.599)",
+        "runbook-rollback.md \u00a7 Runbook: Roll back a failed deployment \u203a Decide (0.573)",
+        "runbook-embedding-model-swap.md \u00a7 Runbook: Swap the embedding model \u203a Before you switch (0.570)"
+      ]
+    },
+    {
+      "id": "f-008",
+      "question": "And the one for the AWS account?",
+      "lang": "en",
+      "domains": ["cloud"],
+      "type": "unanswerable",
+      "exact_term": false,
+      "answerable": false,
+      "relevant_count": 0,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.555823803823325,
+      "latency_ms": 5800.41620801785,
+      "cost_usd": 0.0001501,
+      "top_hits": [
+        "setup-startup.md \u00a7 Startup guide \u2014 run FS100 locally \u203a 4. Check that everything works (0.529)",
+        "setup-startup.md \u00a7 Startup guide \u2014 run FS100 locally \u203a 4. Check that everything works (0.551)",
+        "fs100-plan.md \u00a7 plan.md \u2014 Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing \u203a 0. Roadmap context (0.556)"
+      ]
+    }
+  ]
+}

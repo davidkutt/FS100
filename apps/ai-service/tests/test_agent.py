@@ -598,15 +598,17 @@ def test_tool_output_is_untrusted_and_truncated_to_its_budget() -> None:
     assert len(result.content) < 25 * 4 + 120
 
 
-def hit(chunk: str, score: float) -> Hit:
+def hit(chunk: str, score: float, parent: str | None = None) -> Hit:
     return Hit.model_validate(
-        {"chunk_id": chunk, "doc_id": uuid4(), "title": chunk, "filename": f"{chunk}.md"}
-        | {"page": None, "heading": None, "domains": ["devops"], "score": score, "text": chunk}
+        {"chunk_id": chunk, "parent_id": parent, "doc_id": uuid4(), "title": chunk}
+        | {"filename": f"{chunk}.md", "page": None, "heading": None, "domains": ["devops"]}
+        | {"score": score, "text": chunk}
     )
 
 
 def test_source_numbers_stay_stable_across_searches() -> None:
-    searches = [[hit("a", 0.7), hit("b", 0.6)], [hit("b", 0.6), hit("c", 0.9)]]
+    """Another chunk of a section already found is the same source (D59)."""
+    searches = [[hit("a", 0.7), hit("b", 0.6, "s")], [hit("b2", 0.6, "s"), hit("c", 0.9)]]
 
     async def search(_: Args) -> ToolOutput:
         return ToolOutput("", "hits", searches.pop(0))

@@ -68,8 +68,14 @@ in Claude Code is open. **Phase 3 (retrieval quality, skills; then eval, safety,
 spikes, ADR-0015…0018 drafts), M3a.1 (originals in Postgres `ai`, Procrastinate queue with in-process worker,
 collection v2 with versioned IDs, `kb-admin reindex` behind the golden-set gate + rollback, admin re-index page) and
 M3a.2 (hybrid search: BM25 from fastembed in the AI service, weighted RRF, `explain` ranks in the inspector,
-ADR-0016) and M3a.3 (cross-encoder reranking, opt-in via `RERANKER_MODEL`, off by default: it lost hit@5 on `test`,
-ADR-0017) are done. Phase 3 ADRs start at 0015, not 0014. Check the milestone in
+ADR-0016), M3a.3 (cross-encoder reranking, opt-in via `RERANKER_MODEL`, off by default: it lost hit@5 on `test`,
+ADR-0017) and M3a.4 (HyDE in `query.py` as `strategy` of `search_knowledge_base` and `/v1/search`, follow-up set
+`followup_v1`; multi-query and the follow-up rewrite lost on `dev` and were removed) and M3a.5 (Docling for PDFs in a
+child process with pypdf fallback, parse stored in `ai.source_documents`; 1000/150 chunks searched, their parent
+sections ≤ `PARENT_SIZE` 2000 chars returned once each; `get_document` by section; ADR-0018) and M3a.6
+(contextual retrieval in `contextual.py`: one call per chunk with the document cached in the system prompt,
+`CONTEXTUAL_DOMAINS`, labels stored in `ai.chunk_contexts`, job state `contextualizing`, payload `context` +
+`chunk_topics`, taxonomy v2; ADR-0019) are done. Phase 3 ADRs start at 0015, not 0014. Check the milestone in
 [plan.md §8](plan.md#8-milestones-and-tasks), [plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks) or
 [plan-phase-3.md §8](plan-phase-3.md#8-milestones-and-tasks) before building something: many features are
 deliberately scheduled for later milestones.
@@ -163,7 +169,8 @@ Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
   Appendix A, and into the app's `environment:` list in `infra/compose/docker-compose.yml` (Mode B passes
   only listed variables).
 - **Images:** all three Dockerfiles build with the repo root as context; `.dockerignore` is an allow-list,
-  so a new top-level folder an image needs must be added there.
+  so a new top-level folder an image needs must be added there. The AI service runs on `python:*-slim` without
+  system libraries: Python dependencies must bundle theirs (`psycopg[binary]`, `opencv-python-headless`).
 - **Infra state:** realm JSON and `init.sql` only apply to empty volumes → `pnpm stack:reset && pnpm stack:up`
   (wipes all local data; ask first). Use `localhost`, not `127.0.0.1`, for anything Keycloak-related.
 - **API DB:** Drizzle; migrations in `apps/api/drizzle/` run on API boot. API tests use `API_DATABASE_URL=:memory:`
@@ -173,11 +180,17 @@ Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
   service; their types live in `@fs100/contracts/ai-service`. `contracts:generate` boots the API from the repo
   root with logging off, so a cwd-relative file path in API config makes it exit 1 without a message.
 - **AI service tests** never download models or need Docker: they fake fastembed (`tests/support.py`; BM25 and the cross-encoder via an
-  autouse fixture in `conftest.py`) and use `support.OFFLINE` (Qdrant and the `ai` database in-process, no worker); `drain(client)` runs the queued
+  autouse fixture in `conftest.py`, which also sends PDFs to pypdf instead of Docling) and use `support.OFFLINE` (Qdrant and the `ai` database in-process, no worker); `drain(client)` runs the queued
   jobs, so an upload is `ingest(client, …)`, not a bare POST. The golden set's labels are checked against `data/sample-docs/` by
   `tests/test_evals.py`; `evals/datasets/retrieval_v1.jsonl` is frozen — changes go into a new version.
 - **Sparse vectors are computed in the AI service** (fastembed BM25), never with Qdrant's `models.Document` inference:
   in-process Qdrant (tests, `kb-eval`, CI gate) tokenizes differently from the server (ADR-0016).
+- **torch** comes from PyTorch's CPU index via `tool.uv.sources` in `apps/ai-service/pyproject.toml`; uv applies
+  sources only to direct dependencies, so `torch`/`torchvision` stay listed there (PyPI's Linux wheels pull ~3 GB of CUDA).
+- **Prompt caching at OpenRouter** (`gpt-6-luna`, M3a.6): a long shared prefix was cached only inside the
+  system message (91–98 %), never as a user message (0 %); check `Usage.cached_tokens` before relying on it.
+- **LLM-written index content is stored and reused** (contexts in `ai.chunk_contexts`, keyed by model + messages):
+  regenerated at re-index it moves the gate by noise alone (M3a.6: −0.04 nDCG@10 between two identical builds).
 - **No paid LLM calls in tests or CI** — use `LLM_PROVIDER=fake`. No agent frameworks (LangChain etc.)
   through Phase 2 (D11). No AGPL deps (repo is MIT; e.g. no PyMuPDF).
 - **Never commit secrets.** Only public or self-written documents go into the corpus (D25).

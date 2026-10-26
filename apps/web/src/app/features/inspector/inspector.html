@@ -1,8 +1,10 @@
 <h1 class="h3 mb-1">Retrieval inspector</h1>
 <p class="text-body-secondary">
   Ranked hits for a query, as the chat retrieves them: dense and sparse top 50, fused, reranked.
-  Ranks: rerank = position, fused = rank among the reranker's candidates, dense / sparse = rank on
-  that side (– = not in its top 50); the score is the reranker's, without one the dense similarity.
+  Each section appears once, through its best-matching chunk; the chat gets the whole section.
+  Ranks: rerank = position, fused = rank among the reranker's candidates, dense / sparse = the
+  chunk's rank on that side (– = not in its top 50); the score is the reranker's, without one the
+  dense similarity.
 </p>
 
 <form class="card card-body shadow-sm mb-4" (ngSubmit)="search()">
@@ -81,7 +83,13 @@
                 <span class="badge text-bg-light border">{{ domain }}</span>
               }
             </div>
-            <p class="source-text small mt-2 mb-0">{{ hit.text }}</p>
+            <p class="source-text small mt-2 mb-0">{{ hit.chunk_text || hit.text }}</p>
+            @if (hit.chunk_text && hit.chunk_text !== hit.text) {
+              <details class="mt-2">
+                <summary class="small">Whole section</summary>
+                <p class="source-text small mt-2 mb-0">{{ hit.text }}</p>
+              </details>
+            }
           </div>
         </li>
       } @empty {

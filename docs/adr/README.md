@@ -24,7 +24,8 @@ Short, numbered records of decisions that shape FS100. Each ADR references the d
 | [0015](0015-stored-originals-job-queue-reindex.md) | Stored originals, a Postgres job queue and an eval-gated re-index | Accepted |
 | [0016](0016-hybrid-search-sparse-side.md) | Hybrid search — BM25 computed in the AI service, weighted RRF | Accepted |
 | [0017](0017-reranker.md) | Reranking — built and measured, off by default | Accepted |
-| [0018](0018-docling-parent-child-chunking.md) | Docling parsing and parent-child chunking | Proposed (draft) |
+| [0018](0018-docling-parent-child-chunking.md) | Docling parsing and parent-child chunking | Accepted |
+| [0019](0019-contextual-retrieval-chunk-topics.md) | Contextual retrieval and chunk sub-topics — on for all domains, threshold kept | Accepted |
 
 ## Writing a new ADR
 
