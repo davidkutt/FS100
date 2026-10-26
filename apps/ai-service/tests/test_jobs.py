@@ -385,6 +385,24 @@ def test_deletes_and_relabels_survive_a_rollback(client: TestClient) -> None:
     assert [(h["doc_id"], h["domains"]) for h in hits["hits"]] == [(guide, ["sre"])]
 
 
+def test_a_re_index_keeps_priorities_and_retired_documents(client: TestClient) -> None:
+    runbook = ingest(client, "runbook.md", RUNBOOK, ["devops"])["result"]["doc_id"]
+    guide = ingest(client, "guide.md", GUIDE, ["dev"])["result"]["doc_id"]
+    pinned = {"priority": "canonical", "priority_topics": ["devops/deployment"]}
+    client.patch(f"/v1/documents/{runbook}/labels", json=pinned)
+    client.patch(f"/v1/documents/{guide}/labels", json={"lifecycle": "retired"})
+
+    run = reindex(client)
+
+    assert run["report"]["decision"] == "swapped"
+    assert {
+        (p.payload["doc_id"], p.payload["priority"], p.payload["lifecycle"]) for p in points(client)
+    } == {
+        (runbook, "canonical", "active"),
+        (guide, "normal", "retired"),
+    }
+
+
 def test_a_document_deleted_during_the_build_is_not_swapped_in(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:

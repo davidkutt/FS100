@@ -75,7 +75,10 @@ child process with pypdf fallback, parse stored in `ai.source_documents`; 1000/1
 sections ≤ `PARENT_SIZE` 2000 chars returned once each; `get_document` by section; ADR-0018) and M3a.6
 (contextual retrieval in `contextual.py`: one call per chunk with the document cached in the system prompt,
 `CONTEXTUAL_DOMAINS`, labels stored in `ai.chunk_contexts`, job state `contextualizing`, payload `context` +
-`chunk_topics`, taxonomy v2; ADR-0019) are done. Phase 3 ADRs start at 0015, not 0014. Check the milestone in
+`chunk_topics`, taxonomy v2; ADR-0019) and M3a.7 (`lifecycle` / `priority` / `priority_topics` set in NestJS and
+relayed as labels; retired documents filtered from every search; boost by positions after reranking when the
+question's nearest sub-topics meet the scope; canonical sources marked in the prompts; `kb-eval --priorities`) are
+done. Phase 3 ADRs start at 0015, not 0014. Check the milestone in
 [plan.md §8](plan.md#8-milestones-and-tasks), [plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks) or
 [plan-phase-3.md §8](plan-phase-3.md#8-milestones-and-tasks) before building something: many features are
 deliberately scheduled for later milestones.
@@ -234,3 +237,4 @@ Never cut: validation at trust boundaries, error handling that prevents data los
 Rules learned from user feedback. Newest last. Format: `- <rule> — <why, one clause>`.
 
 - Next to any setting that only applies on first start (Docker volumes, realm import), say so where it is edited and name the reset command — users edit `.env`, restart, and expect it to apply.
+- Before telling the user a variable is missing from their `.env`, grep with `^\s*NAME=` — indented lines still load (uv and Node), so `^NAME=` reports false gaps.

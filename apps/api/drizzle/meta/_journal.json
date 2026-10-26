@@ -43,6 +43,13 @@
       "when": 1793032976815,
       "tag": "0005_contextualizing",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793044176285,
+      "tag": "0006_lifecycle_priority",
+      "breakpoints": true
     }
   ]
 }

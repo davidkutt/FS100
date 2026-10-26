@@ -110,7 +110,8 @@ def history_messages(history: list[ChatTurn]) -> list[Message]:
 
 def render_source(n: int, hit: Hit) -> str:
     text = untrusted(f"Document: {hit.title} · {_location(hit)}\n{hit.text}")
-    return f'<source n="{n}">\n{text}\n</source>\n'
+    scope = f' canonical="{" ".join(hit.priority_topics)}"' if hit.priority == "canonical" else ""
+    return f'<source n="{n}"{scope}>\n{text}\n</source>\n'
 
 
 def invalid_citations(answer: str, source_count: int) -> list[int]:

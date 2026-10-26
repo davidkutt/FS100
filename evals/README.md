@@ -18,6 +18,8 @@ uv run --directory apps/ai-service --env-file ../../.env kb-eval retrieval --spl
                     --strategy plain --strategy hyde   # HyDE (D58): paid QUERY_MODEL calls, LLM from .env
 uv run --directory apps/ai-service --env-file ../../.env kb-eval retrieval --split dev \
                     --contextual none --contextual all # contextual retrieval (D60): paid, ~0.04 USD per ingest
+pnpm eval:retrieval --split dev --priorities none \
+                    --priorities ../../evals/datasets/priorities_v1.json   # priority boosts (D61)
 ```
 
 The runner (`kb-eval retrieval` in `apps/ai-service`) ingests the corpus listed in
@@ -81,6 +83,14 @@ Docker Compose instead?"*). The runner searches `question` alone, as the chat do
 standalone rewrite of follow-ups (D58), which lost on `dev`: these follow-ups name what they ask for, and
 the rewrite's history terms pulled results back to the earlier answer. Run it with
 `--dataset ../../evals/datasets/followup_v1.jsonl`; `tests/test_evals.py` resolves its labels too.
+
+## Priorities `datasets/priorities_v1.json`
+
+Corpus file → `priority` and `priority_topics` (D61, M3a.7): every runbook and the SLO handbook
+`canonical` for its main sub-topic. `--priorities PATH` sets them on the in-memory index before a run
+(`none` resets every document to `normal`), and the report adds a **pinned** row per sub-topic: the
+answerable questions whose two nearest sub-topics — what the boost matches — include it.
+`tests/test_evals.py` checks the files and sub-topics exist.
 
 ## CI gate
 

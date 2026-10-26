@@ -69,6 +69,14 @@
               @for (topic of doc.topics; track topic) {
                 <span class="badge text-bg-light border border-info me-1">{{ topic }}</span>
               }
+              @if (doc.priority !== 'normal') {
+                <span
+                  class="badge me-1"
+                  [class]="doc.priority === 'canonical' ? 'text-bg-primary' : 'text-bg-secondary'"
+                >
+                  {{ doc.priority }}: {{ doc.priorityTopics.join(', ') }}
+                </span>
+              }
             </td>
             <td>
               <span class="badge" [class]="badge[doc.status]">
@@ -77,6 +85,9 @@
                 }
                 {{ doc.status }}
               </span>
+              @if (doc.lifecycle === 'retired') {
+                <span class="badge text-bg-dark ms-1">retired</span>
+              }
             </td>
             <td class="text-end">{{ doc.chunkCount ?? '–' }}</td>
             <td>{{ doc.ownerName }}</td>
@@ -92,6 +103,27 @@
                 >
                   Labels
                 </button>
+                @if (doc.lifecycle === 'retired') {
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-secondary me-1"
+                    [attr.aria-label]="'Activate ' + doc.filename"
+                    [disabled]="working(doc)"
+                    (click)="setLifecycle(doc, 'active')"
+                  >
+                    Activate
+                  </button>
+                } @else {
+                  <button
+                    type="button"
+                    class="btn btn-sm btn-outline-secondary me-1"
+                    [attr.aria-label]="'Retire ' + doc.filename"
+                    [disabled]="working(doc)"
+                    (click)="setLifecycle(doc, 'retired')"
+                  >
+                    Retire
+                  </button>
+                }
                 <button
                   type="button"
                   class="btn btn-sm btn-outline-danger"
@@ -129,6 +161,25 @@
           label="Sub-topics (optional)"
           [options]="editTopicOptions()"
           [(value)]="editTopics"
+        />
+      }
+      <label for="priority" class="form-label">Priority</label>
+      <select
+        #priority
+        id="priority"
+        class="form-select mb-3"
+        (change)="editPriority.set(priority.value)"
+      >
+        @for (option of priorities; track option) {
+          <option [value]="option" [selected]="option === editPriority()">{{ option }}</option>
+        }
+      </select>
+      @if (editPriority() !== 'normal') {
+        <app-domain-picker
+          class="d-block mb-3"
+          label="Priority applies to questions on"
+          [options]="editTopicOptions()"
+          [(value)]="editPriorityTopics"
         />
       }
       @if (editError()) {

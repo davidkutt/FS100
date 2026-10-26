@@ -111,7 +111,11 @@ Multi-query and a standalone rewrite of follow-ups lost on `dev` and were droppe
 retrieval; they change what the LLM reads — each section whole and once (+37 % prompt text) — and
 Docling's HybridChunker lost on `dev`. Contextual retrieval sends each document whole to OpenRouter at
 ingest and lowers abstention accuracy at the 0.55 threshold (`test` 0.95 → 0.93); the same call gives
-each chunk its sub-topics (47 of 50 spot-checked right).
+each chunk its sub-topics (47 of 50 spot-checked right). Documents can be retired (never retrieved) or
+pinned `canonical` / `low` for sub-topics, which moves their hits after reranking (M3a.7); pinning every
+runbook lowered MRR@10 on `test` from 0.90 to 0.88 on the same contextual index — the runbooks already rank
+first, and a wrongly routed question lets a pinned runbook push the right one down — so nothing is pinned by
+default ([plan-phase-3.md M3a.7](plan-phase-3.md#m3a7--lifecycle--priorities-5-h)).
 
 Each chat request is traced in Phoenix (http://localhost:6006): `chat → embed → search → llm` with the
 prompt, token counts and latency; the chat UI links every answer to its trace.

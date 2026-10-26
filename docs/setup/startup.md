@@ -204,7 +204,9 @@ Then the demo path as `bob`: **Documents** → pick domains → drop files from 
 goes `queued → parsing → embedding → ready`. **Chat** → ask a question → the answer streams with `[1]` citations;
 select one to read the passage, **Trace in Phoenix** opens the request's trace. **Inspector** shows the
 raw hits with their dense score and fused, dense and sparse ranks, and warns when the best score is below
-the threshold (the chat would abstain). As `carol` (viewer) there are no upload
+the threshold (the chat would abstain). On **Documents**, **Labels** also sets a priority (`canonical` /
+`low`) for chosen sub-topics, and **Retire** takes a document out of every search until **Activate**; the
+inspector shows the resulting `boost`. As `carol` (viewer) there are no upload, label
 or delete controls. Chat calls the real LLM unless `LLM_PROVIDER=fake`.
 
 ### Use the knowledge base from Claude Code / VS Code
@@ -365,9 +367,9 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | `pnpm dev`: `[ai] … uv: not found` | Install uv ([installation guide](installation.md#24-uv-and-python-313)), then `uv sync --directory apps/ai-service` |
 | `pnpm dev`: port 4200/3000/8000 in use | An old dev server is still running: `lsof -nP -iTCP:4200 -sTCP:LISTEN` and kill it |
 | `[api]` exits on startup: `password authentication failed for user "postgres"` | `API_DATABASE_URL` in `.env` must repeat `POSTGRES_USER` / `POSTGRES_PASSWORD` (the API migrates on boot, so it fails fast) |
-| `[ai]` exits on startup: `password authentication failed` or `connection … 5432 refused` | `AI_DATABASE_URL` must repeat `POSTGRES_USER` / `POSTGRES_PASSWORD` too, and Postgres must run (`pnpm stack:up`) |
+| `[ai]` or `pnpm kb:*` exits: `password authentication failed` or `connection … 5432 refused` | `AI_DATABASE_URL` must repeat `POSTGRES_USER` / `POSTGRES_PASSWORD` too (an `.env` from before M3a.1 lacks it, and the default has the default password), and Postgres must run (`pnpm stack:up`) |
 | Documents stay `queued` | The AI service's worker runs them one at a time; a re-index blocks uploads until it ends. With `JOBS_INPROCESS_WORKER=false` nothing runs them |
-| `pnpm kb:reindex` prints `kept` | The gate refused the build: a `test` metric dropped by more than 0.02, or a document has no stored original (listed) — `pnpm kb:backfill-originals`, upload it again, or `--force --reason "…"` |
+| `pnpm kb:reindex` prints `kept` | The gate refused the build: a `test` metric dropped by more than 0.02, or a document has no stored original (listed) — `pnpm kb:backfill-originals`, upload it again, or `--force --reason "…"` — which swaps in a build without the documents that had none |
 | `POST /api/documents` → 409 for a file that failed | Dedupe is by content (SHA-256), failed rows included: delete the failed document, then upload again |
 | `pnpm dev`: `[ai]` exits on startup with a Qdrant connection error | The AI service needs Qdrant at startup: `pnpm stack:up` first |
 | `[ai]` exits: `LLM_PROVIDER=openai_compat needs LLM_API_KEY and LLM_MODEL` | Set both in `.env` (OpenRouter key with a credit limit, model from [ADR-0005](../adr/0005-llm-access-and-model.md)), or `LLM_PROVIDER=fake` |

@@ -15,10 +15,19 @@ from ai_service.embeddings import Embedder, Reranker, Sparse
 from ai_service.ingest import Section, parents, parse
 
 Domain = Literal["db", "dev", "cloud", "devops", "mlops", "ai", "security", "architecture", "sre"]
+Priority = Literal["canonical", "normal", "low"]
+Lifecycle = Literal["active", "retired"]
+# A document's labels: NestJS owns them, chunks carry them in the payload (D48, D61).
+LABELS = ("domains", "topics", "lifecycle", "priority", "priority_topics")
 SPAN_KIND = "openinference.span.kind"
 COLLECTIONS = "kb__"  # every generation: `kb__{model}__{dim}` (P1) and `kb__v2__…` (D54)
 PREFETCH = 50  # candidates per side before fusion (D56)
 FUSION = "rrf:2:0.5"  # RRF with Qdrant's k = 2, the sparse side at half weight (ADR-0016)
+# Positions a priority moves a hit after reranking (D61), and how many of the question's nearest
+# sub-topics may match its scope; tuned on `dev` (M3a.7).
+BOOST: dict[Priority, int] = {"canonical": 3, "normal": 0, "low": -3}
+QUESTION_TOPICS = 2
+ACTIVE = models.FieldCondition(key="lifecycle", match=models.MatchValue(value="active"))
 tracer = trace.get_tracer(__name__)
 logger = logging.getLogger(__name__)
 
@@ -36,17 +45,20 @@ class Hit(BaseModel):
     domains: list[Domain]
     score: float
     text: str
+    priority: Priority = "normal"
+    priority_topics: list[str] = []
 
 
 class ExplainedHit(Hit):
     """`explain` mode of `/v1/search`: the matching chunk inside the section, and the section's
     rank among the fused candidates and the chunk's in the dense and the sparse top 50 (None: not
-    among them); its position is the reranked one."""
+    among them); its position is the reranked one, moved by `boost` positions (D61)."""
 
     chunk_text: str = ""
     fused_rank: int | None = None
     dense_rank: int | None = None
     sparse_rank: int | None = None
+    boost: int = 0
 
 
 class DocumentSection(BaseModel):
@@ -91,6 +103,7 @@ class KnowledgeBase:
         fusion: str = FUSION,
         reranker: Reranker | None = None,
         topics: dict[str, str] | None = None,
+        threshold: float | None = None,
     ) -> None:
         self.client = client
         self.embedder = embedder
@@ -101,7 +114,8 @@ class KnowledgeBase:
         self.sparse: Sparse = sparse  # for new collections; each one keeps its own (`sparse_of`)
         self.fusion = fusion  # `rrf:<k>:<sparse weight>` or `dbsf`
         self.reranker = reranker
-        self.topics = topics or {}  # `domain/topic` → description, for the chunk-topic fallback
+        self.topics = topics or {}  # `domain/topic` → description: chunk-topic fallback, boosts
+        self.threshold = threshold  # RETRIEVAL_SCORE_THRESHOLD: only hits above it get a boost
         self._topic_vectors: dict[str, list[float]] | None = None
         slug = re.sub(r"[^a-z0-9]+", "-", embedder.model_name.lower()).strip("-")
         self.model_key = f"__{slug}__{embedder.dim}"  # part of every collection name of this model
@@ -236,7 +250,9 @@ class KnowledgeBase:
         chunks = [(n, parent, c) for n, (parent, children) in enumerate(split) for c in children]
         texts = [f"{c.context}\n\n{c.text}" if c.context else c.text for _, _, c in chunks]
         dense = self.embedder.embed_passages(texts)
-        nearest = self._nearest_topics(dense, domains)
+        nearest = self._nearest_topics(
+            dense, [t for t in self.topics if t.split("/")[0] in domains]
+        )
         vectors: list[dict[str, models.Vector]] = [{"dense": vector} for vector in dense]
         if (sparse := self.sparse_of()) != "none":
             for named, vector in zip(
@@ -298,9 +314,10 @@ class KnowledgeBase:
             embedding_model=self.embedder.model_name,
         )
 
-    def _nearest_topics(self, vectors: list[list[float]], domains: list[Domain]) -> list[list[str]]:
-        """Per vector the sub-topic of `domains` with the most similar description (D60)."""
-        ids = [topic for topic in self.topics if topic.split("/")[0] in domains]
+    def _nearest_topics(
+        self, vectors: list[list[float]], ids: list[str], n: int = 1
+    ) -> list[list[str]]:
+        """Per vector the `n` sub-topics of `ids` with the most similar descriptions (D60, D61)."""
         if not ids:
             return [[] for _ in vectors]
         if self._topic_vectors is None:
@@ -308,8 +325,27 @@ class KnowledgeBase:
             embedded = self.embedder.embed_passages(described)
             self._topic_vectors = dict(zip(self.topics, embedded, strict=True))
         topics = unit(np.array([self._topic_vectors[topic] for topic in ids]))
-        best = (unit(np.array(vectors)) @ topics.T).argmax(axis=1)
-        return [[ids[i]] for i in best]
+        nearest = np.argsort(-(unit(np.array(vectors)) @ topics.T), axis=1)[:, :n]
+        return [[ids[i] for i in row] for row in nearest]
+
+    def question_topics(self, query: list[float]) -> list[str]:
+        """The sub-topics nearest to a question's vector; a priority's scope must hold one (D61)."""
+        return self._nearest_topics([query], list(self.topics), QUESTION_TOPICS)[0]
+
+    def _boosts(self, hits: list[Hit], query: list[float]) -> dict[str, int]:
+        """Positions a priority moves each hit (D61): only when its scope holds one of the
+        question's nearest sub-topics and the hit clears the threshold."""
+        scoped = [
+            hit
+            for hit in hits
+            if BOOST[hit.priority] and (self.threshold is None or hit.score >= self.threshold)
+        ]
+        if not scoped:
+            return {}
+        asked = set(self.question_topics(query))
+        return {
+            hit.chunk_id: BOOST[hit.priority] for hit in scoped if asked & {*hit.priority_topics}
+        }
 
     def search(
         self,
@@ -326,7 +362,9 @@ class KnowledgeBase:
         orders these candidates (D57). `score` is the reranker's, without one the cosine
         similarity: the threshold is calibrated on it (ADR-0004, ADR-0017); below it for the best
         hit, the search abstains with no hits. `passages` (HyDE, D58) add dense candidates to the
-        fusion; the reranker and the score still compare with `query`."""
+        fusion; the reranker and the score still compare with `query`. Priorities move hits after
+        reranking (D61), so a canonical one can rise into the top k; retired documents never
+        match."""
         with tracer.start_as_current_span(
             "search", attributes={SPAN_KIND: "RETRIEVER", "input.value": query}
         ):
@@ -336,7 +374,7 @@ class KnowledgeBase:
                 for key, values in (("domains", domains), ("doc_id", doc_ids))
                 if values
             ]
-            where = models.Filter(must=must)
+            where = models.Filter(must=[ACTIVE, *must])
             sides = [models.Prefetch(query=dense, using="dense", filter=where, limit=PREFETCH)]
             if (kind := self.sparse_of()) != "none":
                 sparse = self.embedder.embed_sparse([query], kind, query=True)[0]
@@ -360,13 +398,15 @@ class KnowledgeBase:
             for p in fused_points:
                 best.setdefault((p.payload or {}).get("parent_id") or str(p.id), p)
             points = list(best.values())
-            points = points[: max(top_k, self.reranker.candidates) if self.reranker else top_k]
+            # Room for a canonical hit to rise into the top k.
+            limit = top_k + BOOST["canonical"]
+            points = points[: max(limit, self.reranker.candidates) if self.reranker else limit]
             fused = {str(p.id): rank for rank, p in enumerate(points, 1)}
             chunk_texts = {str(p.id): (p.payload or {})["text"] for p in points}
             if self.reranker and points:
                 texts = list(chunk_texts.values())
                 scored = zip(self.reranker.scores(query, texts), points, strict=True)
-                ranked = sorted(scored, key=lambda pair: -pair[0])[:top_k]
+                ranked = sorted(scored, key=lambda pair: -pair[0])
                 points = [p.model_copy(update={"score": score}) for score, p in ranked]
             elif points:
                 ids = models.HasIdCondition(has_id=[p.id for p in points])
@@ -380,6 +420,9 @@ class KnowledgeBase:
                 scores = {p.id: p.score for p in cosine}
                 points = [p.model_copy(update={"score": scores[p.id]}) for p in points]
             hits: list[Hit] = [_hit(p) for p in points]
+            boosts = self._boosts(hits, dense)
+            moved = sorted(enumerate(hits), key=lambda pair: _moved(*pair, boosts))
+            hits = [hit for _, hit in moved][:top_k]
             if (
                 score_threshold is not None
                 and max((h.score for h in hits), default=0) < score_threshold
@@ -401,14 +444,15 @@ class KnowledgeBase:
                         fused_rank=fused[hit.chunk_id],
                         dense_rank=ranks[0].get(hit.chunk_id),
                         sparse_rank=ranks[1].get(hit.chunk_id) if len(ranks) > 1 else None,
+                        boost=boosts.get(hit.chunk_id, 0),
                     )
                     for hit in hits
                 ]
         return hits
 
     def documents(self, domains: list[Domain] | None = None) -> list[DocumentInfo]:
-        """Every ingested document by title."""
-        labels = _domains(domains)
+        """Every active document by title."""
+        labels = [*_domains(domains), ACTIVE]
         facet = self.client.facet(
             self.alias, "doc_id", facet_filter=models.Filter(must=labels), limit=10_000, exact=True
         )
@@ -420,7 +464,7 @@ class KnowledgeBase:
     def document(self, doc_id: UUID) -> DocumentInfo | None:
         first, _ = self.client.scroll(
             self.alias,
-            models.Filter(must=[_equals("doc_id", str(doc_id)), _equals("chunk_index", 0)]),
+            models.Filter(must=[_equals("doc_id", str(doc_id)), _equals("chunk_index", 0), ACTIVE]),
             limit=1,
         )
         if not first:
@@ -441,17 +485,13 @@ class KnowledgeBase:
             for index, hit in enumerate(first.values())
         ]
 
-    def update_labels(
-        self, doc_id: UUID, domains: list[Domain] | None, topics: list[str] | None
-    ) -> None:
-        """Payload update on every chunk of the document, no re-embedding (D48); in every
-        collection, so a rollback keeps the labels."""
+    def update_labels(self, doc_id: UUID, labels: dict[str, Any]) -> None:
+        """Payload update of `LABELS` on every chunk of the document, no re-embedding (D48, D61);
+        in every collection, so a rollback keeps the labels."""
         # shortcut: new domains keep the old domains' `chunk_topics` until `pnpm kb:reindex`;
-        # recompute them here once retrieval filters or boosts on them (M3a.7).
-        labels = {"domains": domains, "topics": topics}
-        payload = {key: value for key, value in labels.items() if value is not None}
-        for name in self.collections() if payload else []:
-            self.client.set_payload(name, payload, _of(doc_id), wait=True)
+        # recompute them here once retrieval filters or boosts on them.
+        for name in self.collections() if labels else []:
+            self.client.set_payload(name, labels, _of(doc_id), wait=True)
 
     def delete(self, doc_id: UUID) -> None:
         """From every collection, so a rollback cannot bring the document back."""
@@ -462,7 +502,7 @@ class KnowledgeBase:
         """Documents missing from `labels` leave this collection; the others take its labels."""
         for doc_id in first_chunks(self.client, self.alias):
             if doc_id in labels:
-                payload = {key: labels[doc_id][key] for key in ("domains", "topics")}
+                payload = {key: labels[doc_id][key] for key in LABELS}
                 self.client.set_payload(self.alias, payload, _of(doc_id), wait=True)
             else:
                 self.client.delete(self.alias, _of(doc_id), wait=True)
@@ -510,6 +550,13 @@ def _info(payload: dict[str, Any], chunk_counts: dict[str, int]) -> DocumentInfo
     return DocumentInfo.model_validate(
         {**payload, "chunk_count": chunk_counts.get(payload["doc_id"], 0)}
     )
+
+
+def _moved(position: int, hit: Hit, boosts: dict[str, int]) -> tuple[int, int]:
+    """Sort key: `boost` positions up (down if negative); a raised hit goes before the one it
+    meets, a lowered one after."""
+    boost = boosts.get(hit.chunk_id, 0)
+    return position - boost, -boost
 
 
 def _fusion(spec: str, sparse: list[bool]) -> models.FusionQuery | models.RrfQuery:

@@ -3,7 +3,7 @@
 from collections.abc import Iterator
 from pathlib import Path
 from typing import Any, cast
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import jwt
 import pytest
@@ -236,9 +236,63 @@ def test_only_taxonomy_topics_are_accepted(client: TestClient) -> None:
 
     ingested = ingest(client, "runbook.md", MARKDOWN, ["devops"], doc_id, ["devops/nope"])
     patched = client.patch(f"/v1/documents/{doc_id}/labels", json={"topics": ["sre/oncall"]})
+    scoped = client.patch(f"/v1/documents/{doc_id}/labels", json={"priority_topics": ["sre/x"]})
 
-    assert (ingested.status_code, patched.status_code) == (422, 422)  # before anything is stored
+    assert (ingested.status_code, patched.status_code, scoped.status_code) == (422, 422, 422)
     assert "devops/nope" in ingested.json()["detail"]
+
+
+def test_retired_documents_are_never_returned(client: TestClient) -> None:
+    runbook = ingest(client, "runbook.md", MARKDOWN, ["devops"]).json()["result"]["doc_id"]
+    handbook = ingest(client, "two-pages.pdf", PDF, ["sre"]).json()["result"]["doc_id"]
+    kb = kb_of(client)
+
+    retired = client.patch(f"/v1/documents/{runbook}/labels", json={"lifecycle": "retired"})
+    hits = search(client, "rollout undo")
+    listed, found = kb.documents(), kb.document(UUID(runbook))
+    client.patch(f"/v1/documents/{runbook}/labels", json={"lifecycle": "active"})
+
+    assert retired.status_code == 204
+    assert {h["doc_id"] for h in hits} == {handbook}
+    assert ([str(d.doc_id) for d in listed], found) == ([handbook], None)
+    assert search(client, "rollout undo")[0]["doc_id"] == runbook
+
+
+GUIDE = b"# Guide\n\n## Releases\nRollouts and rollbacks of a release.\n"
+RUNBOOK = b"# Runbook\n\n## Rollback\nRollouts and rollbacks of a release: kubectl rollout undo.\n"
+CANONICAL = {"priority": "canonical", "priority_topics": ["devops/deployment"]}
+UNMOVED = [("guide.md", 0), ("runbook.md", 0)]
+
+
+@pytest.mark.parametrize(
+    ("pinned", "labels", "threshold", "order"),
+    [
+        ("runbook.md", CANONICAL, 0.55, [("runbook.md", 3), ("guide.md", 0)]),
+        ("guide.md", {**CANONICAL, "priority": "low"}, 0.55, [("runbook.md", 0), ("guide.md", -3)]),
+        ("runbook.md", {**CANONICAL, "priority_topics": ["db/schema"]}, 0.55, UNMOVED),
+        ("runbook.md", CANONICAL, 0.8, UNMOVED),
+    ],
+    ids=["canonical rises", "low sinks", "other sub-topic", "below the threshold"],
+)
+def test_a_priority_moves_hits_on_its_sub_topics_above_the_threshold(
+    client: TestClient,
+    pinned: str,
+    labels: dict[str, Any],
+    threshold: float,
+    order: list[tuple[str, int]],
+) -> None:
+    files = {"guide.md": GUIDE, "runbook.md": RUNBOOK}
+    ids = {
+        name: ingest(client, name, data, ["devops"]).json()["result"]["doc_id"]
+        for name, data in files.items()
+    }
+    kb_of(client).threshold = threshold
+    question = "rollouts and rollbacks of a release"  # nearest: devops/deployment, devops/ci-cd
+
+    client.patch(f"/v1/documents/{ids[pinned]}/labels", json=labels)
+    hits = search(client, question, explain=True)
+
+    assert [(h["filename"], h["boost"]) for h in hits] == order
 
 
 def test_v1_routes_need_the_service_token(client: TestClient) -> None:

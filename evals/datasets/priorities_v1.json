@@ -1,0 +1,24 @@
+{
+  "runbook-rollback.md": { "priority": "canonical", "priority_topics": ["devops/deployment"] },
+  "runbook-incident-response.md": { "priority": "canonical", "priority_topics": ["sre/incidents"] },
+  "runbook-postgres-backup-restore.md": {
+    "priority": "canonical",
+    "priority_topics": ["db/backup-restore"]
+  },
+  "runbook-secret-rotation.md": {
+    "priority": "canonical",
+    "priority_topics": ["security/secrets"]
+  },
+  "runbook-embedding-model-swap.md": {
+    "priority": "canonical",
+    "priority_topics": ["mlops/model-swap"]
+  },
+  "runbook-azure-cost-guard.md": { "priority": "canonical", "priority_topics": ["cloud/cost"] },
+  "runbook-llm-provider-outage.md": { "priority": "canonical", "priority_topics": ["sre/outages"] },
+  "runbook-tls-zertifikat-erneuern.md": {
+    "priority": "canonical",
+    "priority_topics": ["security/certificates"]
+  },
+  "runbook-speicherplatz-voll.md": { "priority": "canonical", "priority_topics": ["sre/capacity"] },
+  "slo-handbook.pdf": { "priority": "canonical", "priority_topics": ["sre/slos"] }
+}

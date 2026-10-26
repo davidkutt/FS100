@@ -1025,6 +1025,27 @@
               "failed"
             ]
           },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "active",
+              "retired"
+            ]
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "canonical",
+              "normal",
+              "low"
+            ]
+          },
+          "priorityTopics": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "version": {
             "type": "integer",
             "minimum": -9007199254740991,
@@ -1076,6 +1097,9 @@
           "domains",
           "topics",
           "status",
+          "lifecycle",
+          "priority",
+          "priorityTopics",
           "version",
           "jobId",
           "error",
@@ -1113,6 +1137,27 @@
             "items": {
               "type": "string"
             }
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "canonical",
+              "normal",
+              "low"
+            ]
+          },
+          "priorityTopics": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "lifecycle": {
+            "type": "string",
+            "enum": [
+              "active",
+              "retired"
+            ]
           }
         }
       },

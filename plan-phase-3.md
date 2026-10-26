@@ -814,11 +814,56 @@ Deviations:
 
 ### M3a.7 — Lifecycle & priorities (~5 h)
 
-- [ ] Fields in NestJS and the payload; `PATCH` endpoints; documents UI (priority, scope, retire / activate); audit
-- [ ] Boost after reranking; canonical marker and conflict rule in the prompt; weights tuned on `dev`
-- [ ] Golden items per pinned topic; before/after on `test`
+- [x] Fields in NestJS and the payload; `PATCH` endpoints; documents UI (priority, scope, retire / activate); audit
+- [x] Boost after reranking; canonical marker and conflict rule in the prompt; weights tuned on `dev`
+- [x] Golden items per pinned topic; before/after on `test`
 
 **Acceptance:** demo step 5; retired documents are never returned (test).
+
+**Done 2026-10-26 — built and tested; on this corpus pinning costs more than it gains, so nothing is pinned by
+default.** `PATCH /api/documents/:id` takes `priority`, `priorityTopics` and `lifecycle` (`active` / `retired`),
+checks the topics against the taxonomy, relays them as labels (a payload update in every collection, carried
+over by a re-index) and writes the `documents.relabel` audit row. Every search, `list_sources` and `get_document`
+filter `lifecycle = active` (test: a retired document is never returned, an activated one is back). After
+reranking a `canonical` hit moves up 3 positions, a `low` one down 3, when one of the question's two nearest
+sub-topics is in the document's scope and the hit clears the threshold; canonical sources are marked in both
+prompts (`rag-system@2`, `agent-system@3`). The documents page has the priority and scope in the label dialog and
+Retire / Activate; the inspector shows `boost`.
+
+Measured with `evals/datasets/priorities_v1.json` — every runbook and the SLO handbook `canonical` for its main
+sub-topic — on one index each, with and without the pins:
+
+| Index | Split | hit@1 | hit@5 | MRR@10 | nDCG@10 | Items moved |
+|---|---|---|---|---|---|---|
+| plain (free) | `dev` | 0.83 → 0.83 | 1.00 → 1.00 | 0.917 → 0.917 | 0.924 → 0.924 | `r-038` up, `r-014` down |
+| plain | `test` | 0.70 → 0.70 | 0.95 → 0.95 | 0.783 → 0.787 | 0.809 → 0.810 | `r-002`, `r-015` up, `r-008` down |
+| contextual (0.043 USD) | `dev` | 0.77 → 0.73 | 1.00 → 1.00 | 0.872 → 0.856 | 0.897 → 0.884 | `r-014` down |
+| **contextual** (`m3a7-priorities`) | **`test`** | 0.85 → **0.80** | 1.00 → 1.00 | 0.902 → **0.877** | 0.889 → **0.872** | `r-008` down |
+
+Abstention is unchanged (scores are not touched). On `dev` every boost (1, 2, 3, 5, 10 positions) and every number
+of question sub-topics (1, 2, 3) gave the same overall numbers, so the boost stays at 3 (a canonical hit can rise
+from rank 8 into the chat's top 5) and two sub-topics (one never fired on `dev`, three routed 8 of 30 questions to
+`devops/deployment`). With contextual retrieval the runbooks already rank first for their own questions; what is
+left is displacement when routing is wrong: `r-014` (*"How long can chat be down … before we are out of
+budget?"*, SLO handbook) routes to `cloud/cost` and the cost-guard runbook moves above it; `r-008` (incident
+runbook) routes to `sre/outages` / `sre/slos`. Following the acceptance rule ("otherwise the boost is reverted"),
+the pins are data, not defaults: nothing is pinned, so retrieval is unchanged until an editor pins a document. Pin
+only where an outside or older document competes for the sub-topic (the curator's upstream pages, M3b.9), and
+check the pinned rows with `kb-eval retrieval --priorities`. The unpinned contextual numbers differ from
+`m3a6-contextual` (`test` nDCG@10 0.889 vs 0.85) because `kb-eval` writes new contexts per ingest (M3a.6); compare
+only within one index.
+
+Deviations:
+- The question's sub-topics come from its vector against the taxonomy descriptions (the D60 fallback, reused); the
+  router stays at domain level. No LLM call, no setting.
+- The boost moves **positions**, not scores: without a reranker the order is the fused one and the score the cosine
+  similarity, so a score boost would re-sort by cosine (undoing the fusion) and shift the threshold.
+- Golden items per pinned topic are the `retrieval_v1` questions routed to it (the report's **pinned** rows);
+  `retrieval_v1` stays frozen.
+- Demo step 5 waits for a CI runbook: the corpus has none (a document for M3a.9's `ci-failure-triage` or
+  `golden_v2`). The same works today with `runbook-rollback.md` → `devops/deployment`.
+- `low` is built and tested, not measured (no `low` pin in `priorities_v1`). The `app.documents` check allows
+  `active` / `retired`; `staged` comes with the curator (3b). Retire / activate is a relabel in the audit log.
 
 ### M3a.8 — Code-aware RAG (~12 h)
 

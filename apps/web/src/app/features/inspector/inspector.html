@@ -4,7 +4,8 @@
   Each section appears once, through its best-matching chunk; the chat gets the whole section.
   Ranks: rerank = position, fused = rank among the reranker's candidates, dense / sparse = the
   chunk's rank on that side (– = not in its top 50); the score is the reranker's, without one the
-  dense similarity.
+  dense similarity. A priority boost moves a hit by positions when the question is on the document's
+  priority sub-topics and the hit clears the chat's threshold.
 </p>
 
 <form class="card card-body shadow-sm mb-4" (ngSubmit)="search()">
@@ -68,6 +69,9 @@
                 }
                 fused {{ hit.fused_rank ?? '–' }} · dense {{ hit.dense_rank ?? '–' }} · sparse
                 {{ hit.sparse_rank ?? '–' }}
+                @if (hit.boost) {
+                  · boost {{ hit.boost > 0 ? '+' : '' }}{{ hit.boost }}
+                }
               </span>
               <strong>{{ hit.title }}</strong>
               <span class="small text-body-secondary">
@@ -81,6 +85,11 @@
               </span>
               @for (domain of hit.domains; track domain) {
                 <span class="badge text-bg-light border">{{ domain }}</span>
+              }
+              @if (hit.priority !== 'normal') {
+                <span class="badge text-bg-primary">
+                  {{ hit.priority }}: {{ hit.priority_topics?.join(', ') }}
+                </span>
               }
             </div>
             <p class="source-text small mt-2 mb-0">{{ hit.chunk_text || hit.text }}</p>
