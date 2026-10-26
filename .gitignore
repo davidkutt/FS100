@@ -35,6 +35,9 @@ htmlcov/
 # --- evals (results are artifacts, datasets are versioned) ---
 evals/runs/
 
+# --- `pnpm stack:backup` dumps ---
+backups/
+
 # --- Playwright ---
 test-results/
 playwright-report/

@@ -594,6 +594,7 @@
   },
   "users": [
     {
+      "id": "fa2b03b3-0a56-4532-9995-a98f13c42556",
       "username": "alice",
       "enabled": true,
       "emailVerified": true,
@@ -612,6 +613,7 @@
       ]
     },
     {
+      "id": "d872d11e-9bf1-45ee-96a8-3f3976e71ecf",
       "username": "bob",
       "enabled": true,
       "emailVerified": true,
@@ -630,6 +632,7 @@
       ]
     },
     {
+      "id": "dcbb53ac-25b1-48dd-b05b-967e5414e23d",
       "username": "carol",
       "enabled": true,
       "emailVerified": true,
