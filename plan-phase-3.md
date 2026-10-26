@@ -1,5 +1,8 @@
 # plan-phase-3.md — Phase 3: Retrieval Quality, Skills, Evaluation, Safety & Cost
 
+> **Re-planned 2026-10-26:** done through M3a.7. M3a.8–M3a.10 and all of M3b are parked or taken over by
+> [plan-daily-use.md](plan-daily-use.md) (M3a.9 → M3c.3, M3b.7 → M3c.4, the feedback part of M3b.3 → M3c.2).
+
 > **Project (working title):** `kb-agent` — an assistant for the **"Dev of the future"**.
 > **Document scope:** Phase 3 of 6 (3a + 3b) · **Status:** Draft v1.1 · **Updated:** 2026-10-23 · builds on `plan.md` v2,
 > `plan-phase-2.md` v1.1 and `roadmap-phases-3-6.md` v1.2

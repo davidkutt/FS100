@@ -14,8 +14,10 @@ prompt is a **versioned file** whose version and hash land on messages, traces a
 user has a **daily cost cap**. Agent behaviour is measured too: task success, tool selection, cost and
 latency on fixture MCP servers, plus a red-team seed set.
 
-The project is built in six phases: [plan.md](plan.md) (Phase 1, done except the postponed Azure spike)
-and [plan-phase-2.md](plan-phase-2.md) (Phase 2, M2.0 – M2.7 done; M2.8 code-complete).
+Phases 1 and 2 are done, apart from the postponed Azure spike and the M2.8 hand check. Phase 3a (retrieval
+quality) is done through M3a.7. **Since 2026-10-26 FS100 is being turned into a daily-use tool**: personal
+Markdown notes as the corpus, used from Claude Code / VS Code and the web UI, locally on a 16 GB M1
+([plan-daily-use.md](plan-daily-use.md)). The Kubernetes, Azure and MLOps phases are parked.
 
 ---
 
@@ -190,6 +192,7 @@ steps 3–4 also need `GITHUB_REPO`, `GITHUB_SANDBOX_REPO` in `.env` and two fin
 | `pnpm stack:up:full` | Infra **and** the apps as containers (Mode B), rebuilt when changed |
 | `pnpm stack:ps` / `stack:logs [service]` | Status / logs of the infra |
 | `pnpm stack:reset` | Stop the infra and **delete** its volumes |
+| `pnpm stack:backup` | Dump all Postgres databases to `backups/` ([startup guide §7](docs/setup/startup.md#backup-and-restore)) |
 | `pnpm mem` | Memory per app (RSS incl. child processes) and per container — the 16 GB budget of plan-phase-3.md D50 |
 | `pnpm lint` | angular-eslint · oxlint · prettier check · ruff · pyright |
 | `pnpm test` | Vitest (web, api) · pytest (ai-service) |
@@ -277,10 +280,9 @@ plan-phase-2.md   Phase 2 plan (agent, MCP, approvals)
 |---|---|
 | 1 | Foundation + RAG slice + eval + tracing — *M1.0 – M1.6 done; M1.7 Azure spike postponed (local only for now)* |
 | **2** | Agent loop from scratch, agentic RAG, MCP server + client, domain tools, agent evals — *M2.0 – M2.7 done; M2.8 external MCP clients code-complete* |
-| 3 | Hybrid search, reranking, code-aware RAG, guardrails, routing + semantic cache, memory — *M3a.0 – M3a.3 done* |
-| 4 | Kubernetes: Helm, k3d, GitOps-ready manifests |
-| 5 | Azure: Terraform, ACR, AKS / Container Apps, Key Vault, OIDC from GitHub |
-| 6 | MLOps & local models: fine-tuning with MLflow, Ollama/MLX, system card |
+| 3a | Hybrid search, reranking, query transformation, Docling, contextual retrieval, priorities — *M3a.0 – M3a.7 done* |
+| **3c** | **Daily use**: stabilize, notes and URLs as sources, feedback → eval items, skills, long-term memory ([plan-daily-use.md](plan-daily-use.md)) |
+| — | *Parked:* code-aware RAG, judge gate, ACL, guardrails, cache, curator; Kubernetes, Azure, MLOps (plan-phase-4/5/6.md) |
 
 Phase 1 milestones: M1.0 repo & tooling → M1.1 infra + auth walking skeleton → M1.2 ingestion, retrieval,
 eval → M1.3 grounded chat → M1.4 documents + relays → M1.5 UI → M1.6 containers, CI, e2e · M1.7 Azure
