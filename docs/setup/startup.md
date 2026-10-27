@@ -241,8 +241,9 @@ chat (agent mode).
 
 External clients get the read tools (`search_knowledge_base`, `get_document`, `list_sources`) with your roles.
 The server advertises only `kb:read`, so `ingest_url` fails with `insufficient_scope: needs kb:write` — add
-documents in the app. Tokens live 5 minutes and the client refreshes them; after 30 minutes idle or 10 hours
-it asks you to log in again. Not supported: Claude Desktop and claude.ai connectors (they connect from
+documents in the app. Tokens live 5 minutes and the client refreshes them. Claude Code asks for
+`offline_access`, so it stays logged in until it goes unused for 30 days (Keycloak's default). A client without
+it asks you to log in again after 30 minutes idle or 10 hours. Not supported: Claude Desktop and claude.ai connectors (they connect from
 Anthropic's cloud, which cannot reach `localhost`) and ChatGPT (Keycloak does not parse its metadata document).
 
 ## 5. Quality checks
@@ -411,6 +412,7 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | `pnpm stack:up:full` waits for minutes on `ai-service` | First start downloads the embedding model into the volume: `pnpm stack:logs ai-service` |
 | Angular shows stale output | `rm -rf apps/web/.angular` and restart |
 | Claude Code / VS Code: Keycloak shows an error (e.g. `Invalid scopes: kb:read`) instead of the login form | The realm predates M2.8: recreate Keycloak's database ([§7](#changing-the-keycloak-realm)). Otherwise check `pnpm stack:logs keycloak` — Keycloak must reach claude.ai / vscode.dev |
+| Claude Code `/mcp`: still `needs authentication` after the browser login, with `Offline tokens not allowed for the user or client` | The user lacks the realm role `offline_access` (seed users of a realm imported before 2026-10-27). In the admin console: realm **kb** → Users → the user → Role mapping → Assign role → `offline_access`, then *Authenticate* again |
 | Keycloak: every login fails with 500 `Condition with provider ID client-id-uri not found` | Keycloak runs without `--features=cimd,resource-indicators` (ADR-0014); keep them in the Compose `command` |
 | Login page: "Cookie not found" | Use `http://localhost:…`, not `127.0.0.1` — cookies and redirect URIs are bound to `localhost` |
 | Want a clean slate | `pnpm stack:reset`, `rm -rf node_modules apps/*/node_modules apps/ai-service/.venv`, then the steps in §1 |

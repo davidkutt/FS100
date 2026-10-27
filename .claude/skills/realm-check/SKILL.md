@@ -25,7 +25,7 @@ This recipe never touches it. Scratch files go to the session scratchpad (`$S`).
    `aud=kb-api`, `resource_access.kb-api.roles=[ingest-on-behalf]`.
    CIMD (Keycloak fetches the real metadata documents, so it needs internet):
    `.claude/skills/realm-check/cimd-login.sh carol | python3 .claude/skills/realm-check/claims.py` (Claude Code,
-   `kb:read`) → `aud=http://localhost:8000/mcp`, `kb:read`, roles `[viewer]`; VS Code:
+   `kb:read offline_access`) → `aud=http://localhost:8000/mcp`, `kb:read`, roles `[viewer, offline_access]`; VS Code:
    `cimd-login.sh bob https://vscode.dev/oauth/client-metadata.json http://127.0.0.1:33418/ "kb:read kb:write"`.
    A wrong 5th arg (`resource`), a redirect URI not in the document or a `client_id` on another host →
    `authorize refused: 400`. The full table is in ADR-0014.
@@ -55,6 +55,9 @@ This recipe never touches it. Scratch files go to the session scratchpad (`$S`).
 
 ## Pitfalls
 
+- Imported users don't get the default role, so they lack `offline_access`. Claude Code's code exchange then
+  fails with `Offline tokens not allowed for the user or client`. Seed users therefore list `offline_access` in
+  `realmRoles`. Don't use `default-roles-kb` instead: its `account` roles add `account` to every `aud`.
 - A `clientScopes` list in the import replaces Keycloak's built-in scopes: tokens lose `sub`, roles and
   `preferred_username` unless `basic`, `roles`, `profile` … are in the file (they are; keep them).
 - A client with `optionalClientScopes` but no `defaultClientScopes` gets no default scopes at all.

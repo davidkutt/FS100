@@ -609,7 +609,8 @@
         }
       ],
       "realmRoles": [
-        "admin"
+        "admin",
+        "offline_access"
       ]
     },
     {
@@ -628,7 +629,8 @@
         }
       ],
       "realmRoles": [
-        "editor"
+        "editor",
+        "offline_access"
       ]
     },
     {
@@ -647,7 +649,8 @@
         }
       ],
       "realmRoles": [
-        "viewer"
+        "viewer",
+        "offline_access"
       ]
     },
     {
