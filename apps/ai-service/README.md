@@ -80,6 +80,18 @@ reuses them (free and reproducible; contexts differ from run to run); the job re
 report record the cost of new calls per document (~0.035 USD for the sample corpus with
 `openai/gpt-6-luna`).
 
+**Lifecycle and priorities (D61, M3a.7):** NestJS owns `lifecycle` (`active` / `retired`), `priority`
+(`canonical` / `normal` / `low`) and `priority_topics` (taxonomy ids) and relays changes to
+`PATCH /v1/documents/{doc_id}/labels`: a payload update in every collection, which a re-index carries over.
+Every search filters `lifecycle = active`, so `list_sources` and `get_document` miss retired documents too.
+After reranking, a hit of a `canonical` document moves up 3 positions and one of a `low` document down 3 —
+only when one of the question's two nearest sub-topics (its vector against the taxonomy descriptions) is in
+the document's scope and the hit clears `RETRIEVAL_SCORE_THRESHOLD`. The top `top_k + 3` candidates are
+scored, so a canonical hit can rise into the top k; scores stay as they are, so the threshold holds.
+`/v1/search` with `explain` returns the shift as `boost`. Canonical sources reach the LLM as
+`<source n="…" canonical="devops/ci-cd">` with a rule to follow them when sources disagree
+(`rag-system@2`, `agent-system@3`).
+
 **Re-index (D55, ADR-0015):** `pnpm kb:backfill-originals` stores the originals of documents indexed
 before Phase 3 (found in `data/sample-docs/` by SHA-256; the rest are listed for re-upload).
 `pnpm kb:reindex [--force --reason "…"]` queues the job for the running service's worker and prints the

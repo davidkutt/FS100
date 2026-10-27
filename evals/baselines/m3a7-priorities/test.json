@@ -1,0 +1,762 @@
+{
+  "dataset": "retrieval_v1-test",
+  "model": "BAAI/bge-m3",
+  "dim": 1024,
+  "chunk_size": 1000,
+  "chunk_overlap": 150,
+  "parent_size": 2000,
+  "sparse": "bm25-english",
+  "fusion": "rrf:2:0.5",
+  "rerank": "none",
+  "strategy": "plain",
+  "contextual": ["db", "dev", "cloud", "devops", "mlops", "ai", "security", "architecture", "sre"],
+  "context_cost_usd": {
+    "fs100-readme.md": 0.001370225,
+    "fs100-plan.md": 0.023259875000000003,
+    "adr-0001-monorepo-and-pnpm.md": 0.0008969000000000001,
+    "adr-0002-ai-layer-in-python.md": 0.00062384,
+    "adr-0003-embeddings-in-process.md": 0.000642365,
+    "setup-installation.md": 0.00315245,
+    "setup-startup.md": 0.002648335,
+    "runbook-rollback.md": 0.001565025,
+    "runbook-incident-response.md": 0.0009744999999999999,
+    "runbook-postgres-backup-restore.md": 0.0009541,
+    "runbook-secret-rotation.md": 0.0008143,
+    "runbook-embedding-model-swap.md": 0.0011193,
+    "runbook-azure-cost-guard.md": 0.0010731000000000002,
+    "runbook-llm-provider-outage.md": 0.00100875,
+    "runbook-tls-zertifikat-erneuern.md": 0.0012320499999999997,
+    "runbook-speicherplatz-voll.md": 0.000827075,
+    "slo-handbook.pdf": 0.0011019250000000001
+  },
+  "priorities": "priorities_v1",
+  "documents": 17,
+  "chunks": 218,
+  "ingest_s": 464.49327904201346,
+  "created_at": "2026-10-26T20:11:30+00:00",
+  "overall": {
+    "n": 20.0,
+    "hit@1": 0.8,
+    "hit@5": 1.0,
+    "mrr@10": 0.8766666666666667,
+    "ndcg@10": 0.8720437236214793,
+    "p50_ms": 59.64170899824239,
+    "p95_ms": 67.36033401102759,
+    "usd_per_query": 0.0,
+    "context_chars": 3416.3333333333335
+  },
+  "by_domain": {
+    "ai": {
+      "n": 3.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 0.8710490642551528
+    },
+    "architecture": {
+      "n": 3.0,
+      "hit@1": 0.3333333333333333,
+      "hit@5": 1.0,
+      "mrr@10": 0.5666666666666667,
+      "ndcg@10": 0.6673508734668923
+    },
+    "cloud": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "db": {
+      "n": 3.0,
+      "hit@1": 0.6666666666666666,
+      "hit@5": 1.0,
+      "mrr@10": 0.8333333333333334,
+      "ndcg@10": 0.85714283467137
+    },
+    "dev": {
+      "n": 2.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 0.9087647951769722
+    },
+    "devops": {
+      "n": 5.0,
+      "hit@1": 0.8,
+      "hit@5": 1.0,
+      "mrr@10": 0.8666666666666667,
+      "ndcg@10": 0.8754430630676099
+    },
+    "mlops": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "security": {
+      "n": 3.0,
+      "hit@1": 0.6666666666666666,
+      "hit@5": 1.0,
+      "mrr@10": 0.7333333333333334,
+      "ndcg@10": 0.8102080387955224
+    },
+    "sre": {
+      "n": 6.0,
+      "hit@1": 0.6666666666666666,
+      "hit@5": 1.0,
+      "mrr@10": 0.8055555555555556,
+      "ndcg@10": 0.8551549589285763
+    }
+  },
+  "by_lang": {
+    "de": {
+      "n": 6.0,
+      "hit@1": 0.8333333333333334,
+      "hit@5": 1.0,
+      "mrr@10": 0.8888888888888888,
+      "ndcg@10": 0.8657908176153323
+    },
+    "en": {
+      "n": 14.0,
+      "hit@1": 0.7857142857142857,
+      "hit@5": 1.0,
+      "mrr@10": 0.8714285714285714,
+      "ndcg@10": 0.8747235404812567
+    }
+  },
+  "by_type": {
+    "PDF": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "cross-language": {
+      "n": 4.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 0.9236862264229985
+    },
+    "direct lookup": {
+      "n": 8.0,
+      "hit@1": 0.875,
+      "hit@5": 1.0,
+      "mrr@10": 0.9166666666666666,
+      "ndcg@10": 0.9375
+    },
+    "multi-chunk": {
+      "n": 4.0,
+      "hit@1": 0.5,
+      "hit@5": 1.0,
+      "mrr@10": 0.675,
+      "ndcg@10": 0.6537999532915338
+    },
+    "paraphrase": {
+      "n": 2.0,
+      "hit@1": 0.5,
+      "hit@5": 1.0,
+      "mrr@10": 0.75,
+      "ndcg@10": 0.8154648767857288
+    },
+    "whole document": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    }
+  },
+  "exact_terms": {
+    "n": 3.0,
+    "hit@1": 0.6666666666666666,
+    "hit@5": 1.0,
+    "mrr@10": 0.7777777777777778,
+    "ndcg@10": 0.7725098634513148
+  },
+  "by_topic": {
+    "cloud/cost": {
+      "n": 1.0,
+      "hit@1": 0.0,
+      "hit@5": 1.0,
+      "mrr@10": 0.3333333333333333,
+      "ndcg@10": 0.5
+    },
+    "db/backup-restore": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "devops/deployment": {
+      "n": 4.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 0.9693038288345124
+    },
+    "mlops/model-swap": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "security/certificates": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "security/secrets": {
+      "n": 2.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "sre/capacity": {
+      "n": 2.0,
+      "hit@1": 0.5,
+      "hit@5": 1.0,
+      "mrr@10": 0.6666666666666666,
+      "ndcg@10": 0.75
+    },
+    "sre/incidents": {
+      "n": 1.0,
+      "hit@1": 1.0,
+      "hit@5": 1.0,
+      "mrr@10": 1.0,
+      "ndcg@10": 1.0
+    },
+    "sre/outages": {
+      "n": 2.0,
+      "hit@1": 0.5,
+      "hit@5": 1.0,
+      "mrr@10": 0.75,
+      "ndcg@10": 0.7540725344547534
+    },
+    "sre/slos": {
+      "n": 2.0,
+      "hit@1": 0.5,
+      "hit@5": 1.0,
+      "mrr@10": 0.75,
+      "ndcg@10": 0.8154648767857288
+    }
+  },
+  "threshold": 0.5804649329298747,
+  "threshold_balanced_accuracy": 0.925,
+  "checked_threshold": 0.55,
+  "checked_balanced_accuracy": 0.825,
+  "items": [
+    {
+      "id": "r-001",
+      "question": "How do I roll back a Kubernetes deployment to a specific earlier revision?",
+      "lang": "en",
+      "domains": ["devops"],
+      "type": "direct lookup",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.7656216518231922,
+      "context_chars": 1848,
+      "latency_ms": 63.848082994809374,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › Rollback on Kubernetes (0.766)",
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › When to use this runbook (0.587)",
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › Decide (0.638)"
+      ],
+      "topics": ["devops/deployment", "db/migrations"]
+    },
+    {
+      "id": "r-002",
+      "question": "Wie setze ich ein fehlerhaftes Deployment auf die vorherige Version zurück?",
+      "lang": "de",
+      "domains": ["devops"],
+      "type": "cross-language",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 2,
+      "gains": [1, 0, 0, 1, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.7279276652361077,
+      "context_chars": 2141,
+      "latency_ms": 65.77812499017455,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › Rollback on Kubernetes (0.728)",
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › Decide (0.692)",
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › When to use this runbook (0.612)"
+      ],
+      "topics": ["devops/deployment", "sre/outages"]
+    },
+    {
+      "id": "r-003",
+      "question": "Why can we usually go back to the previous release without reverting the schema?",
+      "lang": "en",
+      "domains": ["devops", "db"],
+      "type": "paraphrase",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6174540602768719,
+      "context_chars": 2061,
+      "latency_ms": 58.49795800168067,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › Database migrations (0.617)",
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › When to use this runbook (0.574)",
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › Rollback on Kubernetes (0.585)"
+      ],
+      "topics": ["db/migrations", "devops/deployment"]
+    },
+    {
+      "id": "r-007",
+      "question": "Wie oft müssen wir bei einem SEV1 Statusupdates schicken?",
+      "lang": "de",
+      "domains": ["sre"],
+      "type": "cross-language",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6248665308594994,
+      "context_chars": 2148,
+      "latency_ms": 52.512166992528364,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-incident-response.md § Runbook: Incident response › Severity levels (0.625)",
+        "runbook-tls-zertifikat-erneuern.md § Runbook: TLS-Zertifikat erneuern › Nach einem Ausfall durch ein abgelaufenes Zertifikat (0.576)",
+        "runbook-incident-response.md § Runbook: Incident response › Postmortem (0.558)"
+      ],
+      "topics": ["sre/monitoring", "sre/slos"]
+    },
+    {
+      "id": "r-008",
+      "question": "How soon after an outage does the written analysis have to be done?",
+      "lang": "en",
+      "domains": ["sre"],
+      "type": "paraphrase",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6111011677920488,
+      "context_chars": 1702,
+      "latency_ms": 57.70766601199284,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-llm-provider-outage.md § Runbook: LLM provider errors and outages › Afterwards (0.611)",
+        "runbook-incident-response.md § Runbook: Incident response › Postmortem (0.583)",
+        "runbook-llm-provider-outage.md § Runbook: LLM provider errors and outages › Symptoms (0.553)"
+      ],
+      "topics": ["sre/outages", "sre/slos"]
+    },
+    {
+      "id": "r-009",
+      "question": "When is an incident considered resolved?",
+      "lang": "en",
+      "domains": ["sre"],
+      "type": "direct lookup",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6570646903225914,
+      "context_chars": 1486,
+      "latency_ms": 43.55704100453295,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-incident-response.md § Runbook: Incident response › Closing an incident (0.657)",
+        "runbook-incident-response.md § Runbook: Incident response › Postmortem (0.564)",
+        "runbook-incident-response.md § Runbook: Incident response › Severity levels (0.540)"
+      ],
+      "topics": ["sre/incidents", "architecture/service-boundaries"]
+    },
+    {
+      "id": "r-013",
+      "question": "Where are the SLIs measured — inside the AI service or closer to the user?",
+      "lang": "en",
+      "domains": ["sre"],
+      "type": "PDF",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6578803498558328,
+      "context_chars": 6068,
+      "latency_ms": 67.01225001597777,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "slo-handbook.pdf § p1 (0.658)",
+        "slo-handbook.pdf § 7. Review cadence (0.576)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › Changelog v1 → v2 (0.587)"
+      ],
+      "topics": ["ai/observability", "ai/llm-providers"]
+    },
+    {
+      "id": "r-015",
+      "question": "Ein Server meldet 'no space left on device' — was prüfe ich zuerst?",
+      "lang": "de",
+      "domains": ["sre", "devops"],
+      "type": "direct lookup",
+      "exact_term": true,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6404300522650366,
+      "context_chars": 1948,
+      "latency_ms": 65.86379199870862,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-speicherplatz-voll.md § Runbook: Speicherplatz voll › Symptome (0.640)",
+        "runbook-speicherplatz-voll.md § Runbook: Speicherplatz voll › Schnelle Entlastung (0.583)",
+        "runbook-speicherplatz-voll.md § Runbook: Speicherplatz voll › Ursache finden (0.593)"
+      ],
+      "topics": ["sre/capacity", "cloud/cost"]
+    },
+    {
+      "id": "r-018",
+      "question": "Wie lange werden die nächtlichen Datenbank-Backups aufbewahrt?",
+      "lang": "de",
+      "domains": ["db"],
+      "type": "cross-language",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6945915213512206,
+      "context_chars": 1804,
+      "latency_ms": 59.39604199375026,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-postgres-backup-restore.md § Runbook: Postgres backup and restore › Backup policy (0.695)",
+        "runbook-postgres-backup-restore.md § Runbook: Postgres backup and restore › Restore drill (0.579)",
+        "runbook-postgres-backup-restore.md § Runbook: Postgres backup and restore › Restore into a scratch database (0.554)"
+      ],
+      "topics": ["db/backup-restore", "security/secrets"]
+    },
+    {
+      "id": "r-022",
+      "question": "Which ORM does the API use for its database, and why not Prisma?",
+      "lang": "en",
+      "domains": ["db", "architecture"],
+      "type": "multi-chunk",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 2,
+      "gains": [0, 1, 0, 0, 0, 0, 0, 0, 1, 0],
+      "top1_score": 0.5308393990308957,
+      "context_chars": 6798,
+      "latency_ms": 63.3829589933157,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 5. Architecture (Phase 1) (0.531)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 3. Decisions (0.486)",
+        "adr-0002-ai-layer-in-python.md § ADR-0002: All AI code lives in a Python service; NestJS is the product API › Alternatives considered (0.498)"
+      ],
+      "topics": ["dev/frameworks", "db/schema"]
+    },
+    {
+      "id": "r-025",
+      "question": "How often is the OpenRouter key rotated?",
+      "lang": "en",
+      "domains": ["security"],
+      "type": "direct lookup",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6483626463654624,
+      "context_chars": 1468,
+      "latency_ms": 60.15833301353268,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-secret-rotation.md § Runbook: Rotate secrets and API keys › Rotation schedule (0.648)",
+        "runbook-secret-rotation.md § Runbook: Rotate secrets and API keys › LLM provider key (0.618)",
+        "runbook-secret-rotation.md § Runbook: Rotate secrets and API keys › Zero-downtime order of operations (0.582)"
+      ],
+      "topics": ["security/secrets", "security/identity-access"]
+    },
+    {
+      "id": "r-027",
+      "question": "Die automatische Zertifikatserneuerung durch cert-manager ist fehlgeschlagen. Wie gehe ich vor?",
+      "lang": "de",
+      "domains": ["security", "devops"],
+      "type": "direct lookup",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6832334256658978,
+      "context_chars": 1762,
+      "latency_ms": 74.03858299949206,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-tls-zertifikat-erneuern.md § Runbook: TLS-Zertifikat erneuern › Automatische Erneuerung mit cert-manager reparieren (0.683)",
+        "runbook-tls-zertifikat-erneuern.md § Runbook: TLS-Zertifikat erneuern › Wann dieses Runbook gilt (0.585)",
+        "runbook-tls-zertifikat-erneuern.md § Runbook: TLS-Zertifikat erneuern › Manuelle Erneuerung (0.651)"
+      ],
+      "topics": ["security/certificates", "dev/toolchain"]
+    },
+    {
+      "id": "r-028",
+      "question": "Which token audience does the AI service accept, and who obtains that token?",
+      "lang": "en",
+      "domains": ["security", "architecture"],
+      "type": "multi-chunk",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 2,
+      "gains": [0, 0, 0, 0, 1, 0, 0, 1, 0, 0],
+      "top1_score": 0.6164317290467012,
+      "context_chars": 6133,
+      "latency_ms": 59.34100001468323,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "setup-startup.md § Startup guide — run FS100 locally › 4. Check that everything works (0.616)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 3. Decisions (0.584)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 7. Contracts (draft — generated OpenAPI/JSON Schema is authoritative) › 7.7 Keycloak realm `kb` (0.504)"
+      ],
+      "topics": ["ai/agents", "ai/observability"]
+    },
+    {
+      "id": "r-033",
+      "question": "The LLM provider answers with HTTP 402 — what does that mean?",
+      "lang": "en",
+      "domains": ["ai", "sre"],
+      "type": "direct lookup",
+      "exact_term": true,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.7044939758765721,
+      "context_chars": 1526,
+      "latency_ms": 59.64170899824239,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-llm-provider-outage.md § Runbook: LLM provider errors and outages › Triage by status code (0.704)",
+        "runbook-llm-provider-outage.md § Runbook: LLM provider errors and outages › Symptoms (0.673)",
+        "runbook-llm-provider-outage.md § Runbook: LLM provider errors and outages › Switch the provider (0.590)"
+      ],
+      "topics": ["ai/llm-providers", "security/ai-security"]
+    },
+    {
+      "id": "r-035",
+      "question": "Which spans should a chat request produce in Phoenix?",
+      "lang": "en",
+      "domains": ["ai"],
+      "type": "multi-chunk",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 2,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5568178417505399,
+      "context_chars": 6371,
+      "latency_ms": 49.74716599099338,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 8. Milestones and tasks › M1.3 — AI service: grounded chat (~8 h) (0.557)",
+        "setup-startup.md § Startup guide — run FS100 locally › 4. Check that everything works (0.524)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 10. Definition of Done (Phase 1) (0.440)"
+      ],
+      "topics": ["db/performance", "ai/observability"]
+    },
+    {
+      "id": "r-037",
+      "question": "In which phase does embedding fine-tuning with MLflow happen?",
+      "lang": "en",
+      "domains": ["mlops"],
+      "type": "multi-chunk",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 2,
+      "gains": [1, 1, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5804649329298747,
+      "context_chars": 5339,
+      "latency_ms": 63.847375015029684,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 13. AI technology map (learning roadmap) › 13.4 LLMOps / MLOps (0.580)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 0. Roadmap context (0.554)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 8. Milestones and tasks › M1.6 — Containers, CI, e2e, docs (~10 h) (0.578)"
+      ],
+      "topics": ["mlops/fine-tuning", "mlops/model-swap"]
+    },
+    {
+      "id": "r-041",
+      "question": "Why should the vCPU quota be checked early?",
+      "lang": "en",
+      "domains": ["cloud"],
+      "type": "direct lookup",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6963366376504518,
+      "context_chars": 2370,
+      "latency_ms": 55.900000006658956,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-azure-cost-guard.md § Runbook: Azure cost guard › Quota (0.696)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 8. Milestones and tasks › M1.7 — Azure readiness spike (mandatory, ~4 h, week 2) (0.599)",
+        "runbook-embedding-model-swap.md § Runbook: Swap the embedding model › Pitfalls (0.536)"
+      ],
+      "topics": ["sre/capacity", "dev/code-quality"]
+    },
+    {
+      "id": "r-042",
+      "question": "Why does all AI code live in Python rather than in the NestJS API?",
+      "lang": "en",
+      "domains": ["architecture", "ai"],
+      "type": "whole document",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.6500238096067679,
+      "context_chars": 4224,
+      "latency_ms": 64.70220800838433,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "adr-0002-ai-layer-in-python.md § ADR-0002: All AI code lives in a Python service; NestJS is the product API (0.647)",
+        "adr-0002-ai-layer-in-python.md § ADR-0002: All AI code lives in a Python service; NestJS is the product API › Alternatives considered (0.650)",
+        "adr-0002-ai-layer-in-python.md § ADR-0002: All AI code lives in a Python service; NestJS is the product API › Decision (0.649)"
+      ],
+      "topics": ["dev/frameworks", "architecture/api-design"]
+    },
+    {
+      "id": "r-046",
+      "question": "Which tools must not be installed globally?",
+      "lang": "en",
+      "domains": ["dev"],
+      "type": "direct lookup",
+      "exact_term": false,
+      "answerable": true,
+      "relevant_count": 1,
+      "gains": [1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5865990310109398,
+      "context_chars": 4282,
+      "latency_ms": 45.86983300396241,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "setup-installation.md § Installation guide — local development toolchain › 1. What you need — and what you don't (0.587)",
+        "setup-installation.md § Installation guide — local development toolchain › 2. macOS (Apple Silicon) › 2.1 Base tools (0.523)",
+        "setup-installation.md § Installation guide — local development toolchain › 2. macOS (Apple Silicon) › 2.3 pnpm via Corepack (0.468)"
+      ],
+      "topics": ["dev/toolchain", "devops/deployment"]
+    },
+    {
+      "id": "r-047",
+      "question": "Was mache ich bei ERR_PNPM_IGNORED_BUILDS?",
+      "lang": "de",
+      "domains": ["dev"],
+      "type": "cross-language",
+      "exact_term": true,
+      "answerable": true,
+      "relevant_count": 2,
+      "gains": [1, 0, 0, 0, 0, 0, 1, 0, 0, 0],
+      "top1_score": 0.5219246501465566,
+      "context_chars": 5211,
+      "latency_ms": 63.474458002019674,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "setup-installation.md § Installation guide — local development toolchain › 9. Troubleshooting the installation (0.522)",
+        "fs100-readme.md § FS100 — the FULL FULL stack › Commands (0.519)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 7. Contracts (draft — generated OpenAPI/JSON Schema is authoritative) › 7.6 Golden-set item (`evals/datasets/retrieval_v1.jsonl`) (0.405)"
+      ],
+      "topics": ["sre/monitoring", "dev/toolchain"]
+    },
+    {
+      "id": "u-002",
+      "question": "Wie richte ich den Terraform-Remote-State in einem S3-Bucket ein?",
+      "lang": "de",
+      "domains": ["cloud"],
+      "type": "unanswerable",
+      "exact_term": false,
+      "answerable": false,
+      "relevant_count": 0,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.43470158954717886,
+      "context_chars": 3899,
+      "latency_ms": 67.36033401102759,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "setup-startup.md § Startup guide — run FS100 locally › 7. Managing the infrastructure › Changing the Keycloak realm (0.435)",
+        "runbook-rollback.md § Runbook: Roll back a failed deployment › Verify (0.421)",
+        "runbook-tls-zertifikat-erneuern.md § Runbook: TLS-Zertifikat erneuern › Manuelle Erneuerung (0.332)"
+      ],
+      "topics": ["devops/iac", "architecture/ai-architecture"]
+    },
+    {
+      "id": "u-003",
+      "question": "What is the on-call compensation for weekend shifts?",
+      "lang": "en",
+      "domains": ["sre"],
+      "type": "unanswerable",
+      "exact_term": false,
+      "answerable": false,
+      "relevant_count": 0,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.4289254602598018,
+      "context_chars": 3131,
+      "latency_ms": 56.36662498000078,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 9. Schedule (8–10 h/week) (0.429)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › Changelog v1 → v2 (0.364)",
+        "runbook-azure-cost-guard.md § Runbook: Azure cost guard › Budget and alerts (0.426)"
+      ],
+      "topics": ["cloud/cost", "sre/incidents"]
+    },
+    {
+      "id": "u-007",
+      "question": "What is the maximum request rate per IP on the nginx ingress?",
+      "lang": "en",
+      "domains": ["devops"],
+      "type": "unanswerable",
+      "exact_term": false,
+      "answerable": false,
+      "relevant_count": 0,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5019998063202226,
+      "context_chars": 6145,
+      "latency_ms": 58.38429200230166,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › Appendix A — Environment variables (`.env.example`) (0.502)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 5. Architecture (Phase 1) (0.493)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 8. Milestones and tasks › M1.5 — Angular UI (~13 h) (0.494)"
+      ],
+      "topics": ["cloud/networking", "dev/frameworks"]
+    },
+    {
+      "id": "u-008",
+      "question": "Wie trainiere ich ein eigenes LLM mit LoRA auf unseren Runbooks?",
+      "lang": "de",
+      "domains": ["ai", "mlops"],
+      "type": "unanswerable",
+      "exact_term": false,
+      "answerable": false,
+      "relevant_count": 0,
+      "gains": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "top1_score": 0.5665527550577346,
+      "context_chars": 2127,
+      "latency_ms": 65.34770800499246,
+      "cost_usd": 0.0,
+      "top_hits": [
+        "runbook-secret-rotation.md § Runbook: Rotate secrets and API keys (0.567)",
+        "runbook-llm-provider-outage.md § Runbook: LLM provider errors and outages (0.565)",
+        "fs100-plan.md § plan.md — Phase 1: Foundation, RAG Vertical Slice, Eval & Tracing › 7. Contracts (draft — generated OpenAPI/JSON Schema is authoritative) › 7.6 Golden-set item (`evals/datasets/retrieval_v1.jsonl`) (0.406)"
+      ],
+      "topics": ["mlops/fine-tuning", "sre/slos"]
+    }
+  ]
+}

@@ -68,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 settings.reranker_model, settings.rerank_candidates, settings.embedding_cache_dir
             ),
             topics=taxonomy.topics(),
+            threshold=settings.retrieval_score_threshold,
         )
         kb.ensure_collection()
         llm = create_provider(settings)

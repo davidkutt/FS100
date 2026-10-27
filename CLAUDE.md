@@ -46,13 +46,19 @@ When creating or updating a skill:
 ## What this is
 
 FS100 is a RAG/agent assistant: upload domain-tagged documents, ask questions, get streamed answers with
-citations, with every retrieval change measured by evals and every request traced. Built in six phases.
+citations, with every retrieval change measured by evals and every request traced.
+
+**Goal since 2026-10-26: a daily-use tool for one person on a 16 GB M1.** The corpus is the user's Markdown
+notes, and it's used from Claude Code / VS Code (`/mcp`) and the web UI. There is no Kubernetes, Azure or
+public demo. What's next is in [plan-daily-use.md](plan-daily-use.md) (Phase 3c, M3c.0–M3c.5). Phases 4–6 and
+the rest of Phase 3 are parked.
+
 **Phase 1 is done except M1.7**: M1.0 (repo, skeletons, local infra, CI), M1.1 (auth walking skeleton),
 M1.2 (ingest/search/delete in the AI service, golden set, `pnpm eval:retrieval`), M1.3 (grounded chat
 `POST /v1/chat` as SSE), M1.4 (documents + chat/search relays in NestJS, contracts), M1.5 (Angular UI:
 documents, chat, inspector) and M1.6 (Dockerfiles, Compose `--profile full`, CI workflows, Playwright e2e)
 are done. M1.7 (Azure spike) is postponed while the project runs locally, so Phase 2 has no Azure parts.
-**Phase 2 (agent, MCP, approvals) is in progress** — M2.0 (pins, spikes, identities, ADR-0007…0010
+**Phase 2 (agent, MCP, approvals)** — M2.0 (pins, spikes, identities, ADR-0007…0010
 drafts), M2.1 (agent harness: `agent.py`, `tools.py`, `POST /v1/agent` with SSE v2, task set
 `agent_v0`), M2.2 (conversations + event tee in NestJS, model registry, taxonomy + document topics,
 agent chat UI), M2.3 (signed approvals `approvals.py` + resume, NestJS approval state machine,
@@ -63,7 +69,7 @@ M2.5 (external MCP servers from `config/mcp_servers.yaml` in `catalog.py`, pinne
 gate in `eval.yml`, ADR-0011/0012 proposed) and M2.7 (prompt files `ai_service/prompts/*.md` with version + hash,
 daily cost caps in `apps/api/src/usage/`, admin usage page, system card, e2e approval smoke; only the README GIF
 is open); M2.8 (Claude Code / VS Code log in to `/mcp` via Keycloak CIMD, ADR-0014) is code-complete, the hand check
-in Claude Code is open. **Phase 3 (retrieval quality, skills; then eval, safety, cost) has started** — M3a.0
+in Claude Code is open. **Phase 3a (retrieval quality)** — M3a.0
 (golden set split into `dev`/`test` via a `split` field, baselines in `evals/baselines/p2-dense/`, `pnpm mem`,
 spikes, ADR-0015…0018 drafts), M3a.1 (originals in Postgres `ai`, Procrastinate queue with in-process worker,
 collection v2 with versioned IDs, `kb-admin reindex` behind the golden-set gate + rollback, admin re-index page) and
@@ -75,10 +81,13 @@ child process with pypdf fallback, parse stored in `ai.source_documents`; 1000/1
 sections ≤ `PARENT_SIZE` 2000 chars returned once each; `get_document` by section; ADR-0018) and M3a.6
 (contextual retrieval in `contextual.py`: one call per chunk with the document cached in the system prompt,
 `CONTEXTUAL_DOMAINS`, labels stored in `ai.chunk_contexts`, job state `contextualizing`, payload `context` +
-`chunk_topics`, taxonomy v2; ADR-0019) are done. Phase 3 ADRs start at 0015, not 0014. Check the milestone in
-[plan.md §8](plan.md#8-milestones-and-tasks), [plan-phase-2.md §8](plan-phase-2.md#8-milestones-and-tasks) or
-[plan-phase-3.md §8](plan-phase-3.md#8-milestones-and-tasks) before building something: many features are
-deliberately scheduled for later milestones.
+`chunk_topics`, taxonomy v2; ADR-0019) and M3a.7 (`lifecycle` / `priority` / `priority_topics` set in NestJS and
+relayed as labels; retired documents filtered from every search; boost by positions after reranking when the
+question's nearest sub-topics meet the scope; canonical sources marked in the prompts; `kb-eval --priorities`) are
+done. The reranker, priorities, HyDE, the LLM router and Docling are frozen: no further work until M3c.2
+measures them on the notes. Phase 3 ADRs start at 0015, not 0014. Check the milestone in
+[plan-daily-use.md §3](plan-daily-use.md#3-milestones) (and the earlier plans it builds on) before building
+something: most of the old roadmap is parked.
 
 The plan's working title `kb-agent` lives on in identifiers (realm `kb`, clients `kb-web`/`kb-api`/`kb-ai`,
 Qdrant alias `kb_current`). Keep those names.
@@ -101,7 +110,9 @@ Qdrant alias `kb_current`). Keep those names.
 | `docs/setup/` | `installation.md` (toolchain), `startup.md` (URLs, seed users, troubleshooting) | — |
 | `plan.md` | Phase 1 source of truth: decisions D1–D26, contracts §7, milestones §8, target layout §6 | — |
 | `plan-phase-2.md` | Phase 2 source of truth: decisions D27–D49, contracts §7, milestones M2.0–M2.8 | — |
-| `plan-phase-3.md` | Phase 3 source of truth: decisions D50–D75, contracts §7, milestones M3a.0–M3b.9 | — |
+| `plan-phase-3.md` | Phase 3 source of truth: decisions D50–D75, contracts §7, milestones M3a.0–M3a.7 (the rest re-planned) | — |
+| `plan-daily-use.md` | **What's next.** Phase 3c "Daily use": decisions D121–D126, milestones M3c.0–M3c.5, parked list | — |
+| `plan-phase-4/5/6.md`, `roadmap-phases-3-6.md` | Parked (Kubernetes, Azure, MLOps). Don't build from them | — |
 | `architechture.md` | Cross-phase decisions by ID (REPO-*, DEV-* …). Filename is misspelled; keep it | — |
 | `_meta/ai-theory/` | Study notes, not product docs. Ignore unless asked | — |
 
@@ -127,6 +138,7 @@ pnpm contracts:generate                   # after changing any route or SSE mode
 pnpm kb:backfill-originals                # store originals of pre-M3a.1 documents (data/sample-docs/, by SHA-256)
 pnpm kb:reindex [--force --reason "…"]    # rebuild kb_current from originals behind the eval gate; --rollback; needs `pnpm dev ai`
 pnpm e2e                                  # Playwright smoke; needs a running stack, LLM_PROVIDER=fake
+pnpm stack:backup                         # pg_dumpall into backups/ (git-ignored); run before anything destructive
 pnpm --filter @fs100/api db:generate      # Drizzle migration after editing apps/api/src/db/schema.ts
 ```
 
@@ -171,8 +183,10 @@ Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
 - **Images:** all three Dockerfiles build with the repo root as context; `.dockerignore` is an allow-list,
   so a new top-level folder an image needs must be added there. The AI service runs on `python:*-slim` without
   system libraries: Python dependencies must bundle theirs (`psycopg[binary]`, `opencv-python-headless`).
-- **Infra state:** realm JSON and `init.sql` only apply to empty volumes → `pnpm stack:reset && pnpm stack:up`
-  (wipes all local data; ask first). Use `localhost`, not `127.0.0.1`, for anything Keycloak-related.
+- **Infra state:** realm JSON and `init.sql` only apply to empty volumes. For a realm change, recreate only the
+  `keycloak` database (`docs/setup/startup.md` §7). The seed users' `id`s are pinned in `realm-kb.json`, so the
+  data keeps its owners; keep them pinned. `init.sql` needs `pnpm stack:reset && pnpm stack:up`, which wipes all
+  local data; ask first. Use `localhost`, not `127.0.0.1`, for anything Keycloak-related.
 - **API DB:** Drizzle; migrations in `apps/api/drizzle/` run on API boot. API tests use `API_DATABASE_URL=:memory:`
   (in-process PGlite) and need no Docker; `test/support.ts` builds the app with test JWT keys.
 - **Contracts:** Nest's OpenAPI comes from Zod schemas (`@Body({ schema })`, `@ApiOkResponse({ standardSchema })`;
@@ -234,3 +248,5 @@ Never cut: validation at trust boundaries, error handling that prevents data los
 Rules learned from user feedback. Newest last. Format: `- <rule> — <why, one clause>`.
 
 - Next to any setting that only applies on first start (Docker volumes, realm import), say so where it is edited and name the reset command — users edit `.env`, restart, and expect it to apply.
+- Before telling the user a variable is missing from their `.env`, grep with `^\s*NAME=` — indented lines still load (uv and Node), so `^NAME=` reports false gaps.
+- Call a milestone done only after its demo step ran on the user's running stack, not only in tests or on a throwaway stack — M2.8 was "done" while the live Keycloak lacked its features.

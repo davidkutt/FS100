@@ -176,7 +176,7 @@
           "documents"
         ],
         "summary": "Update Labels",
-        "description": "Change `domains` / `topics` of all chunks of a document without re-embedding (D48).",
+        "description": "Change the labels of all chunks of a document without re-embedding (D48, D61).",
         "operationId": "update_labels_v1_documents__doc_id__labels_patch",
         "security": [
           {
@@ -955,6 +955,24 @@
             "type": "string",
             "title": "Text"
           },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "canonical",
+              "normal",
+              "low"
+            ],
+            "title": "Priority",
+            "default": "normal"
+          },
+          "priority_topics": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Priority Topics",
+            "default": []
+          },
           "chunk_text": {
             "type": "string",
             "title": "Chunk Text",
@@ -992,6 +1010,11 @@
               }
             ],
             "title": "Sparse Rank"
+          },
+          "boost": {
+            "type": "integer",
+            "title": "Boost",
+            "default": 0
           }
         },
         "type": "object",
@@ -1007,7 +1030,7 @@
           "text"
         ],
         "title": "ExplainedHit",
-        "description": "`explain` mode of `/v1/search`: the matching chunk inside the section, and the section's\nrank among the fused candidates and the chunk's in the dense and the sparse top 50 (None: not\namong them); its position is the reranked one."
+        "description": "`explain` mode of `/v1/search`: the matching chunk inside the section, and the section's\nrank among the fused candidates and the chunk's in the dense and the sparse top 50 (None: not\namong them); its position is the reranked one, moved by `boost` positions (D61)."
       },
       "HTTPValidationError": {
         "properties": {
@@ -1172,6 +1195,51 @@
               }
             ],
             "title": "Topics"
+          },
+          "priority": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "canonical",
+                  "normal",
+                  "low"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority"
+          },
+          "priority_topics": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Priority Topics"
+          },
+          "lifecycle": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "active",
+                  "retired"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle"
           }
         },
         "type": "object",

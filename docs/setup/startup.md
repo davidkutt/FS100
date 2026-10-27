@@ -204,7 +204,9 @@ Then the demo path as `bob`: **Documents** → pick domains → drop files from 
 goes `queued → parsing → embedding → ready`. **Chat** → ask a question → the answer streams with `[1]` citations;
 select one to read the passage, **Trace in Phoenix** opens the request's trace. **Inspector** shows the
 raw hits with their dense score and fused, dense and sparse ranks, and warns when the best score is below
-the threshold (the chat would abstain). As `carol` (viewer) there are no upload
+the threshold (the chat would abstain). On **Documents**, **Labels** also sets a priority (`canonical` /
+`low`) for chosen sub-topics, and **Retire** takes a document out of every search until **Activate**; the
+inspector shows the resulting `boost`. As `carol` (viewer) there are no upload, label
 or delete controls. Chat calls the real LLM unless `LLM_PROVIDER=fake`.
 
 ### Use the knowledge base from Claude Code / VS Code
@@ -216,7 +218,7 @@ Document from claude.ai / vscode.dev (so it needs internet), creates a client fo
 
 > **Experimental.** This relies on Keycloak's `cimd` and `resource-indicators` features, which are always on
 > in Compose and may change with any Keycloak upgrade. A realm imported before M2.8 lacks the client
-> policies: `pnpm stack:reset && pnpm stack:up` (wipes all local data, [§7](#changing-the-keycloak-realm)).
+> policies: recreate only Keycloak's state ([§7](#changing-the-keycloak-realm)).
 
 **Claude Code:**
 
@@ -239,8 +241,9 @@ chat (agent mode).
 
 External clients get the read tools (`search_knowledge_base`, `get_document`, `list_sources`) with your roles.
 The server advertises only `kb:read`, so `ingest_url` fails with `insufficient_scope: needs kb:write` — add
-documents in the app. Tokens live 5 minutes and the client refreshes them; after 30 minutes idle or 10 hours
-it asks you to log in again. Not supported: Claude Desktop and claude.ai connectors (they connect from
+documents in the app. Tokens live 5 minutes and the client refreshes them. Claude Code asks for
+`offline_access`, so it stays logged in until it goes unused for 30 days (Keycloak's default). A client without
+it asks you to log in again after 30 minutes idle or 10 hours. Not supported: Claude Desktop and claude.ai connectors (they connect from
 Anthropic's cloud, which cannot reach `localhost`) and ChatGPT (Keycloak does not parse its metadata document).
 
 ## 5. Quality checks
@@ -269,7 +272,8 @@ pnpm e2e
 CI (`.github/workflows/`) runs `ci.yml` (lint, test, build, contract drift), `e2e.yml` (this smoke),
 `eval.yml` (retrieval eval on PRs touching the AI service, config or evals, **blocking** when hit@5 or
 nDCG@10 drops more than 0.02 below the baseline; real-model agent / red-team / routing evals by hand with a
-budget; nightly fixture contract) and, on `main`, `docker.yml` (multi-arch images to GHCR). The agent smoke
+budget; nightly fixture contract — the gate indexes without `.env`, so it guards the engine on the plain index;
+the contextual index you run is gated by `pnpm kb:reindex`) and, on `main`, `docker.yml` (multi-arch images to GHCR). The agent smoke
 (fake LLM + fixture MCP servers) runs with the tests.
 
 Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`,
@@ -296,6 +300,7 @@ Commits follow [Conventional Commits](https://www.conventionalcommits.org/) (`fe
 | `pnpm mem` | Memory of the apps started by `pnpm dev` (RSS incl. child processes) and of each container |
 | `pnpm stack:down` | Stop and remove containers; **keeps** data volumes |
 | `pnpm stack:reset` | Stop and **delete all local data** (Postgres incl. Keycloak, Qdrant, Phoenix, model cache of Mode B) |
+| `pnpm stack:backup` | Dump all Postgres databases (`app`, `ai` with the originals, `keycloak`) to `backups/pg-<time>.sql` — see [Backup and restore](#backup-and-restore) |
 | `pnpm kb:backfill-originals` | Store the originals of documents indexed before M3a.1 (matched in `data/sample-docs/` by SHA-256); lists the rest — upload those again |
 | `pnpm kb:reindex [--force --reason "…"]` · `pnpm kb:reindex --rollback` | Rebuild `kb_current` from the stored originals behind the golden-set gate, or point it back; the job runs in the AI service (`pnpm dev ai`). Also on the admin page **Re-index** |
 
@@ -327,10 +332,30 @@ before the next `pnpm stack:up` (otherwise Keycloak can no longer connect to Pos
 Keycloak imports `infra/keycloak/realm-kb.json` **only if the realm does not exist yet**. After editing the
 file — or pulling a change to it, e.g. M2.4 (client `kb-ai` with secret and token exchange, scopes `kb:read` /
 `kb:write`, role `ingest-on-behalf`, self-registration off) or M2.8 (client policies for Claude Code / VS Code,
-PKCE for public clients) — recreate the Keycloak state:
+PKCE for public clients) — recreate only Keycloak's database. Documents, conversations and the index stay,
+and so do their owners, because the seed users' `id`s are pinned in the realm file:
 
 ```bash
-pnpm stack:reset && pnpm stack:up     # wipes ALL local data (also Qdrant and Phoenix)
+pnpm stack:backup
+node scripts/stack.mjs stop keycloak
+docker exec fs100-postgres-1 psql -U postgres -c 'DROP DATABASE keycloak WITH (FORCE)' -c 'CREATE DATABASE keycloak'
+pnpm stack:up                         # imports realm-kb.json into the empty database
+```
+
+Lost: users registered in the app (their documents and conversations stay but have no owner who can log
+in), admin-console edits, sessions and Claude Code / VS Code consents. `pnpm stack:reset && pnpm stack:up`
+still works and wipes **all** local data.
+
+### Backup and restore
+
+`pnpm stack:backup` writes `backups/pg-<time>.sql` (git-ignored). Qdrant isn't in it: `pnpm kb:reindex`
+rebuilds the index from the originals in `ai`. To restore, stop `pnpm dev` and Keycloak, then load the dump
+(it drops and recreates each database; `ERROR: current user cannot be dropped` is expected):
+
+```bash
+node scripts/stack.mjs stop keycloak
+docker exec -i fs100-postgres-1 psql -U postgres -d postgres < backups/pg-<time>.sql
+pnpm stack:up
 ```
 
 ### Re-exporting the realm after changes in the admin console
@@ -365,13 +390,13 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | `pnpm dev`: `[ai] … uv: not found` | Install uv ([installation guide](installation.md#24-uv-and-python-313)), then `uv sync --directory apps/ai-service` |
 | `pnpm dev`: port 4200/3000/8000 in use | An old dev server is still running: `lsof -nP -iTCP:4200 -sTCP:LISTEN` and kill it |
 | `[api]` exits on startup: `password authentication failed for user "postgres"` | `API_DATABASE_URL` in `.env` must repeat `POSTGRES_USER` / `POSTGRES_PASSWORD` (the API migrates on boot, so it fails fast) |
-| `[ai]` exits on startup: `password authentication failed` or `connection … 5432 refused` | `AI_DATABASE_URL` must repeat `POSTGRES_USER` / `POSTGRES_PASSWORD` too, and Postgres must run (`pnpm stack:up`) |
+| `[ai]` or `pnpm kb:*` exits: `password authentication failed` or `connection … 5432 refused` | `AI_DATABASE_URL` must repeat `POSTGRES_USER` / `POSTGRES_PASSWORD` too (an `.env` from before M3a.1 lacks it, and the default has the default password), and Postgres must run (`pnpm stack:up`) |
 | Documents stay `queued` | The AI service's worker runs them one at a time; a re-index blocks uploads until it ends. With `JOBS_INPROCESS_WORKER=false` nothing runs them |
-| `pnpm kb:reindex` prints `kept` | The gate refused the build: a `test` metric dropped by more than 0.02, or a document has no stored original (listed) — `pnpm kb:backfill-originals`, upload it again, or `--force --reason "…"` |
+| `pnpm kb:reindex` prints `kept` | The gate refused the build: a `test` metric dropped by more than 0.02, or a document has no stored original (listed) — `pnpm kb:backfill-originals`, upload it again, or `--force --reason "…"` — which swaps in a build without the documents that had none |
 | `POST /api/documents` → 409 for a file that failed | Dedupe is by content (SHA-256), failed rows included: delete the failed document, then upload again |
 | `pnpm dev`: `[ai]` exits on startup with a Qdrant connection error | The AI service needs Qdrant at startup: `pnpm stack:up` first |
 | `[ai]` exits: `LLM_PROVIDER=openai_compat needs LLM_API_KEY and LLM_MODEL` | Set both in `.env` (OpenRouter key with a credit limit, model from [ADR-0005](../adr/0005-llm-access-and-model.md)), or `LLM_PROVIDER=fake` |
-| Chat and agent turns fail with 502 `Keycloak token endpoint: HTTP 400` | The realm predates M2.4 (no token exchange on `kb-api`): `pnpm stack:reset && pnpm stack:up` (wipes all local data), see §7 |
+| Chat and agent turns fail with 502 `Keycloak token endpoint: HTTP 400` | The realm predates M2.4 (no token exchange on `kb-api`): recreate Keycloak's database, see [§7](#changing-the-keycloak-realm) |
 | Agent `tool_result` errors `Keycloak token endpoint: HTTP 401` | `AI_KEYCLOAK_CLIENT_SECRET` is missing in `.env` or differs from the realm's `kb-ai` secret (`.env.example`) |
 | Agent proposes a write, then ends with `error` `Agent run failed` | `APPROVAL_SIGNING_KEY` is missing in `.env`, so writes fail closed. After pulling, list what `.env` lacks: `comm -23 <(grep -oE '^[A-Z_0-9]+=' .env.example \| sort) <(grep -oE '^[A-Z_0-9]+=' .env \| sort)` |
 | `kb.ingest_url` fails with `Host … is not allowed` | Only hosts in `INGEST_URL_ALLOWED_HOSTS` are fetched, and only PDF, Markdown or text files (HTML pages get 415) |
@@ -386,7 +411,8 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | `pnpm stack:up:full`: `port is already allocated` on 3000/4200/8000 | `pnpm dev` (or one native app) still runs — stop it; both modes use the same ports |
 | `pnpm stack:up:full` waits for minutes on `ai-service` | First start downloads the embedding model into the volume: `pnpm stack:logs ai-service` |
 | Angular shows stale output | `rm -rf apps/web/.angular` and restart |
-| Claude Code / VS Code: Keycloak shows an error (e.g. `Invalid scopes: kb:read`) instead of the login form | The realm predates M2.8: `pnpm stack:reset && pnpm stack:up` (wipes all local data). Otherwise check `pnpm stack:logs keycloak` — Keycloak must reach claude.ai / vscode.dev |
+| Claude Code / VS Code: Keycloak shows an error (e.g. `Invalid scopes: kb:read`) instead of the login form | The realm predates M2.8: recreate Keycloak's database ([§7](#changing-the-keycloak-realm)). Otherwise check `pnpm stack:logs keycloak` — Keycloak must reach claude.ai / vscode.dev |
+| Claude Code `/mcp`: still `needs authentication` after the browser login, with `Offline tokens not allowed for the user or client` | The user lacks the realm role `offline_access` (seed users of a realm imported before 2026-10-27). In the admin console: realm **kb** → Users → the user → Role mapping → Assign role → `offline_access`, then *Authenticate* again |
 | Keycloak: every login fails with 500 `Condition with provider ID client-id-uri not found` | Keycloak runs without `--features=cimd,resource-indicators` (ADR-0014); keep them in the Compose `command` |
 | Login page: "Cookie not found" | Use `http://localhost:…`, not `127.0.0.1` — cookies and redirect URIs are bound to `localhost` |
 | Want a clean slate | `pnpm stack:reset`, `rm -rf node_modules apps/*/node_modules apps/ai-service/.venv`, then the steps in §1 |
@@ -407,4 +433,6 @@ exchange on both internal hops, `kb.ingest_url`), **M2.5** (GitHub MCP server, s
 **M2.6** (agent eval and red-team seed, `pnpm eval:agent`) and **M2.7** (prompt files with version and hash,
 daily cost caps with `/api/me/usage` and the admin usage page at http://localhost:4200/admin/usage, README and
 [system card](../system-card.md)) are done; **M2.8** (Claude Code / VS Code log in to the MCP server through
-Keycloak, [§4](#use-the-knowledge-base-from-claude-code--vs-code)) is code-complete.
+Keycloak, [§4](#use-the-knowledge-base-from-claude-code--vs-code)) is code-complete. Phase 3a (retrieval
+quality) is done through M3a.7. From here on, FS100 becomes a daily-use tool on your notes:
+[plan-daily-use.md](../../plan-daily-use.md).

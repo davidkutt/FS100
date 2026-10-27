@@ -19,7 +19,7 @@ from typing import Any, Literal, get_args
 from uuid import NAMESPACE_URL, UUID, uuid5
 
 from pydantic import BaseModel, TypeAdapter
-from qdrant_client import QdrantClient
+from qdrant_client import QdrantClient, models
 
 from ai_service.catalog import load_taxonomy
 from ai_service.contextual import Contextualizer, Split
@@ -34,7 +34,7 @@ from ai_service.evals.metrics import (
     reciprocal_rank,
 )
 from ai_service.ingest import HEADING_SEPARATOR, Section, parse
-from ai_service.knowledge_base import FUSION, Domain, Hit, KnowledgeBase
+from ai_service.knowledge_base import FUSION, Domain, Hit, KnowledgeBase, Priority
 from ai_service.llm import create_provider
 from ai_service.query import Query, QueryTransformer, Strategy
 from ai_service.rag import ChatTurn
@@ -85,6 +85,16 @@ class GoldenItem(BaseModel):
         return next((t for t in TYPES if self.notes.startswith(t)), "other")
 
 
+class Pin(BaseModel):
+    """A document's priority in `--priorities` (D61)."""
+
+    priority: Priority
+    priority_topics: list[str]
+
+
+_pins = TypeAdapter(dict[str, Pin])
+
+
 class ItemResult(BaseModel):
     id: str
     question: str
@@ -100,6 +110,7 @@ class ItemResult(BaseModel):
     latency_ms: float  # with the query transformation
     cost_usd: float  # of the query transformation
     top_hits: list[str]
+    topics: list[str] = []  # the question's nearest sub-topics, which boosts match (D61)
 
 
 class RunReport(BaseModel):
@@ -115,6 +126,7 @@ class RunReport(BaseModel):
     strategy: Strategy = "plain"
     contextual: list[Domain] = []
     context_cost_usd: dict[str, float] = {}  # per document, one-off at ingest
+    priorities: str = "none"  # the `--priorities` file (D61)
     documents: int
     chunks: int
     ingest_s: float
@@ -124,6 +136,7 @@ class RunReport(BaseModel):
     by_lang: dict[str, dict[str, float]]
     by_type: dict[str, dict[str, float]]
     exact_terms: dict[str, float]  # empty: no such item in the run
+    by_topic: dict[str, dict[str, float]] = {}  # per pinned sub-topic: the questions routed to it
     threshold: float | None
     threshold_balanced_accuracy: float | None
     checked_threshold: float | None  # RETRIEVAL_SCORE_THRESHOLD, e.g. calibrated on `dev`
@@ -145,6 +158,10 @@ class Indexed:
 
 def load_dataset(path: Path) -> list[GoldenItem]:
     return [GoldenItem.model_validate_json(line) for line in path.read_text().splitlines() if line]
+
+
+def load_priorities(path: Path) -> dict[str, Pin]:
+    return _pins.validate_json(path.read_bytes())
 
 
 def load_manifest(corpus: Path) -> dict[str, list[Domain]]:
@@ -240,6 +257,7 @@ def evaluate(
                 top_hits=[
                     f"{h.filename} § {h.heading or f'p{h.page}'} ({h.score:.3f})" for h in hits[:3]
                 ],
+                topics=kb.question_topics(kb.embedder.embed_queries([query.text])[0]),
             )
         )
     return results
@@ -254,9 +272,12 @@ def index_corpus(
     parent_size: int = 0,
     contextual: list[Domain] | None = None,
     contextualize: Contextualize | None = None,
+    topics: dict[str, str] | None = None,
 ) -> Indexed:
     client = QdrantClient(":memory:")
-    kb = KnowledgeBase(client, embedder, "eval", chunk_size, chunk_overlap, sparse, parent_size)
+    kb = KnowledgeBase(
+        client, embedder, "eval", chunk_size, chunk_overlap, sparse, parent_size, topics=topics
+    )
     kb.ensure_collection()
     started = time.perf_counter()
     chunks, costs = ingest_corpus(kb, corpus, contextualize)
@@ -291,6 +312,14 @@ def strategy_of(
     return lambda item: runner.run(transformer.expand(item.question, strategy))
 
 
+def prioritize(kb: KnowledgeBase, pins: dict[str, Pin]) -> None:
+    """Every document `normal`, then the pinned ones (by corpus filename) as `pins` says."""
+    normal = Pin(priority="normal", priority_topics=[]).model_dump()
+    kb.client.set_payload(kb.alias, normal, models.FilterSelector(filter=models.Filter()))
+    for name, pin in pins.items():
+        kb.update_labels(doc_id(name), pin.model_dump())
+
+
 def run(
     indexed: Indexed,
     dataset: Path,
@@ -300,9 +329,12 @@ def run(
     checked_threshold: float | None = None,
     strategy: Strategy = "plain",
     transform: Callable[[GoldenItem], Query] | None = None,
+    priorities: Path | None = None,
 ) -> RunReport:
     kb = copy.copy(indexed.kb)
-    kb.fusion, kb.reranker = fusion, reranker
+    kb.fusion, kb.reranker, kb.threshold = fusion, reranker, checked_threshold
+    pins = load_priorities(priorities) if priorities else {}
+    prioritize(kb, pins)
     items = [i for i in load_dataset(dataset) if not split or i.split == split]
     results = evaluate(kb, items, transform)
     answerable = [r for r in results if r.answerable]
@@ -352,6 +384,12 @@ def run(
             for t in sorted({r.type for r in answerable})
         },
         exact_terms=summarize(exact) if (exact := [r for r in answerable if r.exact_term]) else {},
+        priorities=priorities.stem if priorities else "none",
+        by_topic={
+            topic: summarize(routed)
+            for topic in sorted({t for pin in pins.values() for t in pin.priority_topics})
+            if (routed := [r for r in answerable if topic in r.topics])
+        },
         threshold=threshold,
         threshold_balanced_accuracy=accuracy,
         checked_threshold=checked_threshold,
@@ -403,6 +441,7 @@ def to_markdown(report: RunReport) -> str:
     lines += [row(f"type {t}", m) for t, m in report.by_type.items()]
     if report.exact_terms:
         lines.append(row("**exact terms**", report.exact_terms))
+    lines += [row(f"pinned `{t}`", m) for t, m in report.by_topic.items()]
     misses = [r for r in report.items if r.answerable and not any(r.gains[:5])]
     if misses:
         lines += ["", "Misses (no relevant hit in the top 5):", ""]
@@ -438,6 +477,8 @@ def _retrieval(report: RunReport) -> str:
     if report.contextual:
         fused += f", contextual ({_contextual(report.contextual)})"
     reranked = fused if report.rerank == "none" else f"{fused}, rerank {report.rerank}"
+    if report.priorities != "none":
+        reranked += f", priorities {report.priorities}"
     return reranked if report.strategy == "plain" else f"{reranked}, {report.strategy}"
 
 
@@ -470,6 +511,10 @@ def _contextual_arg(value: str) -> list[Domain]:
 def _rerank_arg(value: str) -> tuple[str, int]:
     model, _, candidates = value.rpartition(":")
     return ("none", 0) if value == "none" else (model, int(candidates))
+
+
+def _priorities_arg(value: str) -> Path | None:
+    return None if value == "none" else Path(value)
 
 
 def _metric_arg(value: str) -> tuple[str, float]:
@@ -530,6 +575,13 @@ def add_command(commands: Any, settings: Settings) -> None:
         help="repeat to benchmark (default: plain); hyde calls QUERY_MODEL, LLM from the env",
     )
     cmd.add_argument(
+        "--priorities",
+        action="append",
+        type=_priorities_arg,
+        metavar="PATH|none",
+        help="repeat to benchmark (default: none): JSON of corpus file → priority and scope (D61)",
+    )
+    cmd.add_argument(
         "--baseline",
         action="append",
         type=_metric_arg,
@@ -573,10 +625,18 @@ def _main(args: argparse.Namespace, settings: Settings) -> None:
             )
             contextualize = contextualizer_of(contextualizer, runner)
             indexed = index_corpus(
-                embedder, args.corpus, size, overlap, sparse, parent, contextual, contextualize
+                embedder,
+                args.corpus,
+                size,
+                overlap,
+                sparse,
+                parent,
+                contextual,
+                contextualize,
+                topics,
             )
-            for fusion, (name, candidates), strategy in product(
-                args.fusion or [FUSION], reranks, strategies
+            for fusion, (name, candidates), strategy, priorities in product(
+                args.fusion or [FUSION], reranks, strategies, args.priorities or [None]
             ):
                 reranker = load_reranker(name, candidates, settings.embedding_cache_dir)
                 threshold = settings.retrieval_score_threshold
@@ -590,11 +650,14 @@ def _main(args: argparse.Namespace, settings: Settings) -> None:
                     threshold,
                     strategy,
                     transform,
+                    priorities,
                 )
                 reports.append(report)
                 retrieval = f"{sparse}-{fusion}__rerank-{report.rerank}__{strategy}"
                 if contextual:
                     retrieval += f"__ctx-{_contextual(contextual).replace(',', '-')}"
+                if priorities:
+                    retrieval += f"__prio-{priorities.stem}"
                 slug = f"{model}__{size}-{overlap}-{parent}__{retrieval.replace(':', '-')}"
                 stem = (
                     f"{args.out}/{datetime.now(UTC):%Y%m%dT%H%M%SZ}__{report.dataset}__"

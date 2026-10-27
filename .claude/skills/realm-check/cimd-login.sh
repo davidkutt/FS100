@@ -6,7 +6,7 @@ set -euo pipefail
 user=$1
 cid=${2:-https://claude.ai/oauth/claude-code-client-metadata}
 redirect=${3:-http://localhost:54321/callback}
-scope=${4-kb:read}
+scope=${4-kb:read offline_access}  # what Claude Code asks for
 resource=${5-http://localhost:8000/mcp}
 base=${KEYCLOAK_URL:-http://localhost:8081}
 kc=$base/realms/kb/protocol/openid-connect

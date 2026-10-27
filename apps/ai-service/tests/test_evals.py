@@ -8,7 +8,9 @@ from uuid import uuid4
 import pytest
 
 from ai_service import embeddings
+from ai_service.catalog import load_taxonomy
 from ai_service.contextual import Contextualizer
+from ai_service.core.settings import Settings
 from ai_service.embeddings import Embedder, Reranker
 from ai_service.evals.agent import load_tasks
 from ai_service.evals.fixtures import GitHubFixture
@@ -28,6 +30,7 @@ from ai_service.evals.retrieval import (
     index_corpus,
     load_dataset,
     load_manifest,
+    load_priorities,
     regressions,
     run,
     strategy_of,
@@ -43,6 +46,7 @@ REPO = Path(__file__).parents[3]
 DATASETS = REPO / "evals/datasets"
 DATASET = DATASETS / "retrieval_v1.jsonl"
 FOLLOW_UPS = DATASETS / "followup_v1.jsonl"
+PRIORITIES = DATASETS / "priorities_v1.json"
 FIXTURES = REPO / "evals/fixtures"
 CORPUS = REPO / "data/sample-docs"
 KB_TOOLS = {
@@ -178,6 +182,28 @@ def test_runner_runs_the_split_on_one_index_with_each_reranker(
     assert reranked.checked_balanced_accuracy is not None
     assert "At `RETRIEVAL_SCORE_THRESHOLD` 0.500" in to_markdown(reranked)
     assert fused.checked_balanced_accuracy is None
+
+
+def test_runner_pins_the_priorities_per_run_and_reports_the_pinned_topics(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(embeddings, "TextEmbedding", FakeTextEmbedding)
+    taxonomy = load_taxonomy(Settings().taxonomy_config)
+    indexed = index_corpus(Embedder("fake-e5"), CORPUS, 1000, 150, topics=taxonomy.topics())
+    scopes = {t for pin in load_priorities(PRIORITIES).values() for t in pin.priority_topics}
+
+    pinned = run(indexed, DATASET, "dev", checked_threshold=0.55, priorities=PRIORITIES)
+    plain = run(indexed, DATASET, "dev")
+
+    points, _ = indexed.kb.client.scroll(indexed.kb.alias, limit=1000)
+    assert set(load_priorities(PRIORITIES)) <= set(load_manifest(CORPUS))
+    assert taxonomy.unknown_topics(sorted(scopes)) == []
+    assert pinned.by_topic and set(pinned.by_topic) <= scopes
+    assert ", priorities priorities_v1" in to_markdown(pinned)
+    assert (plain.priorities, {(p.payload or {})["priority"] for p in points}) == (
+        "none",
+        {"normal"},
+    )
 
 
 def test_runner_searches_with_the_strategy_and_reports_its_cost(

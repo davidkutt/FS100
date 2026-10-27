@@ -1,5 +1,7 @@
 # Roadmap outline — Phases 3–6
 
+> **Parked 2026-10-26** — see [plan-daily-use.md](plan-daily-use.md).
+
 > **Purpose:** planning outline for the phases after `plan-phase-2.md`. Each phase gets its own `plan-phase-N.md`
 > (same structure as `plan.md`) when the previous phase ends.
 > **Status:** Draft v1.1 · 2026-10-19 · read with `plan.md`, `plan-phase-2.md`, `ai-study-list.md`

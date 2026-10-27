@@ -42,6 +42,10 @@ export class Documents {
   protected readonly editDomains = signal<string[]>([]);
   protected readonly editTopics = signal<string[]>([]);
   protected readonly editTopicOptions = computed(() => this.topicsOf(this.editDomains()));
+  protected readonly priorities: Document['priority'][] = ['canonical', 'normal', 'low'];
+  protected readonly editPriority = signal<string>('normal');
+  /** The sub-topics a priority applies to (D61). */
+  protected readonly editPriorityTopics = signal<string[]>([]);
   protected readonly editError = signal('');
   protected readonly errors = signal<string[]>([]);
   protected readonly uploading = signal(false);
@@ -107,6 +111,8 @@ export class Documents {
     this.editing.set(doc);
     this.editDomains.set(doc.domains);
     this.editTopics.set(doc.topics);
+    this.editPriority.set(doc.priority);
+    this.editPriorityTopics.set(doc.priorityTopics);
     this.editError.set('');
     this.labels().nativeElement.showModal();
   }
@@ -114,9 +120,16 @@ export class Documents {
   /** Relabels the chunks without re-ingesting (D48). */
   protected async saveLabels(doc: Document): Promise<void> {
     if (!this.editDomains().length) return this.editError.set('Pick at least one domain.');
+    const normal = this.editPriority() === 'normal';
+    const scope = normal ? [] : this.picked(this.editPriorityTopics(), this.editTopicOptions());
+    if (!normal && !scope.length) {
+      return this.editError.set('Pick the sub-topics the priority applies to.');
+    }
     const body = {
       domains: this.editDomains(),
       topics: this.picked(this.editTopics(), this.editTopicOptions()),
+      priority: this.editPriority(),
+      priorityTopics: scope,
     };
     try {
       await firstValueFrom(this.http.patch(`${this.api}/api/documents/${doc.id}`, body));
@@ -125,6 +138,16 @@ export class Documents {
     } catch (error) {
       this.editError.set(problemDetail(error));
     }
+  }
+
+  /** Retired documents are never retrieved; activating brings them back (D61). */
+  protected async setLifecycle(doc: Document, lifecycle: Document['lifecycle']): Promise<void> {
+    try {
+      await firstValueFrom(this.http.patch(`${this.api}/api/documents/${doc.id}`, { lifecycle }));
+    } catch (error) {
+      this.errors.set([`${doc.filename}: ${problemDetail(error)}`]);
+    }
+    this.docs.reload();
   }
 
   protected working(doc: Document): boolean {

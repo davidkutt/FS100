@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from ai_service.catalog import Taxonomy
 from ai_service.ingest import supported
 from ai_service.jobs import INGEST, cancel_ingest, defer
-from ai_service.knowledge_base import Domain, ExplainedHit, KnowledgeBase
+from ai_service.knowledge_base import Domain, ExplainedHit, KnowledgeBase, Lifecycle, Priority
 from ai_service.query import QueryTransformer, Strategy
 from ai_service.storage import Store
 
@@ -74,6 +74,9 @@ class Submitted(BaseModel):
 class Labels(BaseModel):
     domains: list[Domain] | None = Field(None, min_length=1)
     topics: list[str] | None = None  # `domain/topic` ids from the taxonomy
+    priority: Priority | None = None  # D61
+    priority_topics: list[str] | None = None  # the priority's scope, taxonomy ids
+    lifecycle: Lifecycle | None = None  # `retired`: never returned
 
 
 @router.post("/documents", status_code=status.HTTP_202_ACCEPTED)
@@ -141,9 +144,9 @@ async def search(
 
 @router.patch("/documents/{doc_id}/labels", status_code=status.HTTP_204_NO_CONTENT)
 def update_labels(kb: KB, taxonomy: Tax, doc_id: UUID, body: Labels) -> None:
-    """Change `domains` / `topics` of all chunks of a document without re-embedding (D48)."""
-    _check_topics(taxonomy, body.topics)
-    kb.update_labels(doc_id, body.domains, body.topics)
+    """Change the labels of all chunks of a document without re-embedding (D48, D61)."""
+    _check_topics(taxonomy, [*(body.topics or []), *(body.priority_topics or [])])
+    kb.update_labels(doc_id, body.model_dump(exclude_none=True))
 
 
 @router.delete("/documents/{doc_id}", status_code=status.HTTP_204_NO_CONTENT)

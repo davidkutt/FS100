@@ -148,10 +148,11 @@ export class DocumentsService implements OnApplicationBootstrap {
     labels: LabelsBody,
     requestId: string,
   ): Promise<Document> {
-    this.checkTopics(labels.topics ?? []);
+    this.checkTopics([...(labels.topics ?? []), ...(labels.priorityTopics ?? [])]);
     await this.settled(user, id, 'change', requestId);
     // Vectors first, like delete: if that fails, the row keeps the labels Qdrant still has.
-    await this.ai.updateLabels(id, labels, requestId);
+    const { priorityTopics, ...rest } = labels;
+    await this.ai.updateLabels(id, { ...rest, priority_topics: priorityTopics }, requestId);
     return this.db.transaction(async (tx) => {
       const [doc] = await tx.update(documents).set(labels).where(eq(documents.id, id)).returning();
       await tx.insert(auditLog).values({

@@ -120,7 +120,7 @@ export interface paths {
         head?: never;
         /**
          * Update Labels
-         * @description Change `domains` / `topics` of all chunks of a document without re-embedding (D48).
+         * @description Change the labels of all chunks of a document without re-embedding (D48, D61).
          */
         patch: operations["update_labels_v1_documents__doc_id__labels_patch"];
         trace?: never;
@@ -386,7 +386,7 @@ export interface components {
          * ExplainedHit
          * @description `explain` mode of `/v1/search`: the matching chunk inside the section, and the section's
          *     rank among the fused candidates and the chunk's in the dense and the sparse top 50 (None: not
-         *     among them); its position is the reranked one.
+         *     among them); its position is the reranked one, moved by `boost` positions (D61).
          */
         ExplainedHit: {
             /** Chunk Id */
@@ -413,6 +413,17 @@ export interface components {
             /** Text */
             text: string;
             /**
+             * Priority
+             * @default normal
+             * @enum {string}
+             */
+            priority?: "canonical" | "normal" | "low";
+            /**
+             * Priority Topics
+             * @default []
+             */
+            priority_topics?: string[];
+            /**
              * Chunk Text
              * @default
              */
@@ -423,6 +434,11 @@ export interface components {
             dense_rank?: number | null;
             /** Sparse Rank */
             sparse_rank?: number | null;
+            /**
+             * Boost
+             * @default 0
+             */
+            boost?: number;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -476,6 +492,12 @@ export interface components {
             domains?: ("db" | "dev" | "cloud" | "devops" | "mlops" | "ai" | "security" | "architecture" | "sre")[] | null;
             /** Topics */
             topics?: string[] | null;
+            /** Priority */
+            priority?: ("canonical" | "normal" | "low") | null;
+            /** Priority Topics */
+            priority_topics?: string[] | null;
+            /** Lifecycle */
+            lifecycle?: ("active" | "retired") | null;
         };
         /**
          * ModelInfo

@@ -26,6 +26,9 @@ export const DOCUMENT_STATUSES = [
   'failed',
 ] as const;
 export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
+/** D61: `retired` documents are never retrieved; priorities move hits on their sub-topics. */
+export const LIFECYCLES = ['active', 'retired'] as const;
+export const PRIORITIES = ['canonical', 'normal', 'low'] as const;
 
 /** plan.md §7.4. After a change: `pnpm --filter @fs100/api db:generate`; the API migrates on boot. */
 export const documents = pgTable(
@@ -47,6 +50,12 @@ export const documents = pgTable(
       .notNull()
       .default(sql`'{}'`),
     status: text({ enum: DOCUMENT_STATUSES }).notNull(),
+    lifecycle: text({ enum: LIFECYCLES }).notNull().default('active'),
+    priority: text({ enum: PRIORITIES }).notNull().default('normal'),
+    priorityTopics: text()
+      .array()
+      .notNull()
+      .default(sql`'{}'`),
     version: integer().notNull().default(1),
     jobId: text(), // the AI service's ingest job
     error: text(),
@@ -64,6 +73,8 @@ export const documents = pgTable(
       'documents_status_check',
       sql`${t.status} in ('pending','queued','parsing','contextualizing','embedding','ready','failed')`,
     ),
+    check('documents_lifecycle_check', sql`${t.lifecycle} in ('active','retired')`),
+    check('documents_priority_check', sql`${t.priority} in ('canonical','normal','low')`),
   ],
 );
 

@@ -149,6 +149,36 @@ describe('Documents (e2e)', () => {
     ]);
   });
 
+  it('owners set priority, scope and lifecycle; the AI service gets them, the audit too', async () => {
+    const { body } = await upload('pinned.md', `# P ${randomUUID()}`, 202, { sub: 'user-4' });
+    await settled(body.id, 'ready');
+    const pin = { priority: 'canonical', priorityTopics: ['devops/ci-cd'] };
+
+    const pinned = await relabel(body.id, pin, 200, EDITOR, 'user-4');
+    const retired = await relabel(body.id, { lifecycle: 'retired' }, 200, EDITOR, 'user-4');
+
+    expect(DocumentDto.parse(pinned.body)).toMatchObject({ ...pin, lifecycle: 'active' });
+    expect(DocumentDto.parse(retired.body)).toMatchObject({ ...pin, lifecycle: 'retired' });
+    expect(ai.updateLabels).toHaveBeenCalledWith(
+      body.id,
+      { priority: 'canonical', priority_topics: ['devops/ci-cd'] },
+      expect.any(String),
+    );
+    await relabel(body.id, { priorityTopics: ['sre/x'] }, 400, EDITOR, 'user-4');
+    await relabel(body.id, { priority: 'top' }, 400, EDITOR, 'user-4');
+    await relabel(body.id, { lifecycle: 'staged' }, 400, EDITOR, 'user-4');
+    await relabel(body.id, { lifecycle: 'active' }, 403);
+    const audited = await app
+      .get<Db>(DB)
+      .select()
+      .from(auditLog)
+      .where(eq(auditLog.tool, 'documents.relabel'));
+    expect(audited.slice(-2).map((row) => row.argsRedacted)).toEqual([
+      { docId: body.id, ...pin },
+      { docId: body.id, lifecycle: 'retired' },
+    ]);
+  });
+
   it('the same content again → 409, whatever the filename', async () => {
     await upload('a.txt', 'same bytes', 202);
     const res = await upload('b.txt', 'same bytes', 409);

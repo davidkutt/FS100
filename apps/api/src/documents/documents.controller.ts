@@ -17,7 +17,7 @@ import { ApiAcceptedResponse, ApiConsumes, ApiOkResponse } from '@nestjs/swagger
 import { z } from 'zod';
 import { type AuthRequest, Roles } from '../auth/auth.guard.js';
 import { DomainSchema } from '../catalog/taxonomy.js';
-import { DOCUMENT_STATUSES, type Document } from '../db/schema.js';
+import { DOCUMENT_STATUSES, type Document, LIFECYCLES, PRIORITIES } from '../db/schema.js';
 import { DocumentsService, type Upload } from './documents.service.js';
 
 const UploadBody = z
@@ -41,8 +41,12 @@ const LabelsBody = z
   .object({
     domains: z.array(DomainSchema).min(1).optional(),
     topics: z.array(z.string()).optional(),
+    // D61: a priority moves hits only for questions on `priorityTopics` (taxonomy ids).
+    priority: z.enum(PRIORITIES).optional(),
+    priorityTopics: z.array(z.string()).optional(),
+    lifecycle: z.enum(LIFECYCLES).optional(),
   })
-  .refine((labels) => labels.domains || labels.topics, 'Give `domains`, `topics` or both')
+  .refine((labels) => Object.values(labels).some(Boolean), 'Give at least one label')
   .meta({ id: 'DocumentLabels' });
 export type LabelsBody = z.infer<typeof LabelsBody>;
 
@@ -59,6 +63,9 @@ export const DocumentDto = z
     domains: z.array(DomainSchema),
     topics: z.array(z.string()),
     status: z.enum(DOCUMENT_STATUSES),
+    lifecycle: z.enum(LIFECYCLES),
+    priority: z.enum(PRIORITIES),
+    priorityTopics: z.array(z.string()),
     version: z.int(),
     jobId: z.string().nullable(),
     error: z.string().nullable(),
@@ -96,7 +103,7 @@ export class DocumentsController {
     return this.documents.upload(req.user, file, body.domains, body.topics, req.id as string);
   }
 
-  /** Relabels the chunks in Qdrant without re-embedding (D48). */
+  /** Relabels the chunks in Qdrant without re-embedding (D48); priority and retire too (D61). */
   @Patch(':id')
   @Roles('editor')
   @ApiOkResponse({ standardSchema: DocumentDto })
