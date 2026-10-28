@@ -113,7 +113,7 @@ services:
   # service sends the PAT (GITHUB_PAT_READ) with each request, so the container holds no secret. Server-side
   # read-only + lockdown; the allow-list lives in config/mcp_servers.yaml. Distroless: no healthcheck.
   github-mcp:
-    image: ghcr.io/github/github-mcp-server:v2.0.2
+    image: ghcr.io/github/github-mcp-server:v2.0.3
     command:
       [
         http,
