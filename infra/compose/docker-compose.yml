@@ -88,7 +88,7 @@ services:
     restart: unless-stopped
 
   phoenix:
-    image: arizephoenix/phoenix:version-20.23.0
+    image: arizephoenix/phoenix:version-20.24.0
     environment:
       PHOENIX_WORKING_DIR: /mnt/data
     ports:
