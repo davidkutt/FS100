@@ -201,6 +201,10 @@ Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
   in-process Qdrant (tests, `kb-eval`, CI gate) tokenizes differently from the server (ADR-0016).
 - **torch** comes from PyTorch's CPU index via `tool.uv.sources` in `apps/ai-service/pyproject.toml`; uv applies
   sources only to direct dependencies, so `torch`/`torchvision` stay listed there (PyPI's Linux wheels pull ~3 GB of CUDA).
+- **Cloud sessions without the PyTorch index:** `uv sync --directory apps/ai-service --no-install-package torch
+  --no-install-package torchvision`, then prefix `uv run` scripts with `UV_NO_SYNC=1` (tests never need torch). If
+  `ng` rejects the Node version, check web changes in `apps/web` with `pnpm exec ngc -p tsconfig.app.json --noEmit`
+  and `pnpm exec eslint src`; `ng test` then runs only in CI.
 - **Prompt caching at OpenRouter** (`gpt-6-luna`, M3a.6): a long shared prefix was cached only inside the
   system message (91–98 %), never as a user message (0 %); check `Usage.cached_tokens` before relying on it.
 - **LLM-written index content is stored and reused** (contexts in `ai.chunk_contexts`, keyed by model + messages):

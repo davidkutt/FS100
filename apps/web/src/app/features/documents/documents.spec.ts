@@ -13,6 +13,7 @@ const doc = (id: string, ownerId: string, filename: string) => ({
   mime: 'text/markdown',
   sizeBytes: 1,
   sha256: id.repeat(64),
+  source: null as string | null,
   domains: ['devops'],
   topics: [],
   status: 'ready',
@@ -87,6 +88,31 @@ describe('Documents', () => {
       'Retire mine.md',
       'Delete mine.md',
     ]);
+  });
+
+  it('lets admins sync the notes folder and URLs, with what was skipped', async () => {
+    const note = { ...doc('c', 'notes', 'a.md'), source: 'notes:ops/a.md' };
+    const page = await render(['admin', 'editor', 'viewer'], [note]);
+    expect(page.querySelector('tbody')!.textContent).toContain('notes:ops/a.md');
+
+    const buttons = Array.from(page.querySelectorAll('button'));
+    buttons.find((b) => b.textContent?.includes('Sync notes and URLs'))!.click();
+    http.expectOne({ method: 'POST', url: 'http://api/api/admin/sources/sync' }).flush({
+      added: ['notes:ops/a.md'],
+      updated: [],
+      deleted: [],
+      unchanged: 4,
+      skipped: [{ source: 'notes:keys.md', reason: 'Looks like it holds a JWT' }],
+    });
+    (await vi.waitFor(() => http.expectOne('http://api/api/documents'))).flush([note]);
+    await fixture.whenStable();
+
+    expect(page.querySelector('[aria-live=polite]')!.textContent).toMatch(
+      /1 added, 0 updated,\s+0 deleted, 4 unchanged/,
+    );
+    expect(page.querySelector('.alert-warning')!.textContent).toContain(
+      'notes:keys.md: Looks like it holds a JWT',
+    );
   });
 
   it('shows the job state and polls until the job has ended', async () => {

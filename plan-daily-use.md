@@ -80,6 +80,12 @@ Sizes at the current pace: S < half a day, M ≈ 1 day, L ≈ 2–3 days.
   - Runs at boot, every `SOURCES_SYNC_MINUTES`, and from an admin "Sync now" button
     (`POST /api/admin/sources/sync`).
   - In Mode B, `NOTES_DIR` is bind-mounted read-only.
+- **HTML by URL:** `fromUrl` accepted only `.md` / `.txt` / `.pdf` paths, so an ordinary docs page was
+  rejected (415). A `text/html` response is now ingested as `.html`, with headings kept for chunks and
+  citations. Moved here from the curator (M3a.5 deferred it to M3b.9).
+- **Secret guard:** the sync is automatic and contextual retrieval sends whole notes to OpenRouter (and
+  traces to Phoenix), so a note that looks like it holds a secret (private key; `sk-…`, GitHub, AWS, Slack or
+  Google key; a JWT) is skipped and listed in the sync result instead of ingested. Presidio stays parked (M3b.5).
 - Domains of a note: frontmatter `domains:` / `topics:`, else a folder → domain map, else a default.
   - **Kickoff:** look at the notes and decide whether a tenth catch-all domain is needed. That touches the
     `Domain` enums of both apps, `taxonomy.yaml` and the contracts.
@@ -89,6 +95,29 @@ Sizes at the current pace: S < half a day, M ≈ 1 day, L ≈ 2–3 days.
 - Tests: API e2e for a new, changed and deleted note and a changed URL.
 - **Hand check:** edit a note; after a sync, the answer cites the new text in the web UI and in Claude Code.
 
+**State 2026-10-28: code-complete; the kickoff decision and the hand check are open.**
+- [x] Migration 0007 `source`; `fromSource` in `documents.service.ts` (add, new version, no-op), used by `fromUrl`
+  (which now answers `unchanged` for the same URL and content instead of 409)
+- [x] `sources.service.ts` + `POST /api/admin/sources/sync` + *Sync notes and URLs* on the documents page;
+  the source path shows under the file name
+- [x] HTML, secret guard, persona (`rag-system@3`, `agent-system@4`), Mode B mount, docs; tests (API e2e
+  `test/sources.e2e-spec.ts`, AI service HTML and label tests)
+- [ ] Kickoff: look at the notes, decide on a catch-all domain (the default is `dev` until then)
+- [ ] Hand check on the daily stack (D124)
+
+Deviations:
+- HTML is parsed with the stdlib parser `web.fetch` already used (moved to `ingest.py`, headings now emitted
+  as Markdown), then split like a note, instead of Docling's HTML backend: that needs the `format-html`
+  extra (beautifulsoup4) and a child process, for the same headings.
+- **Found while building:** a new version reset `lifecycle`, `priority` and `priority_topics` in Qdrant to the
+  defaults, while NestJS kept them. `KnowledgeBase.index` now carries them over from the document's previous
+  points; reindex is unaffected (it reconciles labels after the build).
+- URL sources are re-fetched only when their row is a day old: a page whose markup changes on every fetch
+  would otherwise be re-ingested and re-contextualized every `SOURCES_SYNC_MINUTES`.
+- Notes are owned by a pseudo-user `notes` (*Notes folder*): admins change them, editors don't.
+- The boot recovery of interrupted uploads moved to `onModuleInit`, so it runs before the boot sync adds
+  `pending` rows.
+
 ### M3c.2 Feedback becomes eval items (M)
 
 - **Reuse:** `feedback` (up/down plus comment), `messages.answerStatus` (`abstained` / `no_kb`) and `topScore`.
@@ -96,9 +125,15 @@ Sizes at the current pace: S < half a day, M ≈ 1 day, L ≈ 2–3 days.
   - An admin "Review" list of thumbs-down and abstained questions with their cited sources.
   - A JSONL export in the `retrieval_v1` format, with `relevant` prefilled from the citations.
   - You curate the export into git-ignored `evals/local/notes_v1.jsonl`.
+  - **Synthetic bootstrap** (M3b.2 trimmed): a cheap model writes questions from note chunks (direct,
+    paraphrase without keyword overlap, unanswerable near-miss); a review CLI accepts, edits or rejects them
+    into `notes_v1` with `source: synthetic`. One-off, cents per 100 items; reported apart from feedback items.
+    Feedback alone from one user would take months to reach 40 items.
 - **Run:** `kb-eval retrieval --corpus $NOTES_DIR --dataset evals/local/notes_v1.jsonl`, then the
   `retrieval-sweep` skill.
-- **Once it has about 40 items:** decide the reranker, HyDE and priorities on it; delete whatever still loses.
+- **Once it has about 40 items:** decide the reranker, HyDE, priorities and the LLM router on it; delete
+  whatever still loses. Recalibrate `RETRIEVAL_SCORE_THRESHOLD` (0.55, set on the demo corpus) on its
+  unanswerable items: it was left for golden v2 (M3a.6), which `notes_v1` replaces.
 
 ### M3c.3 Skills (M)
 
@@ -130,10 +165,11 @@ Sizes at the current pace: S < half a day, M ≈ 1 day, L ≈ 2–3 days.
 | M3a.10 golden v2 on the demo corpus | Replaced by `notes_v1` (D126) | — |
 | M3b.1–M3b.3 judge, synthetic data, judge gate | Paid per run, portfolio rigor | Answer quality regresses unnoticed |
 | M3b.4 ACL | One user | A second user |
-| M3b.5 guardrails | Own notes, allow-listed hosts | Untrusted web sources at scale |
+| M3b.5 guardrails | Own notes, allow-listed hosts; the notes sync skips likely secrets (M3c.1) | Untrusted web sources at scale |
 | M3b.6 cascade, semantic cache | One user; `/admin/usage` first | Monthly cost nears the 20 USD key limit |
-| M3b.8 compaction | — | Conversations hit the context limit |
-| M3b.9 curator, 3b options | URL refresh plus `ingest_url` cover it | — |
+| M3b.8 compaction | History is cut silently, never at the context limit: `history_messages` keeps the newest ~2,000 tokens (`HISTORY_TOKEN_BUDGET`, `rag.py`) | The assistant forgets earlier turns; raise the budget first |
+| M3b.9 curator | URL refresh plus `ingest_url` (with HTML from M3c.1) cover it | — |
+| 3b options (D75): code execution, text-to-SQL, per-user GitHub | No use for notes; one user | — |
 | Phase 4 Kubernetes, Phase 5 Azure | D121 | — |
 | Phase 6 MLOps, BFF, supply chain, video | Needs the cloud, and a reranker that is off | — |
 | Phase 6 local models | No room next to the stack on 16 GB | New hardware |

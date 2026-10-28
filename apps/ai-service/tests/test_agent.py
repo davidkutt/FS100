@@ -169,7 +169,7 @@ def test_agent_streams_v2_events_with_the_fake_llm(client: TestClient) -> None:
         "steps": 2,
         "toolCalls": 1,
     }
-    assert (done["protocolVersion"], done["promptVersion"]) == (2, "agent-system@3")
+    assert (done["protocolVersion"], done["promptVersion"]) == (2, "agent-system@4")
     assert done["promptHash"] == agent_module.PROMPT.hash
 
 
@@ -191,7 +191,7 @@ def test_rag_mode_runs_the_phase_1_pipeline_with_a_v2_done(client: TestClient) -
     assert {name for name, _ in events[1:-1]} == {"token"}
     done = events[-1][1]
     assert (done["stopReason"], done["answerStatus"]) == ("end", "answered")
-    assert (done["promptVersion"], done["usage"]["steps"]) == ("rag-system@2", 1)
+    assert (done["promptVersion"], done["usage"]["steps"]) == ("rag-system@3", 1)
 
 
 BAD_REQUESTS: list[dict[str, Any]] = [
@@ -884,8 +884,8 @@ def test_web_fetch_reads_a_page_as_text_from_the_checked_address(
 
     page = fetch("https://docs.example/moved")
 
-    assert page.content == "https://docs.example/\n\nRunbook\nDeploy\nRun make deploy."
-    assert page.summary == "docs.example: 31 chars"
+    assert page.content == "https://docs.example/\n\nRunbook\n# Deploy\nRun make deploy."
+    assert page.summary == "docs.example: 33 chars"
     assert [(r.url.host, r.headers["host"], r.extensions["sni_hostname"]) for r in requests] == [
         (PUBLIC_IP, "docs.example", "docs.example")
     ] * 2

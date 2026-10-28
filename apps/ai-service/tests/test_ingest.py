@@ -104,6 +104,22 @@ def test_pypdf_takes_over_when_docling_fails(
     assert [s.page for s in sections] == [1, 2]
 
 
+def test_html_sections_carry_their_heading_path() -> None:
+    page = b"""<html><head><title>Service</title><script>var x</script></head><body>
+    <nav>Home</nav><h1>Service</h1><p>Expose an app.</p>
+    <h2 id="ports">
+      Port <code>definitions</code><a href="#ports">#</a>
+    </h2><table><tr><th>Type</th><td>ClusterIP</td></tr></table></body></html>"""
+
+    sections = parse("service.html", page)
+
+    assert [(s.heading, s.text.splitlines()[-1]) for s in sections] == [
+        (None, "Home"),
+        ("Service", "Expose an app."),
+        ("Service › Port definitions", "ClusterIP"),  # noqa: RUF001
+    ]
+
+
 def test_txt_is_one_section() -> None:
     assert parse("notes.TXT", b"\xef\xbb\xbfplain text") == [Section("plain text")]
 

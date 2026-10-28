@@ -60,6 +60,7 @@ export const DocumentDto = z
     mime: z.string(),
     sizeBytes: z.int(),
     sha256: z.string(),
+    source: z.string().nullable(),
     domains: z.array(DomainSchema),
     topics: z.array(z.string()),
     status: z.enum(DOCUMENT_STATUSES),

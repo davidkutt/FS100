@@ -18,6 +18,7 @@ import { DomainPicker } from '../../shared/domain-picker';
 
 type Document = components['schemas']['Document'];
 type Taxonomy = components['schemas']['Taxonomy'];
+type SourcesSync = components['schemas']['SourcesSync'];
 
 /** Upload, list and delete documents; the controls follow the roles, the API enforces them (D6). */
 @Component({
@@ -29,7 +30,7 @@ export class Documents {
   private readonly api = inject(APP_CONFIG).apiBaseUrl;
   private readonly http = inject(HttpClient);
   private readonly keycloak = inject(Keycloak);
-  private readonly isAdmin = this.keycloak.hasRealmRole('admin');
+  protected readonly isAdmin = this.keycloak.hasRealmRole('admin');
 
   protected readonly canUpload = this.keycloak.hasRealmRole('editor');
   protected readonly docs = httpResource<Document[]>(() => `${this.api}/api/documents`);
@@ -49,6 +50,8 @@ export class Documents {
   protected readonly editError = signal('');
   protected readonly errors = signal<string[]>([]);
   protected readonly uploading = signal(false);
+  protected readonly syncing = signal(false);
+  protected readonly synced = signal<SourcesSync | undefined>(undefined);
   protected readonly dragging = signal(false);
   protected readonly badge: Record<Document['status'], string> = {
     pending: 'text-bg-secondary',
@@ -95,6 +98,20 @@ export class Documents {
       this.docs.reload();
     }
     this.uploading.set(false);
+  }
+
+  /** The notes folder and URL sources now instead of at the next interval (M3c.1). */
+  protected async sync(): Promise<void> {
+    this.syncing.set(true);
+    this.errors.set([]);
+    try {
+      const url = `${this.api}/api/admin/sources/sync`;
+      this.synced.set(await firstValueFrom(this.http.post<SourcesSync>(url, {})));
+    } catch (error) {
+      this.errors.set([`Sync: ${problemDetail(error)}`]);
+    }
+    this.syncing.set(false);
+    this.docs.reload();
   }
 
   protected async remove(doc: Document): Promise<void> {

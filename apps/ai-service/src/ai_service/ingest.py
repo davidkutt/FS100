@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass, replace
+from html.parser import HTMLParser
 from importlib.metadata import version
 from io import BytesIO
 from pathlib import Path, PurePath
@@ -26,6 +27,13 @@ DOCLING_TIMEOUT_S = 300  # a 36-page PDF takes ~30 s warm (ADR-0018)
 _HEADING = re.compile(r"^(#{1,6})\s+(.+?)\s*#*\s*$")
 _FENCE = ("```", "~~~")
 _SEPARATORS = ("\n\n", "\n", ". ", " ", "")
+_HIDDEN = {"script", "style", "noscript", "template", "svg"}
+_HEADINGS = {f"h{level}" for level in range(1, 7)}
+_BLOCKS = {
+    *("br", "p", "div", "li", "tr", "pre", "blockquote", "section", "article", "header"),
+    *("footer", "nav", "main", "table", "ul", "ol", "dt", "dd", "hr", "title", "th", "td"),
+    *_HEADINGS,
+}
 logger = logging.getLogger(__name__)
 
 
@@ -42,20 +50,22 @@ class Section:
 
 
 def supported(filename: str) -> bool:
-    return PurePath(filename).suffix.lower() in (".pdf", ".md", ".markdown", ".txt")
+    return PurePath(filename).suffix.lower() in (".pdf", ".md", ".markdown", ".txt", ".html")
 
 
 def parse(filename: str, data: bytes) -> list[Section]:
-    """PDF by Docling (pypdf if it fails), Markdown section by section, TXT as one section (D8,
-    D59)."""
+    """PDF by Docling (pypdf if it fails), Markdown section by section, HTML like Markdown by its
+    headings, TXT as one section (D8, D59)."""
     suffix = PurePath(filename).suffix.lower()
     if suffix == ".pdf":
         return _pdf(convert_pdf(data), data)
     if suffix in (".md", ".markdown"):
         return _parse_markdown(data.decode("utf-8-sig"))
+    if suffix == ".html":
+        return _parse_markdown(html_text(data.decode("utf-8-sig")))
     if suffix == ".txt":
         return [Section(data.decode("utf-8-sig"))]
-    raise ValueError(f"Unsupported file type {suffix!r}; expected PDF, MD or TXT")
+    raise ValueError(f"Unsupported file type {suffix!r}; expected PDF, MD, HTML or TXT")
 
 
 async def parse_stored(
@@ -151,6 +161,46 @@ def _parse_markdown(text: str) -> list[Section]:
         for path, lines in blocks
         if any(line.strip() for line in (lines[1:] if path else lines))  # skip heading-only blocks
     ]
+
+
+class _PageText(HTMLParser):
+    """Text of an HTML page with its headings as Markdown ones. Text hidden by CSS stays in: the
+    result is untrusted data anyway."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.parts: list[str] = []
+        self._hidden = 0
+        self._heading = False
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _HIDDEN:
+            self._hidden += 1
+        elif tag in _HEADINGS:
+            self._heading = True
+            self.parts.append(f"\n{'#' * int(tag[1])} ")
+        elif tag in _BLOCKS:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in _HIDDEN:
+            self._hidden = max(0, self._hidden - 1)
+        elif tag in _BLOCKS:
+            self.parts.append("\n")
+        if tag in _HEADINGS:
+            self._heading = False
+
+    def handle_data(self, data: str) -> None:
+        if not self._hidden:
+            self.parts.append(data.replace("\n", " ") if self._heading else data)
+
+
+def html_text(html: str) -> str:
+    parser = _PageText()
+    parser.feed(html)
+    parser.close()
+    lines = (" ".join(line.split()) for line in "".join(parser.parts).splitlines())
+    return "\n".join(line for line in lines if line)
 
 
 def chunk(sections: list[Section], size: int, overlap: int) -> list[Section]:

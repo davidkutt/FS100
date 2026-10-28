@@ -19,6 +19,11 @@ describe('fetchDocument', () => {
     }
     if (req.url === '/big.md') return void res.end('x'.repeat(2048));
     if (req.url === '/a.md') return void res.end('# A\n');
+    if (req.url?.startsWith('/docs/')) {
+      return void res
+        .writeHead(200, { 'content-type': 'text/html; charset=utf-8' })
+        .end('<h1>A</h1>');
+    }
     res.writeHead(404).end();
   });
 
@@ -38,6 +43,14 @@ describe('fetchDocument', () => {
 
     expect(file).toMatchObject({ originalname: 'a.md', size: 4 });
     expect(file.buffer.toString()).toBe('# A\n');
+  });
+
+  it.each([
+    ['/docs/service/', 'service.html'],
+    ['/docs/README.md', 'README.md.html'],
+    ['/docs/page.html', 'page.html'],
+  ])('names a page served as HTML %s → %s', async (path, name) => {
+    expect((await get(path)).originalname).toBe(name);
   });
 
   it.each([

@@ -7,7 +7,6 @@ import socket
 from collections.abc import Awaitable, Callable
 from contextvars import ContextVar
 from dataclasses import dataclass
-from html.parser import HTMLParser
 from typing import Annotated, Any, Literal
 from uuid import UUID
 
@@ -18,6 +17,7 @@ from pydantic import BaseModel, Field, HttpUrl, RootModel, WithJsonSchema
 
 from ai_service.core.auth import Caller
 from ai_service.core.settings import Settings
+from ai_service.ingest import html_text
 from ai_service.knowledge_base import Domain, Hit
 from ai_service.mcp_client import McpClient
 from ai_service.query import STRATEGY, Strategy
@@ -34,12 +34,6 @@ GITHUB_TRANSPORT: httpx2.AsyncBaseTransport | None = None  # tests answer for Gi
 WEB_TRANSPORT: httpx2.AsyncBaseTransport | None = None  # tests answer for the web
 WEB_MAX_BYTES = 2_000_000  # decoded, so a gzip bomb stops here too
 _NAT64 = ipaddress.ip_network("64:ff9b::/96")  # `is_global` lets it through; it embeds any IPv4
-_HIDDEN = {"script", "style", "noscript", "template", "svg"}
-_BLOCKS = {
-    *("br", "p", "div", "li", "tr", "pre", "blockquote", "section", "article", "header"),
-    *("footer", "nav", "main", "table", "ul", "ol", "dt", "dd", "hr", "title"),
-    *(f"h{level}" for level in range(1, 7)),
-}
 # Set by the harness while an approved write runs; the write's idempotency key (D39).
 approval_id: ContextVar[str | None] = ContextVar("approval_id", default=None)
 logger = logging.getLogger(__name__)
@@ -166,39 +160,6 @@ class FetchArgs(BaseModel):
     url: Annotated[HttpUrl, WithJsonSchema({"type": "string"})] = Field(
         description="An http(s) URL on one of the allowed hosts"
     )
-
-
-class _PageText(HTMLParser):
-    """Text of an HTML page. Text hidden by CSS stays in: the result is untrusted data anyway."""
-
-    def __init__(self) -> None:
-        super().__init__()
-        self.parts: list[str] = []
-        self._hidden = 0
-
-    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in _HIDDEN:
-            self._hidden += 1
-        elif tag in _BLOCKS:
-            self.parts.append("\n")
-
-    def handle_endtag(self, tag: str) -> None:
-        if tag in _HIDDEN:
-            self._hidden = max(0, self._hidden - 1)
-        elif tag in _BLOCKS:
-            self.parts.append("\n")
-
-    def handle_data(self, data: str) -> None:
-        if not self._hidden:
-            self.parts.append(data)
-
-
-def html_text(html: str) -> str:
-    parser = _PageText()
-    parser.feed(html)
-    parser.close()
-    lines = (" ".join(line.split()) for line in "".join(parser.parts).splitlines())
-    return "\n".join(line for line in lines if line)
 
 
 async def public_ip(host: str, port: int) -> str:

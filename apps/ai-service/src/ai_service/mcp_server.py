@@ -184,7 +184,7 @@ def create_mcp(
     @mcp.tool()
     async def ingest_url(  # pyright: ignore[reportUnusedFunction]
         url: Annotated[
-            HttpUrl, Field(description="A PDF, Markdown or text file on an allowed host")
+            HttpUrl, Field(description="A web page, PDF, Markdown or text file on an allowed host")
         ],
         domains: Annotated[list[Domain], Field(min_length=1)],
         confirmation: Annotated[Confirmation, Resolve(confirmed)],

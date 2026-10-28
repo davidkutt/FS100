@@ -231,6 +231,20 @@ def test_labels_change_without_re_embedding(
     assert len(search(client, "page", domains=["devops"])) == 2
 
 
+def test_a_new_version_keeps_lifecycle_and_priority(client: TestClient) -> None:
+    doc_id = str(uuid4())
+    ingest(client, "runbook.md", MARKDOWN, ["devops"], doc_id)
+    labels = {"lifecycle": "retired", "priority": "canonical", "priority_topics": ["sre/incidents"]}
+    client.patch(f"/v1/documents/{doc_id}/labels", json=labels)
+
+    ingest(client, "runbook.md", MARKDOWN + b"\nThen check the dashboards.\n", ["sre"], doc_id)
+
+    assert [(p["version"], p["domains"], p["lifecycle"]) for p in payloads(client, doc_id)] == [
+        (2, ["sre"], "retired")
+    ]
+    assert payloads(client, doc_id)[0]["priority_topics"] == ["sre/incidents"]
+
+
 def test_only_taxonomy_topics_are_accepted(client: TestClient) -> None:
     doc_id = str(uuid4())
 

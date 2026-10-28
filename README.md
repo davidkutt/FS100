@@ -17,7 +17,9 @@ latency on fixture MCP servers, plus a red-team seed set.
 Phases 1 and 2 are done, apart from the postponed Azure spike and the M2.8 hand check. Phase 3a (retrieval
 quality) is done through M3a.7. **Since 2026-10-26 FS100 is being turned into a daily-use tool**: personal
 Markdown notes as the corpus, used from Claude Code / VS Code and the web UI, locally on a 16 GB M1
-([plan-daily-use.md](plan-daily-use.md)). The Kubernetes, Azure and MLOps phases are parked.
+([plan-daily-use.md](plan-daily-use.md)). Point `NOTES_DIR` at your notes folder and the API keeps it in
+sync ([startup guide](docs/setup/startup.md#your-notes-and-urls-as-sources)). The Kubernetes, Azure and MLOps
+phases are parked.
 
 ---
 

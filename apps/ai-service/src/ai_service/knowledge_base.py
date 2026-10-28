@@ -259,6 +259,14 @@ class KnowledgeBase:
                 vectors, self.embedder.embed_sparse(texts, sparse), strict=True
             ):
                 named["sparse"] = vector
+        # A new version (a changed note, M3c.1) keeps the lifecycle and priority set since (D61).
+        previous = first_chunks(self.client, self.alias, [_equals("doc_id", str(doc_id))])
+        kept = {
+            key: value
+            for chunk in previous.values()
+            for key, value in chunk.items()
+            if key in ("lifecycle", "priority", "priority_topics")
+        }
         payload = {
             "doc_id": str(doc_id),
             "version": version,
@@ -275,6 +283,7 @@ class KnowledgeBase:
             "allowed_groups": [],
             "sha256": sha256,
             "embedding_model": self.embedder.model_name,
+            **kept,
         }
         points = [
             models.PointStruct(

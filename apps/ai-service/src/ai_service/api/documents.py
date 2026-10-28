@@ -97,7 +97,8 @@ async def submit(
     filename = file.filename or ""
     if not supported(filename):
         raise HTTPException(
-            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, "Unsupported file type; expected PDF, MD or TXT"
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            "Unsupported file type; expected PDF, MD, HTML or TXT",
         )
     data = await file.read()
     if len(data) > MAX_BYTES:

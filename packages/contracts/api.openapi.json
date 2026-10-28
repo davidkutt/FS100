@@ -323,7 +323,8 @@
                     "status": {
                       "type": "string",
                       "enum": [
-                        "pending"
+                        "pending",
+                        "unchanged"
                       ]
                     }
                   },
@@ -407,6 +408,27 @@
         },
         "tags": [
           "Reindex"
+        ]
+      }
+    },
+    "/api/admin/sources/sync": {
+      "post": {
+        "operationId": "SourcesController_sync",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SourcesSync"
+                }
+              }
+            }
+          }
+        },
+        "tags": [
+          "Sources"
         ]
       }
     },
@@ -990,6 +1012,10 @@
           "sha256": {
             "type": "string"
           },
+          "source": {
+            "nullable": true,
+            "type": "string"
+          },
           "domains": {
             "type": "array",
             "items": {
@@ -1094,6 +1120,7 @@
           "mime",
           "sizeBytes",
           "sha256",
+          "source",
           "domains",
           "topics",
           "status",
@@ -1223,6 +1250,61 @@
             "type": "boolean"
           }
         }
+      },
+      "SourcesSync": {
+        "type": "object",
+        "properties": {
+          "added": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "updated": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unchanged": {
+            "type": "integer",
+            "minimum": -9007199254740991,
+            "maximum": 9007199254740991
+          },
+          "skipped": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "source": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "source",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "added",
+          "updated",
+          "deleted",
+          "unchanged",
+          "skipped"
+        ],
+        "additionalProperties": false
       },
       "Taxonomy": {
         "type": "object",

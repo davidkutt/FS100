@@ -20,6 +20,10 @@ const schema = z.object({
     .default('raw.githubusercontent.com')
     .transform((hosts) => hosts.split(',').map((host) => host.trim())),
   UPLOAD_MAX_MB: z.coerce.number().positive().default(20),
+  // M3c.1: Markdown notes kept in sync as documents (absolute path; empty = none), and how often
+  // notes and fetched URLs sync after the one at boot (0 = only at boot and on demand).
+  NOTES_DIR: z.string().default(''),
+  SOURCES_SYNC_MINUTES: z.coerce.number().nonnegative().default(15),
   CHAT_THROTTLE_PER_MIN: z.coerce.number().int().positive().default(20),
   // LLM cost per user and UTC day by highest role (D44); once reached, LLM relays answer 429.
   DAILY_COST_CAP_USD_VIEWER: z.coerce.number().nonnegative().default(0.2),

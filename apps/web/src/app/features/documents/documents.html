@@ -19,19 +19,44 @@
         [(value)]="topics"
       />
     }
-    <label for="files" class="form-label">PDF, Markdown or text files — or drop them here</label>
+    <label for="files" class="form-label">
+      PDF, Markdown, HTML or text files — or drop them here
+    </label>
     <input
       #files
       id="files"
       type="file"
       class="form-control"
-      accept=".pdf,.md,.markdown,.txt"
+      accept=".pdf,.md,.markdown,.txt,.html"
       multiple
       [disabled]="uploading()"
       (change)="upload(files.files); files.value = ''"
     />
     @if (uploading()) {
       <p class="small text-body-secondary mt-2 mb-0" aria-live="polite">Uploading…</p>
+    }
+    @if (isAdmin) {
+      <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+        <button
+          type="button"
+          class="btn btn-outline-secondary"
+          [disabled]="syncing()"
+          (click)="sync()"
+        >
+          Sync notes and URLs
+        </button>
+        @if (synced(); as result) {
+          <span class="small text-body-secondary" aria-live="polite">
+            {{ result.added.length }} added, {{ result.updated.length }} updated,
+            {{ result.deleted.length }} deleted, {{ result.unchanged }} unchanged
+          </span>
+        }
+      </div>
+      @for (skipped of synced()?.skipped; track skipped.source) {
+        <div class="alert alert-warning mt-2 mb-0 py-2" role="status">
+          {{ skipped.source }}: {{ skipped.reason }}
+        </div>
+      }
     }
     @for (error of errors(); track $index) {
       <div class="alert alert-danger mt-2 mb-0 py-2" role="alert">{{ error }}</div>
@@ -58,6 +83,9 @@
           <tr>
             <td>
               {{ doc.filename }}
+              @if (doc.source) {
+                <div class="small text-body-secondary text-break">{{ doc.source }}</div>
+              }
               @if (doc.error) {
                 <div class="small text-danger">{{ doc.error }}</div>
               }
