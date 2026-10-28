@@ -1,10 +1,10 @@
-# Local stack for FS100 (plan.md D18). Run from the repo root (scripts/stack.mjs adds `.env` and `.env.local`):
+# Local stack for Grove (plan.md D18). Run from the repo root (scripts/stack.mjs adds `.env` and `.env.local`):
 # - Mode A, `pnpm stack:up`: infra only — Postgres, Qdrant, Keycloak, Phoenix, GitHub MCP server; apps run
 #   with `pnpm dev`.
 # - Mode B, `pnpm stack:up:full`: also web, api and ai-service as containers (`profiles: [full]`).
 # Ports follow plan.md §5, identical in both modes, and are bound to 127.0.0.1 only.
 # All images are multi-arch (amd64 + arm64). Every credential here is a dev-only default.
-name: fs100
+name: fs100 # old project name kept: renaming it orphans the volumes (`fs100_*`) that hold all local data
 
 services:
   postgres:

@@ -17,9 +17,9 @@ real `fs100` stack cannot run at the same time.
    docker ps --format '{{.Names}}'                       # any fs100-* running?
    docker compose -p fs100 -f infra/compose/docker-compose.yml stop
    ```
-2. **Boot the OLD pins** in a separate project (own volumes `fs100-m20_*`), seed something to survive:
+2. **Boot the OLD pins** in a separate project (own volumes `grove-m20_*`), seed something to survive:
    ```bash
-   docker compose -p fs100-m20 -f infra/compose/docker-compose.yml up -d --wait postgres qdrant keycloak
+   docker compose -p grove-m20 -f infra/compose/docker-compose.yml up -d --wait postgres qdrant keycloak
    curl -s -X PUT localhost:6333/collections/upgrade_probe -H 'content-type: application/json' \
      -d '{"vectors":{"size":2,"distance":"Cosine"}}'
    curl -s -X PUT 'localhost:6333/collections/upgrade_probe/points?wait=true' -H 'content-type: application/json' \
@@ -28,7 +28,7 @@ real `fs100` stack cannot run at the same time.
 3. **Edit the pins**, then upgrade in place: same command plus `phoenix`. Check:
    ```bash
    curl -s localhost:6333/collections/upgrade_probe/points/1          # data survived
-   docker logs fs100-m20-keycloak-1 2>&1 | grep -iE 'migrat|error'    # "migrated realm kb to …"
+   docker logs grove-m20-keycloak-1 2>&1 | grep -iE 'migrat|error'    # "migrated realm kb to …"
    ```
 4. **Fresh import:** `down -v` the throwaway project, `up -d --wait postgres keycloak` again, then
    `curl localhost:8080/realms/kb/.well-known/openid-configuration` → 200 and a `kb-api` client-credentials
@@ -36,10 +36,10 @@ real `fs100` stack cannot run at the same time.
    `KEYCLOAK_URL=http://localhost:8080 .claude/skills/realm-check/cimd-login.sh carol` → `aud=http://localhost:8000/mcp`.
 5. **Retrieval eval** when `qdrant-client` changes: `pnpm eval:retrieval` before and after the bump; diff
    the two newest `evals/runs/*.md` from `| Slice` down — they must be identical.
-6. **Tear down:** list the volumes before deleting them, and only delete `fs100-m20_*`:
+6. **Tear down:** list the volumes before deleting them, and only delete `grove-m20_*`:
    ```bash
-   docker volume ls --format '{{.Name}}' | grep '^fs100-m20_'
-   docker compose -p fs100-m20 -f infra/compose/docker-compose.yml down -v
+   docker volume ls --format '{{.Name}}' | grep '^grove-m20_'
+   docker compose -p grove-m20 -f infra/compose/docker-compose.yml down -v
    ```
    Leave the real stack stopped if it was stopped before; otherwise `pnpm stack:up`.
 

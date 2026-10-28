@@ -13,7 +13,7 @@ from ai_service.evals import agent, retrieval, routing
 
 def main() -> None:
     settings = Settings()
-    parser = argparse.ArgumentParser(prog="kb-eval", description="FS100 evaluation harness")
+    parser = argparse.ArgumentParser(prog="kb-eval", description="Grove evaluation harness")
     commands = parser.add_subparsers(dest="command", required=True)
     retrieval.add_command(commands, settings)
     agent.add_commands(commands, settings)

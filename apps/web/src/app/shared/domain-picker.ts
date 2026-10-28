@@ -1,5 +1,5 @@
 import { Component, input, model } from '@angular/core';
-import type { components } from '@fs100/contracts/api';
+import type { components } from '@grove/contracts/api';
 
 export type Domain = components['schemas']['Document']['domains'][number];
 

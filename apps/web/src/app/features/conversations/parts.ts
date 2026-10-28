@@ -1,5 +1,5 @@
-import type { components as Ai } from '@fs100/contracts/ai-service';
-import type { components as Api } from '@fs100/contracts/api';
+import type { components as Ai } from '@grove/contracts/ai-service';
+import type { components as Api } from '@grove/contracts/api';
 
 type Events = Ai['schemas'];
 export type ToolCall = { type: 'tool_call' } & Events['ToolCallEvent'];

@@ -1,9 +1,9 @@
-# Startup guide — run FS100 locally
+# Startup guide — run Grove locally
 
 Prerequisite: the toolchain from the **[installation guide](installation.md)** (Node 24, pnpm via Corepack,
 uv, Docker).
 
-FS100 uses two development modes (plan.md D18):
+Grove uses two development modes (plan.md D18):
 
 - **Mode A (daily):** infrastructure in Docker Compose — Postgres, Qdrant, Keycloak, Phoenix — and the
   three apps running **natively** with hot reload.
@@ -15,7 +15,7 @@ FS100 uses two development modes (plan.md D18):
 ## 1. First start (≈ 5 minutes, most of it image downloads)
 
 ```bash
-git clone https://github.com/davidkutt/FS100.git && cd FS100
+git clone https://github.com/davidkutt/pecker-grove.git && cd pecker-grove
 
 corepack enable pnpm                      # once per machine
 pnpm install                              # web + api
@@ -61,8 +61,8 @@ pnpm dev api ai     # names: web, api, ai
 Or each app on its own (from the repo root):
 
 ```bash
-pnpm --filter @fs100/web start                                                   # http://localhost:4200
-pnpm --filter @fs100/api start:dev                                               # http://localhost:3000
+pnpm --filter @grove/web start                                                   # http://localhost:4200
+pnpm --filter @grove/api start:dev                                               # http://localhost:3000
 uv run --directory apps/ai-service uvicorn ai_service.main:app --reload --port 8000
 ```
 
@@ -243,17 +243,17 @@ Document from claude.ai / vscode.dev (so it needs internet), creates a client fo
 **Claude Code:**
 
 ```bash
-claude mcp add --transport http fs100-kb http://localhost:8000/mcp
+claude mcp add --transport http grove-kb http://localhost:8000/mcp
 ```
 
-In Claude Code, run `/mcp` → `fs100-kb` → *Authenticate*. The browser opens Keycloak: log in (e.g. `carol`)
-and allow access on the consent screen (once per user). Then ask, e.g., *"Search the FS100 knowledge base:
+In Claude Code, run `/mcp` → `grove-kb` → *Authenticate*. The browser opens Keycloak: log in (e.g. `carol`)
+and allow access on the consent screen (once per user). Then ask, e.g., *"Search the Grove knowledge base:
 what happens when the error budget is exhausted?"* — Claude Code calls `search_knowledge_base`.
 
 **VS Code** (`.vscode/mcp.json`, or *MCP: Add Server* → HTTP):
 
 ```json
-{ "servers": { "fs100-kb": { "type": "http", "url": "http://localhost:8000/mcp" } } }
+{ "servers": { "grove-kb": { "type": "http", "url": "http://localhost:8000/mcp" } } }
 ```
 
 Start the server, allow the authentication prompt, log in in the browser; the tools are then available in
@@ -284,7 +284,7 @@ on GitHub, so it needs internet) and deletes the ingested file. It needs `LLM_PR
 against whatever serves http://localhost:4200 — Mode B as in CI, or Mode A:
 
 ```bash
-pnpm --filter @fs100/e2e exec playwright install chromium   # once per machine
+pnpm --filter @grove/e2e exec playwright install chromium   # once per machine
 LLM_PROVIDER=fake pnpm stack:up:full                        # free: no LLM tokens
 pnpm e2e
 ```
@@ -455,5 +455,5 @@ exchange on both internal hops, `kb.ingest_url`), **M2.5** (GitHub MCP server, s
 daily cost caps with `/api/me/usage` and the admin usage page at http://localhost:4200/admin/usage, README and
 [system card](../system-card.md)) are done; **M2.8** (Claude Code / VS Code log in to the MCP server through
 Keycloak, [§4](#use-the-knowledge-base-from-claude-code--vs-code)) is code-complete. Phase 3a (retrieval
-quality) is done through M3a.7. From here on, FS100 becomes a daily-use tool on your notes:
+quality) is done through M3a.7. From here on, Grove becomes a daily-use tool on your notes:
 [plan-daily-use.md](../../plan-daily-use.md).

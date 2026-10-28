@@ -2,7 +2,7 @@ import { DecimalPipe } from '@angular/common';
 import { HttpClient, httpResource } from '@angular/common/http';
 import { Component, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { components } from '@fs100/contracts/ai-service';
+import type { components } from '@grove/contracts/ai-service';
 import { firstValueFrom } from 'rxjs';
 import { APP_CONFIG } from '../../core/config';
 import { problemDetail } from '../../core/problem';

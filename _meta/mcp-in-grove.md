@@ -1,4 +1,4 @@
-# MCP in FS100 — how it fits, and how to check it by hand
+# MCP in Grove — how it fits, and how to check it by hand
 
 > **State:** M2.4 done (own MCP server + token exchange), M2.5 (external MCP servers) in progress.
 > **Written / verified:** 2026-10-21 against the running stack, MCP Inspector **v2.12.0**, Node 24.
@@ -10,7 +10,7 @@
 
 ## 1. The picture
 
-FS100 is **both** an MCP server and an MCP client, in the same process (the AI service on `:8000`):
+Grove is **both** an MCP server and an MCP client, in the same process (the AI service on `:8000`):
 
 ```
 browser ──JWT aud=kb-api──▶ NestJS :3000
@@ -146,11 +146,11 @@ The token is now on the clipboard. (Want to look inside? Paste it into jwt.io: `
 ### 5.4 Add the server in the Inspector
 
 1. **Add Servers → Add manually.**
-2. Server ID: `fs100-kb` · Transport: **Streamable HTTP** · URL: `http://localhost:8000/mcp` → **Add**.
+2. Server ID: `grove-kb` · Transport: **Streamable HTTP** · URL: `http://localhost:8000/mcp` → **Add**.
    Use `localhost`, not `127.0.0.1`: the server only accepts the `localhost` host (DNS-rebinding guard).
-3. On the new `fs100-kb` card: **Settings → Custom Headers → + Add Header**.
+3. On the new `grove-kb` card: **Settings → Custom Headers → + Add Header**.
    Key `Authorization`, value `Bearer ` followed by the pasted token. Close the dialog.
-4. Flip the `fs100-kb` toggle on.
+4. Flip the `grove-kb` toggle on.
 
 ### 5.5 What you should see
 

@@ -9,10 +9,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json apps/web/
 COPY packages/contracts/package.json packages/contracts/
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --filter @fs100/web...
+    pnpm install --frozen-lockfile --filter @grove/web...
 COPY packages/contracts packages/contracts
 COPY apps/web apps/web
-RUN pnpm --filter @fs100/web build
+RUN pnpm --filter @grove/web build
 
 FROM nginxinc/nginx-unprivileged:1.31.6-alpine
 COPY apps/web/nginx.conf /etc/nginx/conf.d/default.conf

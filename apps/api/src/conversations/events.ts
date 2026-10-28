@@ -1,4 +1,4 @@
-import type { components } from '@fs100/contracts/ai-service';
+import type { components } from '@grove/contracts/ai-service';
 
 type Schemas = components['schemas'];
 

@@ -1,6 +1,6 @@
 # Installation guide — local development toolchain
 
-This guide installs everything you need to develop FS100 on your own machine. The primary target is a
+This guide installs everything you need to develop Grove on your own machine. The primary target is a
 **MacBook with Apple Silicon (M1)**; Linux and Windows (WSL2) are covered as well.
 
 Once the toolchain is in place, continue with the **[startup guide](startup.md)**.
@@ -78,7 +78,7 @@ Corepack ships with Node 24 and installs exactly the pnpm version pinned in `pac
 
 ```bash
 corepack enable pnpm
-cd FS100 && pnpm --version     # -> 12.11.2 (downloaded on first use)
+cd pecker-grove && pnpm --version     # -> 12.11.2 (downloaded on first use)
 ```
 
 If `corepack enable` fails with a permissions error (Node installed system-wide), use
@@ -96,7 +96,7 @@ You never activate a virtualenv by hand: `uv sync` creates `apps/ai-service/.ven
 
 ### 2.5 Docker
 
-Pick **one** container runtime. All images used by FS100 are multi-arch, so they run natively on arm64
+Pick **one** container runtime. All images used by Grove are multi-arch, so they run natively on arm64
 (no Rosetta emulation).
 
 | Option | Notes |
@@ -146,7 +146,7 @@ docker compose version
 
 Use **WSL2** (Ubuntu) and follow the Linux steps *inside* WSL. Install **Docker Desktop for Windows** with
 the WSL2 backend and enable integration for your distro. Clone the repo into the WSL filesystem
-(`~/code/FS100`), **not** under `/mnt/c/…` — file watching and I/O are much slower across the boundary.
+(`~/code/pecker-grove`), **not** under `/mnt/c/…` — file watching and I/O are much slower across the boundary.
 
 ---
 
@@ -183,7 +183,7 @@ How each technology is installed and used **in this repo**. Versions are the one
 
 | Technology | Version | Installed by | Notes |
 |---|---|---|---|
-| Angular | 22.2 | `pnpm install` | Standalone components, signals, zoneless. CLI: `pnpm --filter @fs100/web ng <cmd>` |
+| Angular | 22.2 | `pnpm install` | Standalone components, signals, zoneless. CLI: `pnpm --filter @grove/web ng <cmd>` |
 | Bootstrap | 5.3.8 | `pnpm install` | Compiled from SCSS in `src/styles.scss` with variable overrides; no jQuery, no Bootstrap JS yet |
 | Vitest | 5.x | `pnpm install` | Angular's default unit-test runner (`ng test`), DOM via jsdom |
 | ESLint + angular-eslint | 10.x / 22.x | `pnpm install` | `ng lint`, includes template accessibility rules |
@@ -193,7 +193,7 @@ How each technology is installed and used **in this repo**. Versions are the one
 
 | Technology | Version | Installed by | Notes |
 |---|---|---|---|
-| NestJS | 12.1 | `pnpm install` | ESM (`"type": "module"`, `.js` import suffixes). CLI: `pnpm --filter @fs100/api exec nest <cmd>` |
+| NestJS | 12.1 | `pnpm install` | ESM (`"type": "module"`, `.js` import suffixes). CLI: `pnpm --filter @grove/api exec nest <cmd>` |
 | Vitest + supertest | 5.x / 7.x | `pnpm install` | Unit tests in `src/**/*.spec.ts`, HTTP tests in `test/*.e2e-spec.ts` |
 | oxlint | 1.x | `pnpm install` | Nest 12's default linter, type-aware via `oxlint-tsgolint` |
 | Express | 5 | `pnpm install` | Via `@nestjs/platform-express` |

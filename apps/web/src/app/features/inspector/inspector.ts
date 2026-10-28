@@ -2,7 +2,7 @@ import { DecimalPipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Component, computed, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { components } from '@fs100/contracts/ai-service';
+import type { components } from '@grove/contracts/ai-service';
 import { APP_CONFIG } from '../../core/config';
 import { problemDetail } from '../../core/problem';
 import { type Domain, DomainPicker } from '../../shared/domain-picker';

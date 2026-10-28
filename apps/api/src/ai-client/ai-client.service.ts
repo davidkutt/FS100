@@ -5,7 +5,7 @@ import {
   Inject,
   Injectable,
 } from '@nestjs/common';
-import type { components } from '@fs100/contracts/ai-service';
+import type { components } from '@grove/contracts/ai-service';
 import { CONFIG, type Config } from '../config.js';
 
 type Schemas = components['schemas'];

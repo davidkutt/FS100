@@ -34,7 +34,7 @@ describe('Internal ingest from a URL (e2e)', () => {
   const fromUrl = async (bearer: string, body: object, path = '/internal/documents/from-url') =>
     request(app.getHttpServer()).post(path).auth(bearer, { type: 'bearer' }).send(body);
   const BODY = {
-    url: 'https://raw.githubusercontent.com/davidkutt/FS100/main/runbook.md',
+    url: 'https://raw.githubusercontent.com/davidkutt/pecker-grove/main/runbook.md',
     domains: ['devops'],
     onBehalfOf: { sub: 'bob-sub', name: 'Bob Editor' },
   };

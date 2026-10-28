@@ -1,7 +1,7 @@
 # ai-service
 
 FastAPI service (Python 3.13, managed with [uv](https://docs.astral.sh/uv/)) that owns every AI concern of
-FS100: parsing, chunking, embeddings, retrieval, grounded chat, evals and tracing (plan.md D3,
+Grove: parsing, chunking, embeddings, retrieval, grounded chat, evals and tracing (plan.md D3,
 [ADR-0002](../../docs/adr/0002-ai-layer-in-python.md)). Internal only — the browser talks to the NestJS API.
 
 | Command (from the repo root)                                                        | What it does                    |

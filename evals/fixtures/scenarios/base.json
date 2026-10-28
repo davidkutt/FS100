@@ -53,7 +53,7 @@
           "conclusion": "failure",
           "created_at": "2026-10-21T08:12:31Z",
           "display_title": "feat: agent eval runner",
-          "html_url": "https://github.com/davidkutt/FS100/actions/runs/19001"
+          "html_url": "https://github.com/davidkutt/pecker-grove/actions/runs/19001"
         },
         {
           "id": 18997,
@@ -66,7 +66,7 @@
           "conclusion": "success",
           "created_at": "2026-10-21T08:12:31Z",
           "display_title": "feat: agent eval runner",
-          "html_url": "https://github.com/davidkutt/FS100/actions/runs/18997"
+          "html_url": "https://github.com/davidkutt/pecker-grove/actions/runs/18997"
         },
         {
           "id": 18990,
@@ -79,7 +79,7 @@
           "conclusion": "success",
           "created_at": "2026-10-20T17:40:05Z",
           "display_title": "Merge pull request #14 from davidkutt/feat/m2-4-mcp-server",
-          "html_url": "https://github.com/davidkutt/FS100/actions/runs/18990"
+          "html_url": "https://github.com/davidkutt/pecker-grove/actions/runs/18990"
         },
         {
           "id": 18971,
@@ -92,7 +92,7 @@
           "conclusion": "success",
           "created_at": "2026-10-20T15:02:44Z",
           "display_title": "feat: external MCP servers and routing",
-          "html_url": "https://github.com/davidkutt/FS100/actions/runs/18971"
+          "html_url": "https://github.com/davidkutt/pecker-grove/actions/runs/18971"
         }
       ]
     }
@@ -135,7 +135,7 @@
               "conclusion": "failure"
             }
           ],
-          "html_url": "https://github.com/davidkutt/FS100/actions/runs/19001/job/55102"
+          "html_url": "https://github.com/davidkutt/pecker-grove/actions/runs/19001/job/55102"
         },
         {
           "id": 55103,
@@ -189,7 +189,7 @@
               "conclusion": "failure"
             }
           ],
-          "html_url": "https://github.com/davidkutt/FS100/actions/runs/19001/job/55102"
+          "html_url": "https://github.com/davidkutt/pecker-grove/actions/runs/19001/job/55102"
         },
         {
           "id": 55103,
@@ -223,7 +223,7 @@
       "conclusion": "failure",
       "created_at": "2026-10-21T08:12:31Z",
       "display_title": "feat: agent eval runner",
-      "html_url": "https://github.com/davidkutt/FS100/actions/runs/19001"
+      "html_url": "https://github.com/davidkutt/pecker-grove/actions/runs/19001"
     }
   },
   {
@@ -253,7 +253,7 @@
           "conclusion": "failure"
         }
       ],
-      "html_url": "https://github.com/davidkutt/FS100/actions/runs/19001/job/55102"
+      "html_url": "https://github.com/davidkutt/pecker-grove/actions/runs/19001/job/55102"
     }
   },
   {
@@ -264,7 +264,7 @@
     "result": {
       "job_id": 55102,
       "job_name": "ai-service",
-      "logs_content": "2026-10-21T08:19:40Z ##[group]Run uv run pytest\n2026-10-21T08:19:44Z ============================= test session starts ==============================\n2026-10-21T08:19:44Z collected 171 items\n2026-10-21T08:20:58Z tests/test_evals.py ......F\n2026-10-21T08:21:02Z =================================== FAILURES ===================================\n2026-10-21T08:21:02Z ______________________ test_agent_smoke_runs_the_task_sets ______________________\n2026-10-21T08:21:02Z E   OSError: [Errno 28] No space left on device: '/home/runner/work/FS100/FS100/apps/ai-service/.cache/fastembed/models--BAAI--bge-m3/blobs/7f8e5e2c.incomplete'\n2026-10-21T08:21:02Z FAILED tests/test_evals.py::test_agent_smoke_runs_the_task_sets - OSError: [Errno 28] No space left on device\n2026-10-21T08:21:02Z ======================== 1 failed, 170 passed in 82.11s ========================\n2026-10-21T08:21:03Z ##[error]Process completed with exit code 1.\n2026-10-21T08:21:03Z ##[warning]You are running out of disk space. The runner will stop working when the machine runs out of disk space. Free space left: 14 MB",
+      "logs_content": "2026-10-21T08:19:40Z ##[group]Run uv run pytest\n2026-10-21T08:19:44Z ============================= test session starts ==============================\n2026-10-21T08:19:44Z collected 171 items\n2026-10-21T08:20:58Z tests/test_evals.py ......F\n2026-10-21T08:21:02Z =================================== FAILURES ===================================\n2026-10-21T08:21:02Z ______________________ test_agent_smoke_runs_the_task_sets ______________________\n2026-10-21T08:21:02Z E   OSError: [Errno 28] No space left on device: '/home/runner/work/pecker-grove/pecker-grove/apps/ai-service/.cache/fastembed/models--BAAI--bge-m3/blobs/7f8e5e2c.incomplete'\n2026-10-21T08:21:02Z FAILED tests/test_evals.py::test_agent_smoke_runs_the_task_sets - OSError: [Errno 28] No space left on device\n2026-10-21T08:21:02Z ======================== 1 failed, 170 passed in 82.11s ========================\n2026-10-21T08:21:03Z ##[error]Process completed with exit code 1.\n2026-10-21T08:21:03Z ##[warning]You are running out of disk space. The runner will stop working when the machine runs out of disk space. Free space left: 14 MB",
       "message": "Job logs content retrieved successfully"
     }
   },
@@ -280,7 +280,7 @@
         {
           "job_id": 55102,
           "job_name": "ai-service",
-          "logs_content": "2026-10-21T08:19:40Z ##[group]Run uv run pytest\n2026-10-21T08:19:44Z ============================= test session starts ==============================\n2026-10-21T08:19:44Z collected 171 items\n2026-10-21T08:20:58Z tests/test_evals.py ......F\n2026-10-21T08:21:02Z =================================== FAILURES ===================================\n2026-10-21T08:21:02Z ______________________ test_agent_smoke_runs_the_task_sets ______________________\n2026-10-21T08:21:02Z E   OSError: [Errno 28] No space left on device: '/home/runner/work/FS100/FS100/apps/ai-service/.cache/fastembed/models--BAAI--bge-m3/blobs/7f8e5e2c.incomplete'\n2026-10-21T08:21:02Z FAILED tests/test_evals.py::test_agent_smoke_runs_the_task_sets - OSError: [Errno 28] No space left on device\n2026-10-21T08:21:02Z ======================== 1 failed, 170 passed in 82.11s ========================\n2026-10-21T08:21:03Z ##[error]Process completed with exit code 1.\n2026-10-21T08:21:03Z ##[warning]You are running out of disk space. The runner will stop working when the machine runs out of disk space. Free space left: 14 MB"
+          "logs_content": "2026-10-21T08:19:40Z ##[group]Run uv run pytest\n2026-10-21T08:19:44Z ============================= test session starts ==============================\n2026-10-21T08:19:44Z collected 171 items\n2026-10-21T08:20:58Z tests/test_evals.py ......F\n2026-10-21T08:21:02Z =================================== FAILURES ===================================\n2026-10-21T08:21:02Z ______________________ test_agent_smoke_runs_the_task_sets ______________________\n2026-10-21T08:21:02Z E   OSError: [Errno 28] No space left on device: '/home/runner/work/pecker-grove/pecker-grove/apps/ai-service/.cache/fastembed/models--BAAI--bge-m3/blobs/7f8e5e2c.incomplete'\n2026-10-21T08:21:02Z FAILED tests/test_evals.py::test_agent_smoke_runs_the_task_sets - OSError: [Errno 28] No space left on device\n2026-10-21T08:21:02Z ======================== 1 failed, 170 passed in 82.11s ========================\n2026-10-21T08:21:03Z ##[error]Process completed with exit code 1.\n2026-10-21T08:21:03Z ##[warning]You are running out of disk space. The runner will stop working when the machine runs out of disk space. Free space left: 14 MB"
         }
       ],
       "message": "Retrieved logs for 1 failed jobs"
@@ -301,7 +301,7 @@
           "author": "davidkutt",
           "createdAt": "2026-10-08T11:00:00Z",
           "comments": 0,
-          "url": "https://github.com/davidkutt/FS100/issues/4",
+          "url": "https://github.com/davidkutt/pecker-grove/issues/4",
           "body": "Add a diagram of hop 1 and hop 2 to the docs."
         }
       ],
@@ -320,7 +320,7 @@
           "author": "davidkutt",
           "createdAt": "2026-10-02T09:15:00Z",
           "comments": 1,
-          "url": "https://github.com/davidkutt/FS100/issues/6",
+          "url": "https://github.com/davidkutt/pecker-grove/issues/6",
           "body": "The restore drill on 2026-10-01 restored last night's dump into `kb_restore`, but the verify step reports different row counts for `messages` than production. Is that expected, and what should the drill check instead?"
         },
         {
@@ -331,7 +331,7 @@
           "author": "davidkutt",
           "createdAt": "2026-10-14T16:40:00Z",
           "comments": 0,
-          "url": "https://github.com/davidkutt/FS100/issues/5",
+          "url": "https://github.com/davidkutt/pecker-grove/issues/5",
           "body": "About one in ten Playwright runs times out on the Keycloak login page (`waitForURL` after 30 s). Seen locally and in the E2E workflow."
         }
       ],
@@ -351,7 +351,7 @@
           "author": "davidkutt",
           "createdAt": "2026-10-02T09:15:00Z",
           "comments": 1,
-          "url": "https://github.com/davidkutt/FS100/issues/6",
+          "url": "https://github.com/davidkutt/pecker-grove/issues/6",
           "body": "The restore drill on 2026-10-01 restored last night's dump into `kb_restore`, but the verify step reports different row counts for `messages` than production. Is that expected, and what should the drill check instead?"
         },
         {
@@ -362,7 +362,7 @@
           "author": "davidkutt",
           "createdAt": "2026-10-14T16:40:00Z",
           "comments": 0,
-          "url": "https://github.com/davidkutt/FS100/issues/5",
+          "url": "https://github.com/davidkutt/pecker-grove/issues/5",
           "body": "About one in ten Playwright runs times out on the Keycloak login page (`waitForURL` after 30 s). Seen locally and in the E2E workflow."
         },
         {
@@ -373,7 +373,7 @@
           "author": "davidkutt",
           "createdAt": "2026-10-08T11:00:00Z",
           "comments": 0,
-          "url": "https://github.com/davidkutt/FS100/issues/4",
+          "url": "https://github.com/davidkutt/pecker-grove/issues/4",
           "body": "Add a diagram of hop 1 and hop 2 to the docs."
         }
       ]
@@ -393,7 +393,7 @@
       "author": "davidkutt",
       "createdAt": "2026-10-02T09:15:00Z",
       "comments": 1,
-      "url": "https://github.com/davidkutt/FS100/issues/6",
+      "url": "https://github.com/davidkutt/pecker-grove/issues/6",
       "body": "The restore drill on 2026-10-01 restored last night's dump into `kb_restore`, but the verify step reports different row counts for `messages` than production. Is that expected, and what should the drill check instead?"
     }
   },
@@ -411,7 +411,7 @@
       "author": "davidkutt",
       "createdAt": "2026-10-14T16:40:00Z",
       "comments": 0,
-      "url": "https://github.com/davidkutt/FS100/issues/5",
+      "url": "https://github.com/davidkutt/pecker-grove/issues/5",
       "body": "About one in ten Playwright runs times out on the Keycloak login page (`waitForURL` after 30 s). Seen locally and in the E2E workflow."
     }
   },
@@ -429,7 +429,7 @@
       "author": "davidkutt",
       "createdAt": "2026-10-08T11:00:00Z",
       "comments": 0,
-      "url": "https://github.com/davidkutt/FS100/issues/4",
+      "url": "https://github.com/davidkutt/pecker-grove/issues/4",
       "body": "Add a diagram of hop 1 and hop 2 to the docs."
     }
   },
@@ -465,7 +465,7 @@
         "head": "feat/m2-5-external-mcp-routing",
         "base": "main",
         "created_at": "2026-10-20T14:55:00Z",
-        "html_url": "https://github.com/davidkutt/FS100/pull/15",
+        "html_url": "https://github.com/davidkutt/pecker-grove/pull/15",
         "draft": false
       }
     ]
@@ -481,7 +481,7 @@
       "title": "feat: external MCP servers and routing",
       "state": "open",
       "user": "davidkutt",
-      "html_url": "https://github.com/davidkutt/FS100/pull/15",
+      "html_url": "https://github.com/davidkutt/pecker-grove/pull/15",
       "body": "M2.5: MCP client manager with allow-lists, the GitHub MCP server in Compose, `github_sandbox.create_issue` behind an approval, and domain routing (embedding + LLM router).",
       "additions": 1392,
       "deletions": 126,
@@ -522,21 +522,21 @@
         "message": "feat: agent eval runner",
         "author": "davidkutt",
         "date": "2026-10-21T08:10:12Z",
-        "html_url": "https://github.com/davidkutt/FS100/commit/8f3c2a1d4b6e9f0a7c5d3e1b2a4f6c8d0e9b7a51"
+        "html_url": "https://github.com/davidkutt/pecker-grove/commit/8f3c2a1d4b6e9f0a7c5d3e1b2a4f6c8d0e9b7a51"
       },
       {
         "sha": "642b68b3c1d9e7f5a3b1c9d7e5f3a1b9c7d5e3f1",
         "message": "Merge pull request #14 from davidkutt/feat/m2-4-mcp-server",
         "author": "davidkutt",
         "date": "2026-10-20T17:39:50Z",
-        "html_url": "https://github.com/davidkutt/FS100/commit/642b68b3c1d9e7f5a3b1c9d7e5f3a1b9c7d5e3f1"
+        "html_url": "https://github.com/davidkutt/pecker-grove/commit/642b68b3c1d9e7f5a3b1c9d7e5f3a1b9c7d5e3f1"
       },
       {
         "sha": "f413ef2a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b6d",
         "message": "feat: mcp server + token exchange",
         "author": "davidkutt",
         "date": "2026-10-20T16:02:31Z",
-        "html_url": "https://github.com/davidkutt/FS100/commit/f413ef2a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b6d"
+        "html_url": "https://github.com/davidkutt/pecker-grove/commit/f413ef2a6c8e0b2d4f6a8c0e2b4d6f8a0c2e4b6d"
       }
     ]
   },
@@ -549,7 +549,7 @@
       "sha": "8f3c2a1d4b6e9f0a7c5d3e1b2a4f6c8d0e9b7a51",
       "message": "feat: agent eval runner\n\nkb-eval agent | redteam | routing with fixture MCP servers.",
       "author": "davidkutt",
-      "html_url": "https://github.com/davidkutt/FS100/commit/8f3c2a1d4b6e9f0a7c5d3e1b2a4f6c8d0e9b7a51",
+      "html_url": "https://github.com/davidkutt/pecker-grove/commit/8f3c2a1d4b6e9f0a7c5d3e1b2a4f6c8d0e9b7a51",
       "stats": {
         "additions": 612,
         "deletions": 18

@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-Guide for agents working in FS100. Read this first; follow the links only when the task needs them.
+Guide for agents working in Grove. Read this first; follow the links only when the task needs them.
 
 ## ALWAYS rules
 
@@ -45,7 +45,7 @@ When creating or updating a skill:
 - Don't reference the skill in CLAUDE.md; the description handles discovery.
 ## What this is
 
-FS100 is a RAG/agent assistant: upload domain-tagged documents, ask questions, get streamed answers with
+Grove is a RAG/agent assistant: upload domain-tagged documents, ask questions, get streamed answers with
 citations, with every retrieval change measured by evals and every request traced.
 
 **Goal since 2026-10-26: a daily-use tool for one person on a 16 GB M1.** The corpus is the user's Markdown
@@ -90,7 +90,8 @@ measures them on the notes. Phase 3 ADRs start at 0015, not 0014. Check the mile
 something: most of the old roadmap is parked.
 
 The plan's working title `kb-agent` lives on in identifiers (realm `kb`, clients `kb-web`/`kb-api`/`kb-ai`,
-Qdrant alias `kb_current`). Keep those names.
+Qdrant alias `kb_current`). Keep those names. The old name FS100 stays in the Compose project `fs100` (renaming it
+orphans the user's volumes) and in the frozen `data/sample-docs/`, `evals/datasets/` and `evals/baselines/`.
 
 ## Map
 
@@ -139,21 +140,21 @@ pnpm kb:backfill-originals                # store originals of pre-M3a.1 documen
 pnpm kb:reindex [--force --reason "…"]    # rebuild kb_current from originals behind the eval gate; --rollback; needs `pnpm dev ai`
 pnpm e2e                                  # Playwright smoke; needs a running stack, LLM_PROVIDER=fake
 pnpm stack:backup                         # pg_dumpall into backups/ (git-ignored); run before anything destructive
-pnpm --filter @fs100/api db:generate      # Drizzle migration after editing apps/api/src/db/schema.ts
+pnpm --filter @grove/api db:generate      # Drizzle migration after editing apps/api/src/db/schema.ts
 ```
 
 Fast feedback — run only what you touched:
 
 ```bash
-pnpm --filter @fs100/api exec vitest run src/app.controller.spec.ts
-pnpm --filter @fs100/api test:e2e                      # test/*.e2e-spec.ts
-pnpm --filter @fs100/web test --include src/app/app.spec.ts
+pnpm --filter @grove/api exec vitest run src/app.controller.spec.ts
+pnpm --filter @grove/api test:e2e                      # test/*.e2e-spec.ts
+pnpm --filter @grove/web test --include src/app/app.spec.ts
 uv run --directory apps/ai-service pytest tests/test_health.py::test_healthz_reports_ok
-pnpm --filter @fs100/api lint   |   pnpm --filter @fs100/web lint   |   pnpm lint:ai
+pnpm --filter @grove/api lint   |   pnpm --filter @grove/web lint   |   pnpm lint:ai
 ```
 
-Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
-`pnpm --filter @fs100/api exec nest generate module x`. Python deps: `uv add [--dev] <pkg>` in
+Generators: `pnpm --filter @grove/web ng generate component features/x/x`,
+`pnpm --filter @grove/api exec nest generate module x`. Python deps: `uv add [--dev] <pkg>` in
 `apps/ai-service`. Never install CLIs globally.
 
 **Done means:** `pnpm lint && pnpm test` pass (that is what CI runs; also `pnpm build` for web/api changes).
@@ -191,7 +192,7 @@ Generators: `pnpm --filter @fs100/web ng generate component features/x/x`,
   (in-process PGlite) and need no Docker; `test/support.ts` builds the app with test JWT keys.
 - **Contracts:** Nest's OpenAPI comes from Zod schemas (`@Body({ schema })`, `@ApiOkResponse({ standardSchema })`;
   `.meta({ id })` names a component). Relayed bodies (`/api/chat`, `/api/search`) are validated only by the AI
-  service; their types live in `@fs100/contracts/ai-service`. `contracts:generate` boots the API from the repo
+  service; their types live in `@grove/contracts/ai-service`. `contracts:generate` boots the API from the repo
   root with logging off, so a cwd-relative file path in API config makes it exit 1 without a message.
 - **AI service tests** never download models or need Docker: they fake fastembed (`tests/support.py`; BM25 and the cross-encoder via an
   autouse fixture in `conftest.py`, which also sends PDFs to pypdf instead of Docling) and use `support.OFFLINE` (Qdrant and the `ai` database in-process, no worker); `drain(client)` runs the queued

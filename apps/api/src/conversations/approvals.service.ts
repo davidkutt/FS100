@@ -6,7 +6,7 @@ import {
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import type { components } from '@fs100/contracts/ai-service';
+import type { components } from '@grove/contracts/ai-service';
 import { and, asc, desc, eq, getTableColumns, gt, lte, sql } from 'drizzle-orm';
 import { AiClient } from '../ai-client/ai-client.service.js';
 import type { AuthUser } from '../auth/auth.guard.js';

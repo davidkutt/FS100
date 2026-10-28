@@ -32,8 +32,8 @@ jobs:
           node-version-file: .nvmrc
           package-manager-cache: false
       - run: corepack enable pnpm
-      - run: pnpm install --frozen-lockfile --filter @fs100/e2e
-      - run: pnpm --filter @fs100/e2e exec playwright install --with-deps chromium
+      - run: pnpm install --frozen-lockfile --filter @grove/e2e
+      - run: pnpm --filter @grove/e2e exec playwright install --with-deps chromium
       # Without it the web config and APPROVAL_SIGNING_KEY stay unset; the job's env still wins.
       - run: cp .env.example .env
       - run: pnpm stack:up:full

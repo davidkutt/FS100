@@ -1,6 +1,6 @@
 import { JsonPipe } from '@angular/common';
 import { Component, computed, DestroyRef, inject, input, output, signal } from '@angular/core';
-import type { components } from '@fs100/contracts/api';
+import type { components } from '@grove/contracts/api';
 import type { Proposal } from './parts';
 
 type Approval = components['schemas']['Approval'];

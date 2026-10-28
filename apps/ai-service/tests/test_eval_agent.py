@@ -31,7 +31,7 @@ DATASETS = REPO / "evals/datasets"
 FIXTURES = REPO / "evals/fixtures"
 CORPORA = [REPO / "data/sample-docs", FIXTURES / "documents"]
 GITHUB = load_servers(str(REPO / "config/mcp_servers.yaml"))["github"]
-OWN_REPO = {"owner": "davidkutt", "repo": "FS100"}
+OWN_REPO = {"owner": "davidkutt", "repo": "pecker-grove"}
 
 
 class ScriptedLlm:

@@ -9,10 +9,10 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/api/package.json apps/api/
 COPY packages/contracts/package.json packages/contracts/
 RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
-    pnpm install --frozen-lockfile --filter @fs100/api...
+    pnpm install --frozen-lockfile --filter @grove/api...
 COPY packages/contracts packages/contracts
 COPY apps/api apps/api
-RUN pnpm --filter @fs100/api build && pnpm --filter @fs100/api deploy --prod /out
+RUN pnpm --filter @grove/api build && pnpm --filter @grove/api deploy --prod /out
 
 FROM node:24.22.0-trixie-slim
 ENV NODE_ENV=production TAXONOMY_CONFIG=/app/config/taxonomy.yaml

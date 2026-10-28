@@ -1,6 +1,6 @@
 # Architecture Decision Records
 
-Short, numbered records of decisions that shape FS100. Each ADR references the decision ids of
+Short, numbered records of decisions that shape Grove. Each ADR references the decision ids of
 [plan.md §3](../../plan.md#3-decisions) (`D1` … `D26`) or
 [plan-phase-2.md §3](../../plan-phase-2.md#3-decisions) (`D27` … `D49`) or
 [plan-phase-3.md §3](../../plan-phase-3.md#3-decisions) (`D50` …).

@@ -1,7 +1,7 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "FS100 AI service",
+    "title": "Grove AI service",
     "version": "0.1.0"
   },
   "paths": {

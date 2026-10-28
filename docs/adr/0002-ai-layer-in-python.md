@@ -6,7 +6,7 @@
 
 ## Context
 
-FS100 needs retrieval (parsing, chunking, embeddings, vector search), grounded generation with
+Grove needs retrieval (parsing, chunking, embeddings, vector search), grounded generation with
 streaming, an evaluation harness and LLM tracing — and in Phase 2 an agent loop, tools and an MCP client.
 The surrounding product needs authentication, RBAC, document metadata, quotas and an HTTP API for the
 browser. The AI ecosystem (fastembed, qdrant-client, OpenInference, Phoenix, eval tooling, MLflow) is

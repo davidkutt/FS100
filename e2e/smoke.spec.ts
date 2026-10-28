@@ -41,7 +41,7 @@ test('login → upload → ask → cited answer', async ({ page }) => {
 // Demo step 4 (plan-phase-2.md §1): the fake LLM proposes `kb.ingest_url` for "Add <url>". The
 // approved run fetches the file from GitHub; the test deletes it again, since dedupe would fail a rerun.
 test('agent write → reject, then approve → runs once', async ({ page }) => {
-  const url = 'https://raw.githubusercontent.com/davidkutt/FS100/main/docs/adr/template.md';
+  const url = 'https://raw.githubusercontent.com/davidkutt/pecker-grove/main/docs/adr/template.md';
 
   await login(page, 'bob');
   await page.getByRole('link', { name: 'Chat' }).click();

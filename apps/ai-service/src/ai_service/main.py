@@ -102,7 +102,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 with suppress(asyncio.CancelledError):
                     await worker
 
-    app = FastAPI(title="FS100 AI service", version=__version__, lifespan=lifespan)
+    app = FastAPI(title="Grove AI service", version=__version__, lifespan=lifespan)
     app.include_router(health.router)
     # Every /v1 router is included with this dependency: service token required.
     service_auth = [Depends(ServiceAuth(settings))]

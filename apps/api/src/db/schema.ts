@@ -30,7 +30,7 @@ export type DocumentStatus = (typeof DOCUMENT_STATUSES)[number];
 export const LIFECYCLES = ['active', 'retired'] as const;
 export const PRIORITIES = ['canonical', 'normal', 'low'] as const;
 
-/** plan.md §7.4. After a change: `pnpm --filter @fs100/api db:generate`; the API migrates on boot. */
+/** plan.md §7.4. After a change: `pnpm --filter @grove/api db:generate`; the API migrates on boot. */
 export const documents = pgTable(
   'documents',
   {

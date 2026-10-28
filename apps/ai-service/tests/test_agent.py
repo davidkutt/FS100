@@ -169,7 +169,7 @@ def test_agent_streams_v2_events_with_the_fake_llm(client: TestClient) -> None:
         "steps": 2,
         "toolCalls": 1,
     }
-    assert (done["protocolVersion"], done["promptVersion"]) == (2, "agent-system@4")
+    assert (done["protocolVersion"], done["promptVersion"]) == (2, "agent-system@5")
     assert done["promptHash"] == agent_module.PROMPT.hash
 
 
@@ -191,7 +191,7 @@ def test_rag_mode_runs_the_phase_1_pipeline_with_a_v2_done(client: TestClient) -
     assert {name for name, _ in events[1:-1]} == {"token"}
     done = events[-1][1]
     assert (done["stopReason"], done["answerStatus"]) == ("end", "answered")
-    assert (done["promptVersion"], done["usage"]["steps"]) == ("rag-system@3", 1)
+    assert (done["promptVersion"], done["usage"]["steps"]) == ("rag-system@4", 1)
 
 
 BAD_REQUESTS: list[dict[str, Any]] = [
@@ -543,7 +543,7 @@ def test_an_approved_ingest_runs_once_through_the_mcp_server(
     app = cast(FastAPI, client.app)
     settings = Settings(approval_signing_key=SIGNING_KEY)
     mcp = McpClient(settings.mcp_resource_url)
-    url = "https://raw.githubusercontent.com/davidkutt/FS100/main/README.md"
+    url = "https://raw.githubusercontent.com/davidkutt/pecker-grove/main/README.md"
 
     async def tools(domains: list[Domain] | None, caller: Caller) -> list[ToolSpec[Any]]:
         return kb_tools(mcp, Tokens(settings), caller, domains)
