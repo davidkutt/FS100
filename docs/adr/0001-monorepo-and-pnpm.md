@@ -6,7 +6,7 @@
 
 ## Context
 
-FS100 consists of three apps in two languages — Angular (`apps/web`), NestJS (`apps/api`) and a FastAPI
+Grove consists of three apps in two languages — Angular (`apps/web`), NestJS (`apps/api`) and a FastAPI
 AI service (`apps/ai-service`) — plus shared infrastructure, contracts, evals and docs. Changes often cut
 across all of them (an SSE event field touches Pydantic, Nest and Angular), and one developer works on
 everything.

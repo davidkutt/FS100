@@ -1,5 +1,5 @@
 {
-  "name": "@fs100/api",
+  "name": "@grove/api",
   "version": "0.0.0",
   "private": true,
   "license": "MIT",
@@ -41,7 +41,7 @@
   },
   "devDependencies": {
     "@electric-sql/pglite": "^0.5.10",
-    "@fs100/contracts": "workspace:*",
+    "@grove/contracts": "workspace:*",
     "@nestjs/cli": "^12.0.8",
     "@nestjs/schematics": "^12.0.7",
     "@nestjs/testing": "^12.1.3",

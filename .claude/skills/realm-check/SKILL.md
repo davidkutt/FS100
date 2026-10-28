@@ -1,6 +1,6 @@
 ---
 name: realm-check
-description: Checks a change to infra/keycloak/realm-kb.json on a throwaway Keycloak (container fs100-m24-kc on :8081) — token-exchange matrix of ADR-0009, CIMD logins of Claude Code / VS Code (ADR-0014), and optionally the API and AI service on :3001/:8001 against it — without resetting the user's stack or touching their running `pnpm dev`. Use when editing the realm, client scopes, client policies, token exchange, service accounts or MCP audiences ("does the realm import work", "check the token matrix", "verify kb-ai / kb-api exchange", "does Claude Code's login still work").
+description: Checks a change to infra/keycloak/realm-kb.json on a throwaway Keycloak (container grove-m24-kc on :8081) — token-exchange matrix of ADR-0009, CIMD logins of Claude Code / VS Code (ADR-0014), and optionally the API and AI service on :3001/:8001 against it — without resetting the user's stack or touching their running `pnpm dev`. Use when editing the realm, client scopes, client policies, token exchange, service accounts or MCP audiences ("does the realm import work", "check the token matrix", "verify kb-ai / kb-api exchange", "does Claude Code's login still work").
 ---
 
 # Realm change on a throwaway Keycloak
@@ -11,8 +11,8 @@ This recipe never touches it. Scratch files go to the session scratchpad (`$S`).
 1. Start Keycloak on :8081 with the edited file (≈ 20 s; rerun after each edit, the import runs once):
 
    ```bash
-   docker rm -f fs100-m24-kc 2>/dev/null
-   docker run -d --name fs100-m24-kc -p 127.0.0.1:8081:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+   docker rm -f grove-m24-kc 2>/dev/null
+   docker run -d --name grove-m24-kc -p 127.0.0.1:8081:8080 -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
      -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin -e KC_HOSTNAME=http://localhost:8081 \
      -v "$PWD/infra/keycloak/realm-kb.json:/opt/keycloak/data/import/realm-kb.json:ro" \
      quay.io/keycloak/keycloak:26.8.1 start-dev --import-realm --features=cimd,resource-indicators
@@ -41,7 +41,7 @@ This recipe never touches it. Scratch files go to the session scratchpad (`$S`).
      LLM_PROVIDER=fake APPROVAL_SIGNING_KEY=dev-only-change-me-approval-signing-key \
      OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4317 RETRIEVAL_SCORE_THRESHOLD=0.5 \
      uv run uvicorn ai_service.main:app --host 127.0.0.1 --port 8001 > $S/ai8001.log 2>&1   # background
-   pnpm --filter @fs100/api build
+   pnpm --filter @grove/api build
    env -i PATH="$PATH" HOME="$HOME" API_PORT=3001 API_DATABASE_URL=:memory: \
      KEYCLOAK_ISSUER=http://localhost:8081/realms/kb KEYCLOAK_CLIENT_SECRET=dev-only-change-me \
      AI_SERVICE_URL=http://localhost:8001 node apps/api/dist/main.js > $S/api3001.log 2>&1      # background
@@ -51,7 +51,7 @@ This recipe never touches it. Scratch files go to the session scratchpad (`$S`).
    `localhost:3001/api/*` as in the `user-token` skill (upload, conversation turn); the span tree via
    `agent-turn-check`'s `spans.py <traceId>`.
 4. Clean up: kill the :8001/:3001 processes (`lsof -nP -iTCP:8001 -iTCP:3001 -sTCP:LISTEN -t`), then
-   `docker rm -f fs100-m24-kc`.
+   `docker rm -f grove-m24-kc`.
 
 ## Pitfalls
 

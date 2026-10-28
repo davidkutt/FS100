@@ -15,8 +15,8 @@ import {
 } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterLink } from '@angular/router';
-import type { components as Ai } from '@fs100/contracts/ai-service';
-import type { components as Api } from '@fs100/contracts/api';
+import type { components as Ai } from '@grove/contracts/ai-service';
+import type { components as Api } from '@grove/contracts/api';
 import Keycloak from 'keycloak-js';
 import { firstValueFrom } from 'rxjs';
 import { APP_CONFIG } from '../../core/config';

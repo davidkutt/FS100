@@ -1,13 +1,13 @@
 import { Controller, Get, Inject, Req } from '@nestjs/common';
 import { ApiOkResponse } from '@nestjs/swagger';
-import type { components } from '@fs100/contracts/ai-service';
+import type { components } from '@grove/contracts/ai-service';
 import { AiClient } from '../ai-client/ai-client.service.js';
 import { type AuthRequest, Roles } from '../auth/auth.guard.js';
 import { TAXONOMY, Taxonomy } from './taxonomy.js';
 
 type Schemas = components['schemas'];
 
-/** Relayed lists keep the AI-service shape (`@fs100/contracts/ai-service`), cut to the caller's role. */
+/** Relayed lists keep the AI-service shape (`@grove/contracts/ai-service`), cut to the caller's role. */
 @Controller()
 @Roles('viewer')
 export class CatalogController {

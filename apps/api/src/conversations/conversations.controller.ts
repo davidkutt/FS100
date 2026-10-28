@@ -76,7 +76,7 @@ export const MessageDto = z
   .object({
     id: z.uuid(),
     role: z.enum(['user', 'assistant']),
-    // SSE v2 payloads (`@fs100/contracts/ai-service`) under their event name as `type`.
+    // SSE v2 payloads (`@grove/contracts/ai-service`) under their event name as `type`.
     parts: z.array(z.looseObject({ type: z.string() })),
     model: z.string().nullable(),
     promptVersion: z.string().nullable(),

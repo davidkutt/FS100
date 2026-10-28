@@ -21,7 +21,7 @@ from ai_service.mcp_client import McpClient
 from ai_service.tools import ToolOutput
 
 FIXTURES = Path("../../evals/fixtures")
-REPO = "davidkutt/FS100"  # the repository the scenarios describe
+REPO = "davidkutt/pecker-grove"  # the repository the scenarios describe
 SANDBOX = "davidkutt/fs-100-sandbox"
 FAKE_PAT = "ghp_" + "0" * 36  # the server checks the format only before an API call (ADR-0010)
 _LISTED = {"name", "description", "input_schema", "annotations"}  # what the model sees

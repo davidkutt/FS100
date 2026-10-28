@@ -1,6 +1,6 @@
-# Red teaming FS100
+# Red teaming Grove
 
-A playbook for attacking your own FS100 deployment on purpose, so you find the weak spots before someone
+A playbook for attacking your own Grove deployment on purpose, so you find the weak spots before someone
 else does. It pulls together the security material from the study notes in `_meta/ai-theory/`. Those notes
 hold the experiments, version numbers and sources; this page is the condensed how-to.
 
@@ -48,7 +48,7 @@ hold the experiments, version numbers and sources; this page is the condensed ho
   items from restricted documents, because the repo is public.
 - Keep fixtures **out of the main collection** and out of `evals/datasets/retrieval_v1.jsonl`. They would
   distort retrieval metrics and live answers (§6 shows how).
-- No harmful-content jailbreaks beyond what the threat model needs. FS100's risks are disclosure,
+- No harmful-content jailbreaks beyond what the threat model needs. Grove's risks are disclosure,
   actions and cost, not weapon recipes. Keep such items few and check the provider's terms.
 - Record every run with its config and versions (§10).
 - This page quotes attacks verbatim. Don't copy it into `data/sample-docs/`, unless you deliberately
@@ -387,7 +387,7 @@ Hand-written items are deep but narrow. Generators add breadth, but what they pr
 
 | Tool | Notes |
 |---|---|
-| promptfoo 0.124.1 (MIT) | OWASP-mapped red-team plugins. With `OPENAI_API_KEY` unset (FS100 uses an OpenRouter key), **red-team generation goes to promptfoo's remote API**: set `PROMPTFOO_DISABLE_REMOTE_GENERATION=1` and `PROMPTFOO_DISABLE_TELEMETRY=1` |
+| promptfoo 0.124.1 (MIT) | OWASP-mapped red-team plugins. With `OPENAI_API_KEY` unset (Grove uses an OpenRouter key), **red-team generation goes to promptfoo's remote API**: set `PROMPTFOO_DISABLE_REMOTE_GENERATION=1` and `PROMPTFOO_DISABLE_TELEMETRY=1` |
 | garak 0.17.0 (NVIDIA) | Probe library; needs torch, transformers and `openai < 3`, so it needs its own environment |
 | PyRIT 1.1.0 (MIT, Microsoft) | Multi-turn attack orchestrators; its own environment |
 

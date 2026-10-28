@@ -9,7 +9,7 @@ Never run `pnpm kb:reindex` or this branch's migrations against the user's stack
 API migration and the alias swap change their data, and `main` may not run on the migrated `app` DB.
 
 1. Preconditions: `pnpm stack:up` (Postgres, Qdrant, Keycloak healthy); ports 3001 and 8001 free (the
-   `realm-check` skill uses them too); the API built from this branch: `pnpm --filter @fs100/api build`.
+   `realm-check` skill uses them too); the API built from this branch: `pnpm --filter @grove/api build`.
 2. Run (≈ 10 min on the M1: model load, 17 documents ≈ 3 min, two builds ≈ 3 min each):
    ```bash
    S=<scratchpad>; uv run --directory apps/ai-service python ../../.claude/skills/reindex-check/check.py $S

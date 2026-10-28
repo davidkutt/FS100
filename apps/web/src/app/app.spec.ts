@@ -14,11 +14,11 @@ describe('App', () => {
     }).compileComponents();
   });
 
-  it('renders the FS100 brand in the navbar', async () => {
+  it('renders the Grove brand in the navbar', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
 
-    expect(compiled.querySelector('.navbar-brand')?.textContent).toContain('FS100');
+    expect(compiled.querySelector('.navbar-brand')?.textContent).toContain('Grove');
   });
 });

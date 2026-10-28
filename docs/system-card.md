@@ -1,4 +1,4 @@
-# FS100 system card (stub)
+# Grove system card (stub)
 
 > **Status:** stub as of Phase 2 (M2.7, 2026-10-22). It grows with every phase and becomes a full system
 > card in Phase 6. Numbers come from the eval runs named below; re-run them before quoting.

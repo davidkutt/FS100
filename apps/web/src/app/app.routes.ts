@@ -4,7 +4,7 @@ import { roleGuard } from './core/role.guard';
 export const routes: Routes = [
   {
     path: '',
-    title: 'FS100',
+    title: 'Grove',
     loadComponent: () => import('./features/home/home').then((m) => m.Home),
   },
   {
@@ -13,7 +13,7 @@ export const routes: Routes = [
       url[0]?.path === 'chat' && url.length <= 2
         ? { consumed: url, posParams: url[1] ? { id: url[1] } : undefined }
         : null,
-    title: 'Chat · FS100',
+    title: 'Chat · Grove',
     canActivate: [roleGuard],
     data: { role: 'viewer' },
     loadComponent: () =>
@@ -21,35 +21,35 @@ export const routes: Routes = [
   },
   {
     path: 'documents',
-    title: 'Documents · FS100',
+    title: 'Documents · Grove',
     canActivate: [roleGuard],
     data: { role: 'viewer' },
     loadComponent: () => import('./features/documents/documents').then((m) => m.Documents),
   },
   {
     path: 'inspector',
-    title: 'Retrieval inspector · FS100',
+    title: 'Retrieval inspector · Grove',
     canActivate: [roleGuard],
     data: { role: 'viewer' },
     loadComponent: () => import('./features/inspector/inspector').then((m) => m.Inspector),
   },
   {
     path: 'admin/audit',
-    title: 'Audit log · FS100',
+    title: 'Audit log · Grove',
     canActivate: [roleGuard],
     data: { role: 'admin' },
     loadComponent: () => import('./features/admin/audit').then((m) => m.Audit),
   },
   {
     path: 'admin/usage',
-    title: 'Usage · FS100',
+    title: 'Usage · Grove',
     canActivate: [roleGuard],
     data: { role: 'admin' },
     loadComponent: () => import('./features/admin/usage').then((m) => m.Usage),
   },
   {
     path: 'admin/reindex',
-    title: 'Re-index · FS100',
+    title: 'Re-index · Grove',
     canActivate: [roleGuard],
     data: { role: 'admin' },
     loadComponent: () => import('./features/admin/reindex').then((m) => m.Reindex),

@@ -2,7 +2,7 @@ import { CurrencyPipe, DecimalPipe } from '@angular/common';
 import { httpResource } from '@angular/common/http';
 import { Component, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import type { components } from '@fs100/contracts/api';
+import type { components } from '@grove/contracts/api';
 import { APP_CONFIG } from '../../core/config';
 import { problemDetail } from '../../core/problem';
 

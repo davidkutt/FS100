@@ -9,7 +9,7 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
-import type { components } from '@fs100/contracts/api';
+import type { components } from '@grove/contracts/api';
 import Keycloak from 'keycloak-js';
 import { firstValueFrom } from 'rxjs';
 import { APP_CONFIG } from '../../core/config';

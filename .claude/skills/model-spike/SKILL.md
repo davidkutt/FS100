@@ -30,7 +30,7 @@ description: Benchmarks a candidate model (reranker, Docling, Prompt Guard, spaC
    an unsatisfiable `numpy==<current>` reveals caps (Presidio 2.2.364 caps numpy < 2.5).
 7. Licence and gating: `curl -s https://huggingface.co/api/models/<id>` → `cardData.license`, `gated`.
 8. Qdrant features: a throwaway container, never the dev Qdrant:
-   `docker run -d --rm --name fs100-spike-qdrant -p 6343:6333 qdrant/qdrant:v1.19.2` → `docker stop` after.
+   `docker run -d --rm --name grove-spike-qdrant -p 6343:6333 qdrant/qdrant:v1.19.2` → `docker stop` after.
 
 ## Pitfalls
 

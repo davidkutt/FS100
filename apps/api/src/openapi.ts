@@ -11,7 +11,7 @@ process.env.LOG_LEVEL = 'silent';
 
 const app = configureApp(await NestFactory.create(AppModule, { logger: false }));
 const config = new DocumentBuilder()
-  .setTitle('FS100 API')
+  .setTitle('Grove API')
   .addBearerAuth()
   .addSecurityRequirements('bearer')
   .build();

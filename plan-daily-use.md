@@ -2,7 +2,7 @@
 
 > **Status:** Draft v1 · **Updated:** 2026-10-26 · replaces the rest of `plan-phase-3.md` (M3a.8–M3b.9) and parks
 > `roadmap-phases-3-6.md` and `plan-phase-4.md` … `plan-phase-6.md`.
-> **Goal change:** FS100 is no longer built toward a portfolio roadmap (Kubernetes, Azure, MLOps). It becomes a
+> **Goal change:** Grove is no longer built toward a portfolio roadmap (Kubernetes, Azure, MLOps). It becomes a
 > **tool you use every day**, on **your Markdown notes**, from **Claude Code / VS Code and the web UI**, on the
 > **16 GB M1**. Decided 2026-10-26.
 

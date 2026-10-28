@@ -131,7 +131,7 @@ Status: **L** = locked · **C** = changed in v2 · **N** = new in v2. ADR number
 **Still open (decide during M1.0):**
 - ~~**RAM size** of the Mac~~ — **16 GB** (checked 2026-10-19), A1 holds.
 - ~~**Monthly token cap**~~ — **20 USD/month** as the OpenRouter key limit with monthly reset (decided 2026-10-19).
-- ~~**Project name**~~ — **FS100** for now (decided 2026-10-19); identifiers keep `kb-*`.
+- ~~**Project name**~~ — **FS100** for now (decided 2026-10-19), **Grove** since 2026-10-28 (repository `pecker-grove`); identifiers keep `kb-*`.
 - ~~**Dev and demo model**~~ — decided in [ADR-0005](docs/adr/0005-llm-access-and-model.md); agent mode in ADR-0007.
 
 ---

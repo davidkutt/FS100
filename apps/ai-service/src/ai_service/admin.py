@@ -78,7 +78,7 @@ async def _run(args: argparse.Namespace, settings: Settings) -> int:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(prog="kb-admin", description="FS100 knowledge base admin")
+    parser = argparse.ArgumentParser(prog="kb-admin", description="Grove knowledge base admin")
     commands = parser.add_subparsers(dest="command", required=True)
     backfill_cmd = commands.add_parser(
         "backfill-originals", help="store originals of documents indexed before Phase 3 (D52)"

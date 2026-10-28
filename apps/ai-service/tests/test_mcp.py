@@ -25,7 +25,7 @@ from support import ScriptedLlm, ingest, token
 MCP = Settings().mcp_resource_url
 METADATA = "http://localhost:8000/.well-known/oauth-protected-resource/mcp"
 GUIDE = b"# Guide\n\n## One\nFirst part.\n\n## Two\nSecond part.\n\n## Three\nThird part.\n"
-URL = "https://raw.githubusercontent.com/davidkutt/FS100/main/README.md"
+URL = "https://raw.githubusercontent.com/davidkutt/pecker-grove/main/README.md"
 
 
 def mcp_token(roles: tuple[str, ...] = ("viewer",), scope: str = "kb:read") -> str:

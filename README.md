@@ -1,4 +1,4 @@
-# FS100 — the FULL FULL stack
+# Grove — the FULL FULL stack
 
 **A RAG and agent assistant for the "Dev of the future"** — an engineer fluent across DB · Dev · Cloud ·
 DevOps · MLOps · AI integration · Security · Architecture · SRE. Upload documents tagged by domain, ask
@@ -15,7 +15,7 @@ user has a **daily cost cap**. Agent behaviour is measured too: task success, to
 latency on fixture MCP servers, plus a red-team seed set.
 
 Phases 1 and 2 are done, apart from the postponed Azure spike and the M2.8 hand check. Phase 3a (retrieval
-quality) is done through M3a.7. **Since 2026-10-26 FS100 is being turned into a daily-use tool**: personal
+quality) is done through M3a.7. **Since 2026-10-26 Grove is being turned into a daily-use tool**: personal
 Markdown notes as the corpus, used from Claude Code / VS Code and the web UI, locally on a 16 GB M1
 ([plan-daily-use.md](plan-daily-use.md)). Point `NOTES_DIR` at your notes folder and the API keeps it in
 sync ([startup guide](docs/setup/startup.md#your-notes-and-urls-as-sources)). The Kubernetes, Azure and MLOps
@@ -129,7 +129,7 @@ prompt, token counts and latency; the chat UI links every answer to its trace.
 **Just run it** — Docker and Node 24 only, everything in containers (Mode B):
 
 ```bash
-git clone https://github.com/davidkutt/FS100.git && cd FS100
+git clone https://github.com/davidkutt/pecker-grove.git && cd pecker-grove
 corepack enable pnpm
 cp .env.example .env    # either set LLM_API_KEY (OpenRouter key with a credit limit) + LLM_MODEL,
                         # or set LLM_PROVIDER=fake for free, canned answers
@@ -180,7 +180,7 @@ steps 3–4 also need `GITHUB_REPO`, `GITHUB_SANDBOX_REPO` in `.env` and two fin
    spans, including the own MCP server's spans, with prompt version, prompt hash and model.
 10. `pnpm eval:agent`, `pnpm eval:redteam`, `pnpm eval:routing` — reports in `evals/runs/`
     ([evals/README.md](evals/README.md)); `pnpm eval:retrieval` is a blocking CI check.
-11. `claude mcp add --transport http fs100-kb http://localhost:8000/mcp`, then `/mcp` → *Authenticate* in
+11. `claude mcp add --transport http grove-kb http://localhost:8000/mcp`, then `/mcp` → *Authenticate* in
     Claude Code: log in as `carol` in Keycloak and ask it to search the knowledge base — it calls
     `search_knowledge_base`; `ingest_url` is refused ([startup guide](docs/setup/startup.md#use-the-knowledge-base-from-claude-code--vs-code),
     also VS Code; experimental Keycloak features, [ADR-0014](docs/adr/0014-external-mcp-clients-cimd.md)).
@@ -292,9 +292,10 @@ readiness spike ([plan.md §8](plan.md#8-milestones-and-tasks)).
 
 ## Naming
 
-The project is called **FS100**. The plan's working title `kb-agent` survives in technical identifiers
-(Keycloak realm `kb`, clients `kb-web` / `kb-api` / `kb-ai`, Qdrant alias `kb_current`) so that plan.md and
-the contracts stay aligned.
+The project is called **Grove** (repository `pecker-grove`). The plan's working title `kb-agent` survives in
+technical identifiers (Keycloak realm `kb`, clients `kb-web` / `kb-api` / `kb-ai`, Qdrant alias `kb_current`) so
+that plan.md and the contracts stay aligned. The earlier name FS100 survives only where renaming would lose data:
+the Compose project `fs100` (its Docker volumes hold your data) and the frozen corpus and eval files.
 
 ## Contributing
 

@@ -3,7 +3,7 @@ import { pipeline } from 'node:stream/promises';
 import type { ReadableStream } from 'node:stream/web';
 import { Body, Controller, HttpCode, Post, Req, Res } from '@nestjs/common';
 import { ApiOkResponse, ApiProduces } from '@nestjs/swagger';
-import type { components } from '@fs100/contracts/ai-service';
+import type { components } from '@grove/contracts/ai-service';
 import type { Response } from 'express';
 import {
   AiClient,
@@ -16,7 +16,7 @@ import { sseParser } from '../conversations/events.js';
 import { UsageService } from '../usage/usage.service.js';
 import { ChatThrottle } from './chat-throttle.js';
 
-/** Relays to the AI service, which validates the bodies; their types are in `@fs100/contracts/ai-service`. */
+/** Relays to the AI service, which validates the bodies; their types are in `@grove/contracts/ai-service`. */
 @Controller()
 @Roles('viewer')
 export class ChatController {

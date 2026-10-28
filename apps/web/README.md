@@ -1,14 +1,14 @@
-# @fs100/web
+# @grove/web
 
 Angular 22 frontend (standalone components, signals, Bootstrap 5.3 via SCSS). See the [root README](../../README.md)
 and the [startup guide](../../docs/setup/startup.md).
 
 | Command (from the repo root)         | What it does                                  |
 | ------------------------------------ | --------------------------------------------- |
-| `pnpm --filter @fs100/web start`     | dev server on http://localhost:4200           |
-| `pnpm --filter @fs100/web test`      | unit tests (Vitest via the Angular CLI)       |
-| `pnpm --filter @fs100/web lint`      | ESLint (angular-eslint, incl. template a11y)  |
-| `pnpm --filter @fs100/web build`     | production build into `dist/`                 |
+| `pnpm --filter @grove/web start`     | dev server on http://localhost:4200           |
+| `pnpm --filter @grove/web test`      | unit tests (Vitest via the Angular CLI)       |
+| `pnpm --filter @grove/web lint`      | ESLint (angular-eslint, incl. template a11y)  |
+| `pnpm --filter @grove/web build`     | production build into `dist/`                 |
 
 Runtime config comes from `/config.json` (dev values in `public/config.json`, plan.md D17), loaded before
 bootstrap; an empty `phoenixUrl` hides the chat's trace links. Login is Keycloak Authorization Code + PKCE
@@ -19,4 +19,4 @@ Pages (`src/app/features/`): `home`, `chat` (SSE, citations → source panel, st
 live status, delete), `inspector` (raw search hits vs. the score threshold). `roleGuard` checks the
 route's `data.role`; the API enforces the same roles.
 
-Generate code with the local CLI, e.g. `pnpm --filter @fs100/web ng generate component features/chat/chat`.
+Generate code with the local CLI, e.g. `pnpm --filter @grove/web ng generate component features/chat/chat`.

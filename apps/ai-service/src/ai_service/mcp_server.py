@@ -101,8 +101,8 @@ def create_mcp(
 ) -> MCPServer:
     """`kb` and `transformer` are getters: they only exist once the app's lifespan has started."""
     mcp = MCPServer(
-        "fs100-kb",
-        instructions="The FS100 knowledge base: runbooks, ADRs, setup guides and handbooks.",
+        "grove-kb",
+        instructions="The Grove knowledge base: runbooks, ADRs, setup guides and handbooks.",
         # Clients may reuse the list (the SDK default `ttlMs: 0` makes them list before each call).
         cache_hints={"tools/list": CacheHint(ttl_ms=300_000)},
         token_verifier=KbTokenVerifier(settings),

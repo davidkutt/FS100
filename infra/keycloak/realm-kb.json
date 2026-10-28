@@ -1,6 +1,6 @@
 {
   "realm": "kb",
-  "displayName": "FS100",
+  "displayName": "Grove",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,
@@ -70,7 +70,7 @@
   "clients": [
     {
       "clientId": "kb-web",
-      "name": "FS100 web (Angular SPA)",
+      "name": "Grove web (Angular SPA)",
       "description": "Public client: Authorization Code + PKCE (S256). Access tokens carry aud=kb-api.",
       "enabled": true,
       "protocol": "openid-connect",
@@ -117,7 +117,7 @@
     },
     {
       "clientId": "kb-api",
-      "name": "FS100 API (NestJS)",
+      "name": "Grove API (NestJS)",
       "description": "Confidential client of the API. Exchanges user tokens for aud=kb-ai (hop 1); its service account calls the AI service for system jobs (client credentials, aud=kb-ai).",
       "enabled": true,
       "protocol": "openid-connect",
@@ -157,7 +157,7 @@
     },
     {
       "clientId": "kb-ai",
-      "name": "FS100 AI service (FastAPI)",
+      "name": "Grove AI service (FastAPI)",
       "description": "Audience of hop 1. Exchanges user tokens for the MCP server (scopes kb:read, kb:write; hop 2) and calls the API's internal ingest as a service account (ADR-0009).",
       "enabled": true,
       "protocol": "openid-connect",

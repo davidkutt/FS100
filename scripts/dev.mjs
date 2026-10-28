@@ -8,8 +8,8 @@ import concurrently from 'concurrently';
 const aiPort = process.env.AI_PORT ?? '8000';
 
 const apps = {
-  web: { command: 'pnpm --filter @fs100/web start', prefixColor: 'magenta' },
-  api: { command: 'pnpm --filter @fs100/api start:dev', prefixColor: 'blue' },
+  web: { command: 'pnpm --filter @grove/web start', prefixColor: 'magenta' },
+  api: { command: 'pnpm --filter @grove/api start:dev', prefixColor: 'blue' },
   ai: {
     command: `uv run --directory apps/ai-service uvicorn ai_service.main:app --reload --host 127.0.0.1 --port ${aiPort}`,
     prefixColor: 'green',

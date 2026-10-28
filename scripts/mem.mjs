@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { totalmem } from 'node:os';
 
-const apps = { 'ai-service': /ai_service\.main/, api: /@fs100\/api /, web: /@fs100\/web / };
+const apps = { 'ai-service': /ai_service\.main/, api: /@grove\/api /, web: /@grove\/web / };
 const gb = (bytes) => `${(bytes / 1e9).toFixed(2)} GB`;
 
 const procs = new Map();
