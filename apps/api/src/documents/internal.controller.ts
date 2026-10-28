@@ -18,17 +18,20 @@ const FromUrl = z
 export class InternalDocumentsController {
   constructor(private readonly documents: DocumentsService) {}
 
-  /** 202 like an upload: the URL is fetched now, the ingest runs in the background. */
+  /**
+   * 202 like an upload: the URL is fetched now, the ingest runs in the background. A URL added
+   * before is its source: new content is a new version, the same is `unchanged` (M3c.1).
+   */
   @Post('from-url')
   @ServiceRole('ingest-on-behalf')
   @HttpCode(202)
   @ApiAcceptedResponse({
-    standardSchema: z.object({ id: z.uuid(), status: z.literal('pending') }),
+    standardSchema: z.object({ id: z.uuid(), status: z.enum(['pending', 'unchanged']) }),
   })
   fromUrl(
     @Req() req: AuthRequest,
     @Body({ schema: FromUrl }) body: z.infer<typeof FromUrl>,
-  ): Promise<{ id: string; status: 'pending' }> {
+  ): Promise<{ id: string; status: 'pending' | 'unchanged' }> {
     const { onBehalfOf, url, domains } = body;
     return this.documents.fromUrl(req.user, onBehalfOf, url, domains, req.id as string);
   }

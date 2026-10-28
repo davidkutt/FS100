@@ -50,6 +50,13 @@
       "when": 1793044176285,
       "tag": "0006_lifecycle_priority",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1793175103289,
+      "tag": "0007_sources",
+      "breakpoints": true
     }
   ]
 }

@@ -224,8 +224,13 @@ services:
       - API_DATABASE_URL=postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-dev-only-change-me}@postgres:5432/app
       - KEYCLOAK_REALM_URL=http://keycloak:8080/realms/kb
       - AI_SERVICE_URL=http://ai-service:8000
+      - NOTES_DIR=${NOTES_DIR:+/notes}
+      - SOURCES_SYNC_MINUTES
     ports:
       - '127.0.0.1:3000:3000'
+    volumes:
+      # The notes folder, read-only (M3c.1); without NOTES_DIR a stand-in that is never synced.
+      - ${NOTES_DIR:-.}:/notes:ro
     depends_on:
       postgres:
         condition: service_healthy

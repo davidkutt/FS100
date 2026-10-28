@@ -41,6 +41,7 @@ export const documents = pgTable(
     mime: text().notNull(),
     sizeBytes: integer().notNull(),
     sha256: char({ length: 64 }).notNull().unique(),
+    source: text().unique(), // `notes:<relative path>` or the URL it was fetched from (M3c.1)
     domains: text()
       .array()
       .notNull()

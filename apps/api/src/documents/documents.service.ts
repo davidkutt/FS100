@@ -9,7 +9,7 @@ import {
   Injectable,
   Logger,
   NotFoundException,
-  type OnApplicationBootstrap,
+  type OnModuleInit,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
 import { and, desc, eq, inArray, isNotNull } from 'drizzle-orm';
@@ -43,10 +43,11 @@ const MIME_BY_EXTENSION: Record<string, string> = {
   '.md': 'text/markdown',
   '.markdown': 'text/markdown',
   '.txt': 'text/plain',
+  '.html': 'text/html',
 };
 
 @Injectable()
-export class DocumentsService implements OnApplicationBootstrap {
+export class DocumentsService implements OnModuleInit {
   private readonly logger = new Logger(DocumentsService.name);
 
   constructor(
@@ -56,8 +57,11 @@ export class DocumentsService implements OnApplicationBootstrap {
     @Inject(CONFIG) private readonly config: Config,
   ) {}
 
-  /** An upload not yet handed to the AI service dies with the process; queued jobs resume (D53). */
-  async onApplicationBootstrap(): Promise<void> {
+  /**
+   * An upload not yet handed to the AI service dies with the process; queued jobs resume (D53).
+   * Before any bootstrap hook, so the boot sync's new uploads are not caught.
+   */
+  async onModuleInit(): Promise<void> {
     // shortcut: assumes one API instance; a second one would fail the other's uploads in flight.
     const stuck = await this.db
       .update(documents)
@@ -78,16 +82,10 @@ export class DocumentsService implements OnApplicationBootstrap {
     domains: Domain[],
     topics: string[],
     requestId: string,
+    source?: string,
   ): Promise<{ id: string }> {
     if (!file?.size) throw new BadRequestException('A non-empty `file` is required');
-    this.checkTopics(topics);
-    const mime = MIME_BY_EXTENSION[extname(file.originalname).toLowerCase()];
-    if (!mime || !hasExpectedContent(mime, file.buffer)) {
-      throw new UnsupportedMediaTypeException(
-        'Only PDF, Markdown and plain-text files are accepted',
-      );
-    }
-    const sha256 = createHash('sha256').update(file.buffer).digest('hex');
+    const { mime, sha256 } = this.checked(file, topics);
 
     const [doc] = await this.db
       .insert(documents)
@@ -100,6 +98,7 @@ export class DocumentsService implements OnApplicationBootstrap {
         sha256,
         domains,
         topics,
+        source,
         status: 'pending',
       })
       .onConflictDoNothing({ target: documents.sha256 })
@@ -126,10 +125,16 @@ export class DocumentsService implements OnApplicationBootstrap {
     url: string,
     domains: Domain[],
     requestId: string,
-  ): Promise<{ id: string; status: 'pending' }> {
-    const maxBytes = this.config.UPLOAD_MAX_MB * 1024 * 1024;
-    const file = await fetchDocument(new URL(url), this.config.INGEST_URL_ALLOWED_HOSTS, maxBytes);
-    const { id } = await this.upload({ ...owner, roles: [] }, file, domains, [], requestId);
+  ): Promise<{ id: string; status: 'pending' | 'unchanged' }> {
+    const source = new URL(url).href;
+    const { id, changed } = await this.fromSource(
+      owner,
+      source,
+      await this.fetch(source),
+      domains,
+      [],
+      requestId,
+    );
     await this.db.insert(auditLog).values({
       actorId: owner.sub,
       actorRoles: [],
@@ -139,7 +144,56 @@ export class DocumentsService implements OnApplicationBootstrap {
       argsRedacted: { docId: id, url, domains },
       outcome: 'ok',
     });
-    return { id, status: 'pending' };
+    return { id, status: changed ? 'pending' : 'unchanged' };
+  }
+
+  /** Through the SSRF guard and host allow-list (D36). */
+  fetch(url: string): Promise<Upload> {
+    const maxBytes = this.config.UPLOAD_MAX_MB * 1024 * 1024;
+    return fetchDocument(new URL(url), this.config.INGEST_URL_ALLOWED_HOSTS, maxBytes);
+  }
+
+  /**
+   * The document of a note or URL (M3c.1): added, or a new version of the same id once its content
+   * changed; the same content changes nothing. Its labels follow the source.
+   */
+  async fromSource(
+    owner: { sub: string; name: string },
+    source: string,
+    file: Upload,
+    domains: Domain[],
+    topics: string[],
+    requestId: string,
+  ): Promise<{ id: string; changed: boolean }> {
+    const user = { ...owner, roles: [] };
+    const [doc] = await this.db.select().from(documents).where(eq(documents.source, source));
+    if (!doc) {
+      const { id } = await this.upload(user, file, domains, topics, requestId, source);
+      return { id, changed: true };
+    }
+    const { mime, sha256 } = this.checked(file, topics);
+    if (doc.sha256 === sha256) return { id: doc.id, changed: false };
+    await this.settled(user, doc.id, 'change', requestId);
+    const [same] = await this.db.select().from(documents).where(eq(documents.sha256, sha256));
+    if (same) throw new ConflictException(`Same content as "${same.filename}"`);
+    const [changed] = await this.db
+      .update(documents)
+      .set({
+        filename: file.originalname,
+        mime,
+        sizeBytes: file.size,
+        sha256,
+        domains,
+        topics,
+        status: 'pending',
+        error: null,
+        chunkCount: null,
+        pageCount: null,
+      })
+      .where(eq(documents.id, doc.id))
+      .returning();
+    void this.ingest(changed, file.buffer, requestId);
+    return { id: doc.id, changed: true };
   }
 
   async relabel(
@@ -257,6 +311,17 @@ export class DocumentsService implements OnApplicationBootstrap {
       argsRedacted: args,
       outcome: 'ok',
     });
+  }
+
+  private checked(file: Upload, topics: string[]): { mime: string; sha256: string } {
+    this.checkTopics(topics);
+    const mime = MIME_BY_EXTENSION[extname(file.originalname).toLowerCase()];
+    if (!mime || !hasExpectedContent(mime, file.buffer)) {
+      throw new UnsupportedMediaTypeException(
+        'Only PDF, Markdown, HTML and plain-text files are accepted',
+      );
+    }
+    return { mime, sha256: createHash('sha256').update(file.buffer).digest('hex') };
   }
 
   private checkTopics(topics: string[]): void {

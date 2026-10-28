@@ -209,6 +209,26 @@ the threshold (the chat would abstain). On **Documents**, **Labels** also sets a
 inspector shows the resulting `boost`. As `carol` (viewer) there are no upload, label
 or delete controls. Chat calls the real LLM unless `LLM_PROVIDER=fake`.
 
+### Your notes and URLs as sources
+
+Set `NOTES_DIR` in `.env` to the absolute path of a Markdown folder, then restart the API (`pnpm dev`, or
+`pnpm stack:up:full`, which mounts the folder read-only at `/notes`). The API syncs at boot, every
+`SOURCES_SYNC_MINUTES` (15; `0` = off) and when an admin presses *Sync notes and URLs* on the documents page
+(`POST /api/admin/sources/sync`, which returns what was added, updated, deleted and skipped):
+
+- Every `*.md` below the folder is a document owned by *Notes folder*; hidden folders (`.obsidian`, `.git`)
+  are skipped. A changed note becomes a new version of the same document (labels, priority and lifecycle
+  stay), a deleted one leaves the knowledge base. A folder that suddenly has no notes deletes nothing.
+- Domains: frontmatter `domains:` (and `topics:` as `domain/topic` ids), else a top folder named after a
+  domain (`devops/…`), else `dev`.
+- A note that looks like it holds a secret (private key, `sk-…` key, GitHub, AWS, Slack or Google key, a JWT)
+  is skipped with that reason, so it never reaches OpenRouter or Phoenix. Remove the secret to index it.
+- Documents added with `kb.ingest_url` are re-fetched when their row is a day old; new content is a new
+  version. Web pages (`text/html`) are ingested with their headings; the host must be in
+  `INGEST_URL_ALLOWED_HOSTS`.
+- Every new or changed document runs contextual retrieval when its domain is in `CONTEXTUAL_DOMAINS`
+  (≈ 0.002 USD each; 1,000 notes ≈ 2 USD once).
+
 ### Use the knowledge base from Claude Code / VS Code
 
 MCP clients log in to the own MCP server through Keycloak themselves: no client to register, no token to
@@ -399,7 +419,8 @@ The script only runs on an **empty** Postgres volume: `pnpm stack:reset && pnpm 
 | Chat and agent turns fail with 502 `Keycloak token endpoint: HTTP 400` | The realm predates M2.4 (no token exchange on `kb-api`): recreate Keycloak's database, see [§7](#changing-the-keycloak-realm) |
 | Agent `tool_result` errors `Keycloak token endpoint: HTTP 401` | `AI_KEYCLOAK_CLIENT_SECRET` is missing in `.env` or differs from the realm's `kb-ai` secret (`.env.example`) |
 | Agent proposes a write, then ends with `error` `Agent run failed` | `APPROVAL_SIGNING_KEY` is missing in `.env`, so writes fail closed. After pulling, list what `.env` lacks: `comm -23 <(grep -oE '^[A-Z_0-9]+=' .env.example \| sort) <(grep -oE '^[A-Z_0-9]+=' .env \| sort)` |
-| `kb.ingest_url` fails with `Host … is not allowed` | Only hosts in `INGEST_URL_ALLOWED_HOSTS` are fetched, and only PDF, Markdown or text files (HTML pages get 415) |
+| `kb.ingest_url` fails with `Host … is not allowed` | Only hosts in `INGEST_URL_ALLOWED_HOSTS` are fetched (web pages, PDF, Markdown or text) |
+| A note is missing after a sync | The sync result (admin *Sync notes and URLs*, or the API log) lists it under skipped with the reason: a likely secret, frontmatter with an unknown domain or topic, content identical to another document, or still being ingested (the next sync takes it) |
 | `web.fetch` missing for the agent, or `… is not an allowed host` | Editors and admins only; it reads only hosts in `WEB_FETCH_ALLOWED_HOSTS` (empty = unavailable), on every redirect too. Restart the AI service after changing it |
 | Chat ends with `event: error`, `LLM request failed` | `detail` carries the provider's answer: 401 wrong key, 402 credits used up, 429 rate limit after retries — see `data/sample-docs/runbook-llm-provider-outage.md` |
 | `[ai]` logs `kb_current has sparse=none, not SPARSE_MODEL=…`; the inspector shows no sparse ranks | The live collection predates hybrid search (M3a.2) or `SPARSE_MODEL` changed: `pnpm kb:reindex` builds a hybrid one behind the gate; search stays dense-only until then |

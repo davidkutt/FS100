@@ -7,6 +7,8 @@ import { DocumentsController } from './documents.controller.js';
 import { DocumentsService } from './documents.service.js';
 import { InternalDocumentsController } from './internal.controller.js';
 import { ReindexController } from './reindex.controller.js';
+import { SourcesController } from './sources.controller.js';
+import { SourcesService } from './sources.service.js';
 
 @Module({
   imports: [
@@ -21,7 +23,12 @@ import { ReindexController } from './reindex.controller.js';
       }),
     }),
   ],
-  controllers: [DocumentsController, InternalDocumentsController, ReindexController],
-  providers: [DocumentsService],
+  controllers: [
+    DocumentsController,
+    InternalDocumentsController,
+    ReindexController,
+    SourcesController,
+  ],
+  providers: [DocumentsService, SourcesService],
 })
 export class DocumentsModule {}

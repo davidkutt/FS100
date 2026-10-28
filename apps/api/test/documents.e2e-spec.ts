@@ -266,7 +266,7 @@ describe('Documents (e2e)', () => {
     const { body: lost } = await upload('lost.txt', 'lost', 202);
     await settled(lost.id, 'pending');
 
-    await app.get(DocumentsService).onApplicationBootstrap();
+    await app.get(DocumentsService).onModuleInit();
 
     expect((await settled(lost.id, 'failed')).error).toMatch(/Interrupted by an API restart/);
     expect((await list()).find((d) => d.id === working.id)?.status).toBe('embedding');

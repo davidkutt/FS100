@@ -92,7 +92,8 @@ export async function fetchDocument(
     }
     chunks.push(chunk);
   }
-  // The extension decides the type, as for uploads.
-  const originalname = basename(url.pathname) || 'index';
-  return { originalname, buffer: Buffer.concat(chunks), size };
+  // The extension decides the type, as for uploads; a page served as HTML is HTML whatever its path.
+  const name = basename(url.pathname) || 'index';
+  const html = /^text\/html\b/i.test(res.headers['content-type'] ?? '') && !/\.html$/i.test(name);
+  return { originalname: html ? `${name}.html` : name, buffer: Buffer.concat(chunks), size };
 }
